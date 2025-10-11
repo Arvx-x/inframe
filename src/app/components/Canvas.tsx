@@ -1,0 +1,1131 @@
+'use client';
+
+import { useEffect, useRef, useState } from "react";
+import { Canvas as FabricCanvas, Image as FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine, filters, Point } from "fabric";
+import { Button } from "@/app/components/ui/button";
+import { Slider } from "@/app/components/ui/slider";
+import { Download, RotateCcw, Type, Square, Circle as CircleIcon, Minus, ImagePlus, SlidersHorizontal, Droplet, Crop, Trash2, Filter, Check, X, Wand2, Save, MousePointer, Hand, ChevronDown } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
+import { toast } from "sonner";
+import ImageEditPanel from "@/app/components/ImageEditPanel";
+import EditImagePanel from "@/app/components/EditImagePanel";
+import { InspectorSidebar } from "@/app/components/InspectorSidebar";
+// use local Next.js API route for canvas commands
+
+interface CanvasProps {
+  generatedImageUrl: string | null;
+  onClear: () => void;
+  onCanvasCommandRef?: React.MutableRefObject<((command: string) => Promise<string>) | null>;
+}
+
+export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef }: CanvasProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
+  const [selectedImage, setSelectedImage] = useState<FabricImage | null>(null);
+  const [editPanelPosition, setEditPanelPosition] = useState({ x: 0, y: 0 });
+  const [showEditPanel, setShowEditPanel] = useState(false);
+  const [showAIEditPanel, setShowAIEditPanel] = useState(false);
+  const [topToolbarPosition, setTopToolbarPosition] = useState({ x: 0, y: 0 });
+  const [showTopToolbar, setShowTopToolbar] = useState(false);
+  const [showOpacityPanel, setShowOpacityPanel] = useState(false);
+  const [showBlurPanel, setShowBlurPanel] = useState(false);
+  const [isCropping, setIsCropping] = useState(false);
+  const cropRectRef = useRef<FabricRect | null>(null);
+  const [imageFilters, setImageFilters] = useState({
+    brightness: 0,
+    contrast: 0,
+    saturation: 0,
+    hue: 0,
+    blur: 0,
+  });
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isPanningRef = useRef(false);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const [activeTool, setActiveTool] = useState<"pointer" | "hand">("pointer");
+  const activeToolRef = useRef<"pointer" | "hand">("pointer");
+  const [activeShape, setActiveShape] = useState<"rect" | "circle" | "line">("rect");
+
+  const syncGridToViewport = (canvas: FabricCanvas) => {
+    const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+    const zoom = canvas.getZoom();
+    const base = 20; // base grid size
+    const size = Math.max(4, base * zoom);
+    const mod = (n: number, m: number) => ((n % m) + m) % m;
+    const offsetX = mod(vpt[4], size);
+    const offsetY = mod(vpt[5], size);
+    if (gridRef.current) {
+      gridRef.current.style.backgroundSize = `${size}px ${size}px`;
+      gridRef.current.style.backgroundPosition = `${offsetX}px ${offsetY}px`;
+    }
+  };
+
+  // Initialize canvas (browser-only)
+  useEffect(() => {
+    if (!canvasRef.current) return;
+
+    const canvas = new FabricCanvas(canvasRef.current, {
+      width: canvasRef.current.parentElement?.clientWidth || window.innerWidth,
+      height: canvasRef.current.parentElement?.clientHeight || window.innerHeight,
+      backgroundColor: 'transparent',
+    });
+
+    // Enable panning with middle mouse drag (or left-drag when Hand tool active)
+    canvas.on('mouse:down', (opt: any) => {
+      const e = opt.e as MouseEvent;
+      const isMiddleButton = e.button === 1 || (e.buttons & 4) === 4;
+      const isLeftButton = e.button === 0 || (e.buttons & 1) === 1;
+      const useHandTool = activeToolRef.current === 'hand';
+      if (isMiddleButton || (useHandTool && isLeftButton)) {
+        isPanningRef.current = true;
+        canvas.setCursor('grabbing');
+        canvas.selection = false;
+      }
+    });
+    canvas.on('mouse:move', (opt: any) => {
+      if (!isPanningRef.current) return;
+      const e = opt.e as MouseEvent;
+      const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+      vpt[4] += e.movementX;
+      vpt[5] += e.movementY;
+      canvas.setViewportTransform(vpt);
+      syncGridToViewport(canvas);
+    });
+    canvas.on('mouse:up', () => {
+      isPanningRef.current = false;
+      canvas.setCursor(activeToolRef.current === 'hand' ? 'grab' : 'default');
+      canvas.selection = activeToolRef.current === 'pointer';
+    });
+
+    // Wheel interactions: two-finger swipe pans, pinch (Ctrl/⌘ + wheel) zooms
+    canvas.on('mouse:wheel', (opt: any) => {
+      const e = opt.e as WheelEvent;
+      const isZoomGesture = e.ctrlKey || e.metaKey; // pinch-to-zoom promotes Ctrl on most browsers
+      if (isZoomGesture) {
+        let zoom = canvas.getZoom();
+        // Increased sensitivity: smaller base yields larger change per delta
+        const zoomFactor = Math.pow(0.989, e.deltaY);
+        zoom *= zoomFactor;
+        zoom = Math.min(4, Math.max(0.1, zoom));
+        const point = new Point(e.offsetX, e.offsetY);
+        canvas.zoomToPoint(point, zoom);
+        syncGridToViewport(canvas);
+      } else {
+        const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+        // natural scroll: swipe moves content; move viewport opposite of scroll
+        vpt[4] -= e.deltaX;
+        vpt[5] -= e.deltaY;
+        canvas.setViewportTransform(vpt);
+        syncGridToViewport(canvas);
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    // Handle selection events
+    canvas.on('selection:created', (e) => {
+      const obj = e.selected?.[0];
+      if (obj && obj instanceof (FabricImage as any)) {
+        setSelectedImage(obj as FabricImage);
+        updateEditPanelPosition(obj, canvas);
+        setShowEditPanel(false);
+      }
+    });
+
+    canvas.on('selection:updated', (e) => {
+      const obj = e.selected?.[0];
+      if (obj && obj instanceof (FabricImage as any)) {
+        setSelectedImage(obj as FabricImage);
+        updateEditPanelPosition(obj, canvas);
+        setShowEditPanel(false);
+      }
+    });
+
+    canvas.on('selection:cleared', () => {
+      setSelectedImage(null);
+      setShowEditPanel(false);
+      setShowAIEditPanel(false);
+      setShowTopToolbar(false);
+      setShowOpacityPanel(false);
+      setShowBlurPanel(false);
+    });
+
+    canvas.on('object:moving', (e) => {
+      if (e.target && e.target instanceof (FabricImage as any) && selectedImage) {
+        updateEditPanelPosition(e.target, canvas);
+      }
+    });
+
+    canvas.on('object:scaling', (e) => {
+      if (e.target && e.target instanceof (FabricImage as any) && selectedImage) {
+        updateEditPanelPosition(e.target, canvas);
+      }
+    });
+
+    // Show top toolbar on double click on an image
+    canvas.on('mouse:down', (evt: any) => {
+      const isDouble = (evt?.e as MouseEvent)?.detail === 2;
+      const target = evt?.target;
+      if (isDouble && target && target instanceof (FabricImage as any)) {
+        setSelectedImage(target as FabricImage);
+        setShowTopToolbar(true);
+        positionTopToolbar(null, canvas);
+        setShowEditPanel(false);
+        setShowAIEditPanel(false);
+        setShowOpacityPanel(false);
+        setShowBlurPanel(false);
+      }
+    });
+
+    // Explicit dblclick handler to ensure consistent behavior
+    canvas.on('mouse:dblclick', (evt: any) => {
+      const target = evt?.target;
+      if (target && target instanceof (FabricImage as any)) {
+        setSelectedImage(target as FabricImage);
+        setShowTopToolbar(true);
+        positionTopToolbar(null, canvas);
+        setShowEditPanel(false);
+        setShowAIEditPanel(false);
+        setShowOpacityPanel(false);
+        setShowBlurPanel(false);
+      }
+    });
+
+    setFabricCanvas(canvas);
+
+    const handleResize = () => {
+      const parent = canvasRef.current?.parentElement;
+      const width = parent?.clientWidth || window.innerWidth;
+      const height = parent?.clientHeight || window.innerHeight;
+      canvas.setWidth(width);
+      canvas.setHeight(height);
+      canvas.renderAll();
+      syncGridToViewport(canvas);
+      if (showTopToolbar) {
+        positionTopToolbar(null, canvas);
+      }
+    };
+
+    const ro = new ResizeObserver(() => handleResize());
+    if (canvasRef.current?.parentElement) ro.observe(canvasRef.current.parentElement);
+
+    window.addEventListener('resize', handleResize);
+
+    // initial sync
+    syncGridToViewport(canvas);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      ro.disconnect();
+      canvas.dispose();
+    };
+    // intentionally empty deps: we only want to initialize once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep a ref mirror of activeTool for event handlers
+  useEffect(() => {
+    activeToolRef.current = activeTool;
+  }, [activeTool]);
+
+  // Apply tool mode to canvas behavior and cursors
+  useEffect(() => {
+    if (!fabricCanvas) return;
+    const isPointer = activeTool === 'pointer';
+    fabricCanvas.selection = isPointer;
+    fabricCanvas.skipTargetFind = !isPointer;
+    fabricCanvas.defaultCursor = isPointer ? 'default' : 'grab';
+    fabricCanvas.hoverCursor = isPointer ? 'move' : 'grab';
+    if (!isPointer) {
+      fabricCanvas.discardActiveObject();
+      fabricCanvas.requestRenderAll();
+      setSelectedImage(null);
+      setShowTopToolbar(false);
+      setShowEditPanel(false);
+      setShowAIEditPanel(false);
+      setShowOpacityPanel(false);
+      setShowBlurPanel(false);
+    }
+  }, [activeTool, fabricCanvas]);
+
+  const handleAddActiveShape = () => {
+    if (activeShape === 'rect') return handleAddRect();
+    if (activeShape === 'circle') return handleAddCircle();
+    return handleAddLine();
+  };
+
+  // Helper function to update edit panel position (adjacent to image)
+  const updateEditPanelPosition = (obj: any, canvas: FabricCanvas) => {
+    const objBounds = obj.getBoundingRect();
+    const canvasElement = canvas.getElement();
+    const canvasRect = canvasElement.getBoundingClientRect();
+    const panelWidth = 320; // matches w-80
+    const gap = 0;
+
+    const objectRight = canvasRect.left + objBounds.left + objBounds.width;
+    const objectLeft = canvasRect.left + objBounds.left;
+    const availableRight = window.innerWidth - objectRight - 16;
+
+    // Prefer placing the panel to the right of the image; if not enough space, place to the left
+    const canPlaceRight = availableRight >= panelWidth + gap;
+    const left = canPlaceRight
+      ? objectRight + gap
+      : Math.max(16, objectLeft - panelWidth - gap);
+
+    const top = canvasRect.top + objBounds.top; // align to object top
+    
+    setEditPanelPosition({
+      x: left,
+      y: top,
+    });
+  };
+
+  // Position top toolbar fixed at top center of the canvas
+  const positionTopToolbar = (_obj: any, canvas: FabricCanvas) => {
+    const canvasElement = canvas.getElement();
+    const canvasRect = canvasElement.getBoundingClientRect();
+    const containerRect = canvasElement.parentElement?.getBoundingClientRect() || canvasRect;
+    const toolbarWidth = 280;
+    // Center relative to the canvas container, not the viewport
+    const centeredLeft = containerRect.width / 2 - toolbarWidth / 2;
+    const left = Math.max(16, Math.min(centeredLeft, containerRect.width - toolbarWidth - 16));
+    // Pin near the top inside the container
+    const top = 12;
+    setTopToolbarPosition({ x: left, y: top });
+    if (showEditPanel) {
+      setEditPanelPosition({ x: left, y: top + 40 + 8 });
+    }
+  };
+
+  // Add generated image to canvas
+  useEffect(() => {
+    if (!fabricCanvas || !generatedImageUrl) return;
+
+    FabricImage.fromURL(generatedImageUrl, {
+      crossOrigin: 'anonymous'
+    }).then((img) => {
+      const maxWidth = fabricCanvas.width! * 0.6;
+      const maxHeight = fabricCanvas.height! * 0.6;
+      
+      if (img.width! > maxWidth) {
+        img.scaleToWidth(maxWidth);
+      }
+      if (img.getScaledHeight() > maxHeight) {
+        img.scaleToHeight(maxHeight);
+      }
+
+      img.set({
+        left: (fabricCanvas.width! - img.getScaledWidth()) / 2,
+        top: (fabricCanvas.height! - img.getScaledHeight()) / 2,
+        selectable: true,
+      });
+
+      fabricCanvas.add(img);
+      fabricCanvas.setActiveObject(img);
+      fabricCanvas.renderAll();
+      
+      setSelectedImage(img);
+      updateEditPanelPosition(img, fabricCanvas);
+      
+      toast.success("Image added to canvas");
+    }).catch((error) => {
+      console.error("Error loading image:", error);
+      toast.error("Failed to load image");
+    });
+  }, [generatedImageUrl, fabricCanvas]);
+
+  // Apply filters to selected image
+  const handleFilterChange = (filterName: string, value: number) => {
+    if (!selectedImage) return;
+
+    const newFilters = { ...imageFilters, [filterName]: value };
+    setImageFilters(newFilters);
+
+    // Clear existing filters
+    selectedImage.filters = [];
+
+    // Apply brightness filter
+    if (newFilters.brightness !== 0) {
+      selectedImage.filters.push(new filters.Brightness({ brightness: newFilters.brightness }));
+    }
+
+    // Apply contrast filter
+    if (newFilters.contrast !== 0) {
+      selectedImage.filters.push(new filters.Contrast({ contrast: newFilters.contrast }));
+    }
+
+    // Apply saturation filter
+    if (newFilters.saturation !== 0) {
+      selectedImage.filters.push(new filters.Saturation({ saturation: newFilters.saturation }));
+    }
+
+    // Apply hue rotation filter
+    if (newFilters.hue !== 0) {
+      selectedImage.filters.push(new filters.HueRotation({ rotation: newFilters.hue }));
+    }
+
+    // Apply blur filter
+    if (newFilters.blur !== 0) {
+      selectedImage.filters.push(new filters.Blur({ blur: Math.max(0, newFilters.blur) }));
+    }
+
+    selectedImage.applyFilters();
+    fabricCanvas?.renderAll();
+  };
+
+  // Reset filters
+  const handleResetFilters = () => {
+    if (!selectedImage) return;
+
+    setImageFilters({
+      brightness: 0,
+      contrast: 0,
+      saturation: 0,
+      hue: 0,
+      blur: 0,
+    });
+
+    selectedImage.filters = [];
+    selectedImage.applyFilters();
+    fabricCanvas?.renderAll();
+    toast.success("Filters reset");
+  };
+
+  // Opacity control
+  const handleOpacityChange = (value: number) => {
+    if (!selectedImage || !fabricCanvas) return;
+    selectedImage.set({ opacity: value });
+    fabricCanvas.renderAll();
+  };
+
+  // Blur control via filters
+  const handleBlurChange = (value: number) => {
+    handleFilterChange('blur', value);
+  };
+
+  // Crop helpers
+  const startCrop = () => {
+    if (!fabricCanvas || !selectedImage) return;
+    if (isCropping) return;
+    const img = selectedImage;
+    const rect = new FabricRect({
+      left: img.left! + 10,
+      top: img.top! + 10,
+      width: Math.max(40, (img.getScaledWidth() || 200) - 20),
+      height: Math.max(40, (img.getScaledHeight() || 120) - 20),
+      fill: 'rgba(0,0,0,0.05)',
+      stroke: '#111827',
+      strokeDashArray: [5, 5],
+      strokeWidth: 1,
+      selectable: true,
+      hasBorders: true,
+      hasControls: true,
+      lockRotation: true,
+    });
+    cropRectRef.current = rect;
+    fabricCanvas.add(rect);
+    fabricCanvas.setActiveObject(rect);
+    setIsCropping(true);
+    fabricCanvas.renderAll();
+  };
+
+  const applyCrop = () => {
+    if (!fabricCanvas || !selectedImage || !cropRectRef.current) return;
+    const img = selectedImage;
+    const rect = cropRectRef.current;
+    const imgLeft = img.left || 0;
+    const imgTop = img.top || 0;
+    const imgScaleX = img.scaleX || 1;
+    const imgScaleY = img.scaleY || 1;
+    const cropLeft = rect.left || 0;
+    const cropTop = rect.top || 0;
+    const cropWidth = rect.getScaledWidth();
+    const cropHeight = rect.getScaledHeight();
+
+    const cropX = Math.max(0, (cropLeft - imgLeft) / imgScaleX);
+    const cropY = Math.max(0, (cropTop - imgTop) / imgScaleY);
+    const newWidth = Math.max(1, cropWidth / imgScaleX);
+    const newHeight = Math.max(1, cropHeight / imgScaleY);
+
+    img.set({ cropX, cropY, width: newWidth, height: newHeight });
+    fabricCanvas.remove(rect);
+    cropRectRef.current = null;
+    setIsCropping(false);
+    fabricCanvas.renderAll();
+  };
+
+  const cancelCrop = () => {
+    if (!fabricCanvas) return;
+    if (cropRectRef.current) {
+      fabricCanvas.remove(cropRectRef.current);
+      cropRectRef.current = null;
+    }
+    setIsCropping(false);
+    fabricCanvas.renderAll();
+  };
+
+  const centerCoords = (objWidth: number, objHeight: number) => {
+    const canvasWidth = fabricCanvas?.width ?? window.innerWidth - 320;
+    const canvasHeight = fabricCanvas?.height ?? window.innerHeight;
+    return {
+      left: (canvasWidth - objWidth) / 2,
+      top: (canvasHeight - objHeight) / 2,
+    };
+  };
+
+  const handleAddText = () => {
+    if (!fabricCanvas) return;
+    const textbox = new FabricTextbox("Text", {
+      fontSize: 32,
+      fill: '#111827',
+      editable: true,
+    });
+    const { left, top } = centerCoords(200, 40);
+    textbox.set({ left, top });
+    fabricCanvas.add(textbox);
+    fabricCanvas.setActiveObject(textbox);
+    fabricCanvas.renderAll();
+  };
+
+  const handleAddRect = () => {
+    if (!fabricCanvas) return;
+    const rect = new FabricRect({
+      width: 200,
+      height: 120,
+      fill: 'rgba(0,0,0,0)',
+      stroke: '#111827',
+      strokeWidth: 2,
+      rx: 8,
+      ry: 8,
+    });
+    const { left, top } = centerCoords(200, 120);
+    rect.set({ left, top });
+    fabricCanvas.add(rect);
+    fabricCanvas.setActiveObject(rect);
+    fabricCanvas.renderAll();
+  };
+
+  const handleAddCircle = () => {
+    if (!fabricCanvas) return;
+    const radius = 80;
+    const circle = new FabricCircle({
+      radius,
+      fill: 'rgba(0,0,0,0)',
+      stroke: '#111827',
+      strokeWidth: 2,
+    });
+    const { left, top } = centerCoords(radius * 2, radius * 2);
+    circle.set({ left, top });
+    fabricCanvas.add(circle);
+    fabricCanvas.setActiveObject(circle);
+    fabricCanvas.renderAll();
+  };
+
+  const handleAddLine = () => {
+    if (!fabricCanvas) return;
+    const width = 180;
+    const height = 0;
+    const { left, top } = centerCoords(width, 2);
+    const line = new FabricLine([left, top, left + width, top + height], {
+      stroke: '#111827',
+      strokeWidth: 2,
+      selectable: true,
+    });
+    fabricCanvas.add(line);
+    fabricCanvas.setActiveObject(line);
+    fabricCanvas.renderAll();
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!fabricCanvas) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    FabricImage.fromURL(url).then((img) => {
+      const maxWidth = fabricCanvas.width! * 0.6;
+      const maxHeight = fabricCanvas.height! * 0.6;
+
+      if (img.width! > maxWidth) {
+        img.scaleToWidth(maxWidth);
+      }
+      if (img.getScaledHeight() > maxHeight) {
+        img.scaleToHeight(maxHeight);
+      }
+
+      img.set({
+        left: (fabricCanvas.width! - img.getScaledWidth()) / 2,
+        top: (fabricCanvas.height! - img.getScaledHeight()) / 2,
+        selectable: true,
+      });
+
+      fabricCanvas.add(img);
+      fabricCanvas.setActiveObject(img);
+      fabricCanvas.renderAll();
+
+      setSelectedImage(img);
+      updateEditPanelPosition(img, fabricCanvas);
+      toast.success("Image uploaded onto canvas");
+    }).catch(() => {
+      toast.error("Failed to upload image");
+    }).finally(() => {
+      URL.revokeObjectURL(url);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    });
+  };
+
+  const handleDownload = () => {
+    if (!fabricCanvas) return;
+
+    // Ensure exported image has a white background even though the editor shows a grid
+    const originalBg = fabricCanvas.backgroundColor as string | undefined;
+    (fabricCanvas as any).backgroundColor = '#ffffff';
+    fabricCanvas.renderAll();
+    fabricCanvas.renderAll();
+
+    const dataURL = fabricCanvas.toDataURL({
+      format: 'png',
+      quality: 1,
+      multiplier: 1,
+    });
+
+    const link = document.createElement('a');
+    link.download = `frame-creation-${Date.now()}.png`;
+    link.href = dataURL;
+    link.click();
+    
+    // Restore original background (transparent for grid visibility)
+    (fabricCanvas as any).backgroundColor = (originalBg as string | undefined) || 'transparent';
+    fabricCanvas.renderAll();
+    fabricCanvas.renderAll();
+    
+    toast.success("Canvas downloaded!");
+  };
+
+  const handleEditComplete = (newImageUrl: string) => {
+    if (!fabricCanvas || !selectedImage) return;
+
+    FabricImage.fromURL(newImageUrl, {
+      crossOrigin: 'anonymous'
+    }).then((img) => {
+      // Preserve position, scale, and other properties from the original image
+      img.set({
+        left: selectedImage.left,
+        top: selectedImage.top,
+        scaleX: selectedImage.scaleX,
+        scaleY: selectedImage.scaleY,
+        angle: selectedImage.angle,
+        opacity: selectedImage.opacity,
+        selectable: true,
+      });
+
+      // Remove old image and add new one
+      fabricCanvas.remove(selectedImage);
+      fabricCanvas.add(img);
+      fabricCanvas.setActiveObject(img);
+      fabricCanvas.renderAll();
+      
+      setSelectedImage(img);
+      setShowAIEditPanel(false);
+    }).catch((error) => {
+      console.error("Error loading edited image:", error);
+      toast.error("Failed to load edited image");
+    });
+  };
+
+  const handleNewProject = () => {
+    if (!fabricCanvas) return;
+    fabricCanvas.clear();
+    fabricCanvas.backgroundColor = 'transparent';
+    fabricCanvas.renderAll();
+    setSelectedImage(null);
+    setImageFilters({
+      brightness: 0,
+      contrast: 0,
+      saturation: 0,
+      hue: 0,
+      blur: 0,
+    });
+    onClear();
+    toast.success("Canvas cleared");
+  };
+
+  // Canvas command handler (calls local API route)
+  const handleCanvasCommand = async (command: string): Promise<string> => {
+    if (!fabricCanvas) {
+      return "Canvas not ready";
+    }
+
+    try {
+      // Get current canvas state
+      const objects = fabricCanvas.getObjects().map((obj, idx) => ({
+        id: `obj_${idx}`,
+        type: obj.type,
+        left: obj.left || 0,
+        top: obj.top || 0,
+        width: obj.width || 0,
+        height: obj.height || 0,
+        scaleX: obj.scaleX || 1,
+        scaleY: obj.scaleY || 1,
+      }));
+
+      const canvasState = {
+        objects,
+        canvasWidth: fabricCanvas.width || 0,
+        canvasHeight: fabricCanvas.height || 0,
+      };
+
+      const res = await fetch('/api/canvas-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command, canvasState })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+
+      // Execute actions returned from the edge function
+      if (data?.actions && Array.isArray(data.actions)) {
+        for (const action of data.actions) {
+          const canvasObjs = fabricCanvas.getObjects();
+          
+          if (action.type === 'move' && action.objectIds) {
+            action.objectIds.forEach((id: string) => {
+              const idx = parseInt(id.replace('obj_', ''));
+              if (canvasObjs[idx]) {
+                canvasObjs[idx].set({
+                  left: action.params.left ?? canvasObjs[idx].left,
+                  top: action.params.top ?? canvasObjs[idx].top,
+                });
+              }
+            });
+          } else if (action.type === 'resize' && action.objectIds) {
+            action.objectIds.forEach((id: string) => {
+              const idx = parseInt(id.replace('obj_', ''));
+              if (canvasObjs[idx]) {
+                canvasObjs[idx].set({
+                  scaleX: action.params.scaleX ?? canvasObjs[idx].scaleX,
+                  scaleY: action.params.scaleY ?? canvasObjs[idx].scaleY,
+                });
+              }
+            });
+          } else if (action.type === 'align') {
+            const targetObjects = action.objectIds 
+              ? action.objectIds.map((id: string) => canvasObjs[parseInt(id.replace('obj_', ''))])
+              : canvasObjs;
+
+            targetObjects.forEach((obj: any) => {
+              if (!obj) return;
+              const objWidth = (obj.width || 0) * (obj.scaleX || 1);
+              const objHeight = (obj.height || 0) * (obj.scaleY || 1);
+
+              let left = obj.left || 0;
+              let top = obj.top || 0;
+
+              if (action.params.horizontal === 'center') {
+                left = ((fabricCanvas.width || 0) - objWidth) / 2;
+              } else if (action.params.horizontal === 'left') {
+                left = 20;
+              } else if (action.params.horizontal === 'right') {
+                left = (fabricCanvas.width || 0) - objWidth - 20;
+              }
+
+              if (action.params.vertical === 'center') {
+                top = ((fabricCanvas.height || 0) - objHeight) / 2;
+              } else if (action.params.vertical === 'top') {
+                top = 20;
+              } else if (action.params.vertical === 'bottom') {
+                top = (fabricCanvas.height || 0) - objHeight - 20;
+              }
+
+              obj.set({ left, top });
+            });
+          } else if (action.type === 'add_text') {
+            const textbox = new FabricTextbox(action.params.text || "Text", {
+              fontSize: action.params.fontSize || 32,
+              fill: '#111827',
+              editable: true,
+              left: action.params.left ?? ((fabricCanvas.width || 0) / 2 - 100),
+              top: action.params.top ?? 50,
+            });
+            fabricCanvas.add(textbox);
+          } else if (action.type === 'delete' && action.objectIds) {
+            action.objectIds.forEach((id: string) => {
+              const idx = parseInt(id.replace('obj_', ''));
+              if (canvasObjs[idx]) {
+                fabricCanvas.remove(canvasObjs[idx]);
+              }
+            });
+          } else if (action.type === 'group' && action.objectIds) {
+            // Simple horizontal grouping
+            const spacing = action.params.spacing || 20;
+            const targetObjs = action.objectIds.map((id: string) => 
+              canvasObjs[parseInt(id.replace('obj_', ''))]
+            ).filter(Boolean);
+
+            if (targetObjs.length > 0) {
+              let currentX = 50;
+              targetObjs.forEach((obj: any) => {
+                obj.set({ left: currentX, top: 100 });
+                currentX += ((obj.width || 0) * (obj.scaleX || 1)) + spacing;
+              });
+            }
+          }
+        }
+
+        fabricCanvas.renderAll();
+      }
+
+      return data?.message || "Done";
+    } catch (error) {
+      console.error('Canvas command error:', error);
+      throw error;
+    }
+  };
+
+  // Expose command handler via ref
+  useEffect(() => {
+    if (onCanvasCommandRef) {
+      onCanvasCommandRef.current = handleCanvasCommand;
+    }
+  }, [fabricCanvas, onCanvasCommandRef]);
+
+  return (
+    <>
+    <div className="relative w-full h-screen overflow-hidden bg-[#f3f4f6]">
+      {/* Grid background (not included in exports) */}
+      <div
+        ref={gridRef}
+        className="absolute inset-0 pointer-events-none bg-[radial-gradient(rgba(0,0,0,0.16)_1px,transparent_1px)]"
+      />
+      <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
+      
+      {/* Top Floating Toolbar (shows on image double-click) */}
+      {selectedImage && showTopToolbar && (
+        <div
+          className="absolute z-50 bg-[hsl(var(--toolbar-bg))] border border-border rounded-xl shadow-[0_4px_12px_hsl(var(--shadow-medium))] px-2 py-1 flex items-center gap-1"
+          style={{ left: `${topToolbarPosition.x}px`, top: `${topToolbarPosition.y}px`, width: 280, height: 40 }}
+        >
+          {/* AI Edit */}
+          <Button
+            variant="default"
+            size="sm"
+            className="h-8 px-3 rounded-lg flex items-center gap-1.5"
+            onClick={() => {
+              setShowAIEditPanel(true);
+              setShowEditPanel(false);
+              setShowOpacityPanel(false);
+              setShowBlurPanel(false);
+            }}
+            title="AI Edit"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            <span className="text-xs">Edit</span>
+          </Button>
+
+          {/* Adjustments */}
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-8 px-2 rounded-lg flex items-center gap-1"
+            onClick={() => {
+              const willShow = !showEditPanel;
+              setShowEditPanel(willShow);
+              setShowAIEditPanel(false);
+              setShowOpacityPanel(false);
+              setShowBlurPanel(false);
+              if (willShow) {
+                setEditPanelPosition({ x: topToolbarPosition.x, y: topToolbarPosition.y + 40 + 8 });
+              }
+            }}
+            title="Adjustments"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </Button>
+
+          {/* Opacity */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2 rounded-lg"
+            onClick={() => {
+              setShowOpacityPanel((v) => !v);
+              setShowEditPanel(false);
+              setShowBlurPanel(false);
+            }}
+            title="Opacity"
+          >
+            <Droplet className="w-4 h-4" />
+          </Button>
+
+          {/* Blur */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2 rounded-lg"
+            onClick={() => {
+              setShowBlurPanel((v) => !v);
+              setShowEditPanel(false);
+              setShowOpacityPanel(false);
+            }}
+            title="Blur"
+          >
+            <Filter className="w-4 h-4" />
+          </Button>
+
+          {/* Crop */}
+          {!isCropping && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2 rounded-lg"
+              onClick={startCrop}
+              title="Crop"
+            >
+              <Crop className="w-4 h-4" />
+            </Button>
+          )}
+          {isCropping && (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-8 px-2 rounded-lg"
+                onClick={applyCrop}
+                title="Apply Crop"
+              >
+                <Check className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 rounded-lg"
+                onClick={cancelCrop}
+                title="Cancel Crop"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </>
+          )}
+
+          {/* Delete */}
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-8 px-2 rounded-lg"
+            onClick={() => {
+              if (!fabricCanvas || !selectedImage) return;
+              fabricCanvas.remove(selectedImage);
+              setSelectedImage(null);
+              setShowTopToolbar(false);
+              setShowEditPanel(false);
+              setShowAIEditPanel(false);
+              setShowOpacityPanel(false);
+              setShowBlurPanel(false);
+              fabricCanvas.renderAll();
+            }}
+            title="Delete"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+
+      {/* AI Edit Panel */}
+      {selectedImage && showAIEditPanel && (
+        <EditImagePanel
+          position={editPanelPosition}
+          imageElement={selectedImage.getElement() as HTMLImageElement}
+          onEditComplete={handleEditComplete}
+          onClose={() => setShowAIEditPanel(false)}
+        />
+      )}
+
+      {/* Opacity Panel */}
+      {selectedImage && showTopToolbar && showOpacityPanel && (
+        <div
+          className="absolute z-50 mt-2 bg-background border border-border rounded-xl shadow p-3 w-56"
+          style={{ left: `${topToolbarPosition.x}px`, top: `${topToolbarPosition.y + 40 + 8}px` }}
+        >
+          <div className="flex items-center justify-between mb-2 text-xs">
+            <span>Opacity</span>
+            <span>{Math.round((selectedImage?.opacity ?? 1) * 100)}%</span>
+          </div>
+          <Slider
+            value={[selectedImage?.opacity ?? 1]}
+            onValueChange={([v]) => handleOpacityChange(v)}
+            min={0}
+            max={1}
+            step={0.01}
+          />
+        </div>
+      )}
+
+      {/* Blur Panel */}
+      {selectedImage && showTopToolbar && showBlurPanel && (
+        <div
+          className="absolute z-50 mt-2 bg-background border border-border rounded-xl shadow p-3 w-56"
+          style={{ left: `${topToolbarPosition.x}px`, top: `${topToolbarPosition.y + 40 + 8}px` }}
+        >
+          <div className="flex items-center justify-between mb-2 text-xs">
+            <span>Blur</span>
+            <span>{imageFilters.blur.toFixed(2)}</span>
+          </div>
+          <Slider
+            value={[imageFilters.blur]}
+            onValueChange={([v]) => handleBlurChange(v)}
+            min={0}
+            max={1}
+            step={0.01}
+          />
+        </div>
+      )}
+
+      {/* Bottom Toolbar (Figma-like styling) */}
+      <TooltipProvider>
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-white/70 dark:bg-neutral-900/60 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md px-3 py-2 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-border/60 ring-1 ring-black/5 z-50">
+          {/* Pointer/Hand tool (split button with dropdown chevron) */}
+          <div className="relative inline-flex items-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className={`h-10 w-10 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5 [&_svg]:!w-[19px] [&_svg]:!h-[19px] ${activeTool === 'hand' ? 'bg-muted/70' : ''}`}
+                  aria-label="Current Tool"
+                  onClick={() => setActiveTool(activeTool)}
+                >
+                  {activeTool === 'hand' ? (
+                    <Hand />
+                  ) : (
+                    <MousePointer />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Tools</TooltipContent>
+            </Tooltip>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="absolute right-0 top-1/2 -translate-y-1/2 h-2.5 w-2.5 p-0 rounded-none bg-transparent hover:bg-transparent focus-visible:ring-0 [&_svg]:!size-2" aria-label="More tools">
+                  <ChevronDown className="w-2 h-2 text-foreground/80" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" sideOffset={8} className="rounded-xl">
+                <DropdownMenuItem className="gap-2 text-sm" onClick={() => setActiveTool('pointer')}>
+                  <MousePointer className="w-4 h-4" /> Pointer
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2 text-sm" onClick={() => setActiveTool('hand')}>
+                  <Hand className="w-4 h-4" /> Hand
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Text */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={handleAddText} variant="ghost" className="h-10 w-10 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5 [&_svg]:!w-[19px] [&_svg]:!h-[19px]" aria-label="Add Text">
+                <Type />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Add Text</TooltipContent>
+          </Tooltip>
+
+          {/* Shapes (split button with dropdown chevron) */}
+          <div className="relative inline-flex items-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={handleAddActiveShape} variant="ghost" className={`h-10 w-10 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5 [&_svg]:!w-[19px] [&_svg]:!h-[19px]`} aria-label="Add Shape">
+                  {activeShape === 'rect' && <Square />}
+                  {activeShape === 'circle' && <CircleIcon />}
+                  {activeShape === 'line' && <Minus />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {activeShape === 'rect' ? 'Add Rectangle' : activeShape === 'circle' ? 'Add Circle' : 'Add Line'}
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="absolute right-0 top-1/2 -translate-y-1/2 h-2.5 w-2.5 p-0 rounded-none bg-transparent hover:bg-transparent focus-visible:ring-0 [&_svg]:!size-2" aria-label="More shapes">
+                  <ChevronDown className="w-2 h-2 text-foreground/80" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" sideOffset={8} className="rounded-xl">
+                <DropdownMenuItem className="gap-2 text-sm" onClick={() => setActiveShape('rect')}>
+                  <Square className="w-4 h-4" /> Rectangle
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2 text-sm" onClick={() => setActiveShape('circle')}>
+                  <CircleIcon className="w-4 h-4" /> Circle
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2 text-sm" onClick={() => setActiveShape('line')}>
+                  <Minus className="w-4 h-4" /> Line
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Upload */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={handleUploadClick} variant="ghost" className="h-10 w-10 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5 [&_svg]:!w-[19px] [&_svg]:!h-[19px]" aria-label="Upload Image">
+                <ImagePlus />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Upload Image</TooltipContent>
+          </Tooltip>
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+
+          {/* New Project */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={handleNewProject} variant="ghost" className="h-10 w-10 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5 [&_svg]:!w-[19px] [&_svg]:!h-[19px]" aria-label="New Project">
+                <RotateCcw />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>New Project</TooltipContent>
+          </Tooltip>
+
+          {/* Save/Download Project */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={handleDownload} variant="ghost" className="h-10 w-10 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5 [&_svg]:!w-[19px] [&_svg]:!h-[19px]" aria-label="Save Project">
+                <Save />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Save</TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
+      
+      {/* Adjustments Panel (compact) */}
+      {selectedImage && showTopToolbar && showEditPanel && (
+        <ImageEditPanel
+          position={editPanelPosition}
+          filters={imageFilters}
+          onFilterChange={handleFilterChange}
+          onReset={handleResetFilters}
+          compact
+        />
+      )}
+      
+      {/* (Removed old Bottom Action Bar; consolidated into Bottom Toolbar above) */}
+    </div>
+    {/* Inspector Sidebar (shows when an image is selected) */}
+    {selectedImage && (
+      <InspectorSidebar
+        selectedObject={selectedImage}
+        canvas={fabricCanvas}
+        onClose={() => {
+          if (fabricCanvas) {
+            fabricCanvas.discardActiveObject();
+            fabricCanvas.requestRenderAll();
+          }
+          setSelectedImage(null);
+        }}
+      />
+    )}
+    </>
+  );
+}

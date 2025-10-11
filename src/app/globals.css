@@ -1,26 +1,191 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* 
+  ────────────────────────────────────────────────────────────────
+  FRAME / INFRAME GLOBAL DESIGN SYSTEM
+  All color tokens, layout primitives, and global utilities live here.
+  ────────────────────────────────────────────────────────────────
+*/
+
+/*
+  Tailwind v4 theme tokens
+  Map CSS variables -> Tailwind color tokens so utilities like
+  bg-background, text-foreground, border-border, etc. work.
+*/
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Frame Design System - Minimal Off-White Canvas */
+    --background: 30 20% 98%;  /* #FAFAF8 off-white */
+    --foreground: 0 0% 15%;     /* Dark charcoal text */
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 15%;
+
+    --primary: 0 0% 10%;        /* Near black */
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 0 0% 96%;      /* Light gray */
+    --secondary-foreground: 0 0% 15%;
+
+    --muted: 0 0% 94%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 0 0% 92%;
+    --accent-foreground: 0 0% 15%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 88%;
+    --input: 0 0% 90%;
+    --ring: 0 0% 20%;
+
+    --radius: 1rem;  /* Frame's signature rounded corners */
+    
+    /* Frame-specific tokens */
+    --canvas-bg: 0 0% 100%;  /* Pure white canvas */
+    --toolbar-bg: 0 0% 100%;
+    --shadow-soft: 0 0% 0% / 0.04;
+    --shadow-medium: 0 0% 0% / 0.08;
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* Frame maintains its minimal aesthetic in dark mode */
+    --background: 0 0% 8%;
+    --foreground: 0 0% 95%;
+
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 0 0% 95%;
+    --primary-foreground: 0 0% 10%;
+
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 60%;
+
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 95%;
+
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 0 0% 95%;
+
+    --border: 0 0% 18%;
+    --input: 0 0% 16%;
+    --ring: 0 0% 80%;
+    
+    --canvas-bg: 0 0% 8%;
+    --toolbar-bg: 0 0% 10%;
+    --shadow-soft: 0 0% 100% / 0.04;
+    --shadow-medium: 0 0% 100% / 0.08;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  /* Global base styling */
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased transition-colors duration-300;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* 
+  ────────────────────────────────────────────────────────────────
+  Legacy / utility classes carried over from app.css (Vite)
+  ────────────────────────────────────────────────────────────────
+*/
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+
+.logo:hover {
+  filter: drop-shadow(0 0 2em hsl(234, 100%, 70%));
+}
+
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em hsl(191, 95%, 65%));
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .logo-spin {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
 }
