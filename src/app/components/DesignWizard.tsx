@@ -505,7 +505,7 @@ Elements: ${keywords?.elements.join(", ") || "none specified"}.`;
                   <Button
                     onClick={handleUploadClick}
                     size="icon"
-                    className="h-6 w-6 p-0 rounded-lg shadow-sm bg-muted text-foreground hover:bg-muted/90 border border-border"
+                    className="h-6 w-6 p-0 rounded-full shadow-sm bg-muted text-foreground hover:bg-muted/90 border border-border"
                     title="Upload image"
                   >
                     <Plus className="w-3 h-3" />
@@ -531,7 +531,7 @@ Elements: ${keywords?.elements.join(", ") || "none specified"}.`;
                 onClick={handleSend}
                 disabled={!input.trim() || isProcessing}
                 size="icon"
-                    className="h-7 w-7 p-0 rounded-lg shadow-sm"
+                    className="h-7 w-7 p-0 rounded-full shadow-sm"
                     title={phase === "interview" ? "Send" : "Send feedback"}
               >
                 {isProcessing ? (

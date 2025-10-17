@@ -12,14 +12,18 @@ import ImageEditPanel from "@/app/components/ImageEditPanel";
 import EditImagePanel from "@/app/components/EditImagePanel";
 import { InspectorSidebar } from "@/app/components/InspectorSidebar";
 // use local Next.js API route for canvas commands
+import { executeActions } from "@/app/lib/agent/executor";
+import type { AgentAction } from "@/app/lib/agent/canvas-schema";
 
 interface CanvasProps {
   generatedImageUrl: string | null;
   onClear: () => void;
   onCanvasCommandRef?: React.MutableRefObject<((command: string) => Promise<string>) | null>;
+  onCanvasHistoryRef?: React.MutableRefObject<{ undo: () => void; redo: () => void } | null>;
+  onHistoryAvailableChange?: (available: boolean) => void;
 }
 
-export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef }: CanvasProps) {
+export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [selectedImage, setSelectedImage] = useState<FabricImage | null>(null);
@@ -45,6 +49,14 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef 
   const [activeTool, setActiveTool] = useState<"pointer" | "hand">("pointer");
   const activeToolRef = useRef<"pointer" | "hand">("pointer");
   const [activeShape, setActiveShape] = useState<"rect" | "circle" | "line">("rect");
+  const [selectedObject, setSelectedObject] = useState<any>(null);
+  const setHistoryAvailability = () => {
+    if (onHistoryAvailableChange) {
+      onHistoryAvailableChange((undoStackRef.current?.length || 0) > 0);
+    }
+  };
+  const undoStackRef = useRef<AgentAction[][]>([]);
+  const redoStackRef = useRef<AgentAction[][]>([]);
 
   const syncGridToViewport = (canvas: FabricCanvas) => {
     const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
@@ -96,6 +108,20 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef 
       canvas.setCursor(activeToolRef.current === 'hand' ? 'grab' : 'default');
       canvas.selection = activeToolRef.current === 'pointer';
     });
+
+    // Selection tracking for InspectorSidebar (supports images and text)
+    const syncSelection = () => {
+      const active = canvas.getActiveObject();
+      setSelectedObject(active || null);
+      if (active && active instanceof FabricImage) {
+        setSelectedImage(active);
+      } else if (!active || !(active instanceof FabricImage)) {
+        setSelectedImage(null);
+      }
+    };
+    canvas.on('selection:created', syncSelection);
+    canvas.on('selection:updated', syncSelection);
+    canvas.on('selection:cleared', syncSelection);
 
     // Wheel interactions: two-finger swipe pans, pinch (Ctrl/⌘ + wheel) zooms
     canvas.on('mouse:wheel', (opt: any) => {
@@ -686,96 +712,22 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef 
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
 
-      // Execute actions returned from the edge function
-      if (data?.actions && Array.isArray(data.actions)) {
-        for (const action of data.actions) {
-          const canvasObjs = fabricCanvas.getObjects();
-          
-          if (action.type === 'move' && action.objectIds) {
-            action.objectIds.forEach((id: string) => {
-              const idx = parseInt(id.replace('obj_', ''));
-              if (canvasObjs[idx]) {
-                canvasObjs[idx].set({
-                  left: action.params.left ?? canvasObjs[idx].left,
-                  top: action.params.top ?? canvasObjs[idx].top,
-                });
-              }
-            });
-          } else if (action.type === 'resize' && action.objectIds) {
-            action.objectIds.forEach((id: string) => {
-              const idx = parseInt(id.replace('obj_', ''));
-              if (canvasObjs[idx]) {
-                canvasObjs[idx].set({
-                  scaleX: action.params.scaleX ?? canvasObjs[idx].scaleX,
-                  scaleY: action.params.scaleY ?? canvasObjs[idx].scaleY,
-                });
-              }
-            });
-          } else if (action.type === 'align') {
-            const targetObjects = action.objectIds 
-              ? action.objectIds.map((id: string) => canvasObjs[parseInt(id.replace('obj_', ''))])
-              : canvasObjs;
-
-            targetObjects.forEach((obj: any) => {
-              if (!obj) return;
-              const objWidth = (obj.width || 0) * (obj.scaleX || 1);
-              const objHeight = (obj.height || 0) * (obj.scaleY || 1);
-
-              let left = obj.left || 0;
-              let top = obj.top || 0;
-
-              if (action.params.horizontal === 'center') {
-                left = ((fabricCanvas.width || 0) - objWidth) / 2;
-              } else if (action.params.horizontal === 'left') {
-                left = 20;
-              } else if (action.params.horizontal === 'right') {
-                left = (fabricCanvas.width || 0) - objWidth - 20;
-              }
-
-              if (action.params.vertical === 'center') {
-                top = ((fabricCanvas.height || 0) - objHeight) / 2;
-              } else if (action.params.vertical === 'top') {
-                top = 20;
-              } else if (action.params.vertical === 'bottom') {
-                top = (fabricCanvas.height || 0) - objHeight - 20;
-              }
-
-              obj.set({ left, top });
-            });
-          } else if (action.type === 'add_text') {
-            const textbox = new FabricTextbox(action.params.text || "Text", {
-              fontSize: action.params.fontSize || 32,
-              fill: '#111827',
-              editable: true,
-              left: action.params.left ?? ((fabricCanvas.width || 0) / 2 - 100),
-              top: action.params.top ?? 50,
-            });
-            fabricCanvas.add(textbox);
-          } else if (action.type === 'delete' && action.objectIds) {
-            action.objectIds.forEach((id: string) => {
-              const idx = parseInt(id.replace('obj_', ''));
-              if (canvasObjs[idx]) {
-                fabricCanvas.remove(canvasObjs[idx]);
-              }
-            });
-          } else if (action.type === 'group' && action.objectIds) {
-            // Simple horizontal grouping
-            const spacing = action.params.spacing || 20;
-            const targetObjs = action.objectIds.map((id: string) => 
-              canvasObjs[parseInt(id.replace('obj_', ''))]
-            ).filter(Boolean);
-
-            if (targetObjs.length > 0) {
-              let currentX = 50;
-              targetObjs.forEach((obj: any) => {
-                obj.set({ left: currentX, top: 100 });
-                currentX += ((obj.width || 0) * (obj.scaleX || 1)) + spacing;
-              });
-            }
+      // Execute actions using executor and push inverse for undo
+      if (data?.actions && Array.isArray(data.actions) && data.actions.length > 0) {
+        const { inverseActions } = executeActions(
+          fabricCanvas,
+          data.actions as AgentAction[],
+          {
+            createTextbox: (text: string, options: any) => new FabricTextbox(text, options),
           }
+        );
+        if (inverseActions.length > 0) {
+          undoStackRef.current.push(inverseActions);
+          if (undoStackRef.current.length > 50) undoStackRef.current.shift();
+          // Clear redo on new action
+          redoStackRef.current = [];
+          setHistoryAvailability();
         }
-
-        fabricCanvas.renderAll();
       }
 
       return data?.message || "Done";
@@ -784,6 +736,69 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef 
       throw error;
     }
   };
+
+  // Undo/Redo handlers
+  const handleUndo = () => {
+    if (!fabricCanvas) return;
+    const inverse = undoStackRef.current.pop();
+    if (!inverse || inverse.length === 0) return;
+    // Executing inverse yields a forward set to redo
+    const { inverseActions } = executeActions(
+      fabricCanvas,
+      inverse,
+      {
+        createTextbox: (text: string, options: any) => new FabricTextbox(text, options),
+      }
+    );
+    if (inverseActions.length > 0) {
+      redoStackRef.current.push(inverseActions);
+      if (redoStackRef.current.length > 50) redoStackRef.current.shift();
+      setHistoryAvailability();
+    }
+  };
+
+  const handleRedo = () => {
+    if (!fabricCanvas) return;
+    const forward = redoStackRef.current.pop();
+    if (!forward || forward.length === 0) return;
+    const { inverseActions } = executeActions(
+      fabricCanvas,
+      forward,
+      {
+        createTextbox: (text: string, options: any) => new FabricTextbox(text, options),
+      }
+    );
+    if (inverseActions.length > 0) {
+      undoStackRef.current.push(inverseActions);
+      if (undoStackRef.current.length > 50) undoStackRef.current.shift();
+      setHistoryAvailability();
+    }
+  };
+
+  // Hotkeys for undo/redo
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const isZ = e.key.toLowerCase() === 'z';
+      const isY = e.key.toLowerCase() === 'y';
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && isZ && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if ((meta && isZ && e.shiftKey) || (meta && isY)) {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fabricCanvas]);
+
+  // Expose undo/redo handlers via history ref
+  useEffect(() => {
+    if (onCanvasHistoryRef) {
+      onCanvasHistoryRef.current = { undo: handleUndo, redo: handleRedo };
+    }
+  }, [onCanvasHistoryRef, fabricCanvas]);
 
   // Expose command handler via ref
   useEffect(() => {
@@ -1112,10 +1127,10 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef 
       
       {/* (Removed old Bottom Action Bar; consolidated into Bottom Toolbar above) */}
     </div>
-    {/* Inspector Sidebar (shows when an image is selected) */}
-    {selectedImage && (
+    {/* Inspector Sidebar (shows when an image or text is selected) */}
+    {selectedObject && (
       <InspectorSidebar
-        selectedObject={selectedImage}
+        selectedObject={selectedObject}
         canvas={fabricCanvas}
         onClose={() => {
           if (fabricCanvas) {
@@ -1123,6 +1138,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef 
             fabricCanvas.requestRenderAll();
           }
           setSelectedImage(null);
+          setSelectedObject(null);
         }}
       />
     )}

@@ -9,6 +9,8 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/app/comp
 export default function Page() {
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const canvasCommandRef = useRef<((command: string) => Promise<string>) | null>(null);
+  const canvasHistoryRef = useRef<{ undo: () => void; redo: () => void } | null>(null);
+  const [historyAvailable, setHistoryAvailable] = useState(false);
 
   const handleImageGenerated = (imageUrl: string) => {
     setGeneratedImageUrl(imageUrl);
@@ -33,6 +35,9 @@ export default function Page() {
             onImageGenerated={handleImageGenerated}
             currentImageUrl={generatedImageUrl}
             onCanvasCommand={handleCanvasCommand}
+            onCanvasUndo={() => canvasHistoryRef.current?.undo()}
+            onCanvasRedo={() => canvasHistoryRef.current?.redo()}
+            showHistoryControls={historyAvailable}
           />
         </ResizablePanel>
         <ResizableHandle withHandle />
@@ -41,6 +46,8 @@ export default function Page() {
             generatedImageUrl={generatedImageUrl}
             onClear={handleClear}
             onCanvasCommandRef={canvasCommandRef}
+            onCanvasHistoryRef={canvasHistoryRef}
+            onHistoryAvailableChange={setHistoryAvailable}
           />
         </ResizablePanel>
       </ResizablePanelGroup>

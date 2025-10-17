@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/app/components/ui/button";
 import { Textarea } from "@/app/components/ui/textarea";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
-import { Sparkles, Loader2, ArrowUp, Wand2, ImagePlus, Zap, Brain, PenTool, Plus } from "lucide-react";
+import { Sparkles, Loader2, ArrowUp, Wand2, ImagePlus, Zap, Brain, PenTool, Plus, Undo2, Redo2 } from "lucide-react";
 // Calls go to local Next.js API routes instead of Supabase Edge Functions
 import { toast } from "sonner";
 
@@ -60,15 +60,33 @@ interface PromptSidebarProps {
   onImageGenerated: (imageUrl: string) => void;
   currentImageUrl: string | null;
   onCanvasCommand?: (command: string) => Promise<string>;
+  onCanvasUndo?: () => void;
+  onCanvasRedo?: () => void;
+  showHistoryControls?: boolean;
 }
 
-export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCanvasCommand }: PromptSidebarProps) {
+export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCanvasCommand, onCanvasUndo, onCanvasRedo, showHistoryControls = false }: PromptSidebarProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [mode, setMode] = useState<ChatMode>("design");
   const [isGuidedMode, setIsGuidedMode] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [maxTextareaHeight, setMaxTextareaHeight] = useState<number>(0);
+  const resizeTextareaEl = (el: HTMLTextAreaElement) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    const desired = el.scrollHeight;
+    const maxH = maxTextareaHeight || desired;
+    const clamped = Math.min(desired, maxH);
+    el.style.height = `${clamped}px`;
+    el.style.overflowY = desired > clamped ? 'auto' : 'hidden';
+    if (desired > clamped) {
+      el.scrollTop = el.scrollHeight;
+    }
+  };
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Guided wizard state (keeps chat UI unchanged)
   type WizardPhase = "interview" | "directions" | "refinement";
@@ -86,6 +104,25 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isGenerating]);
+
+  // Auto-grow textarea with max height = 50% of sidebar height; keep bottom in view
+  useEffect(() => {
+    const recomputeMax = () => {
+      const h = containerRef.current?.clientHeight || 0;
+      if (h > 0) setMaxTextareaHeight(Math.floor(h * 0.5));
+    };
+    recomputeMax();
+    window.addEventListener('resize', recomputeMax);
+    return () => window.removeEventListener('resize', recomputeMax);
+  }, []);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    // Ensure min-height is enforced before measuring to avoid collapsing due to padding
+    el.style.minHeight = '112px';
+    resizeTextareaEl(el);
+  }, [input, maxTextareaHeight, mode]);
 
   const handleSend = async () => {
     if (!input.trim()) {
@@ -388,7 +425,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
   };
 
   return (
-    <div className="w-full h-full bg-background border-r border-border flex flex-col">
+    <div ref={containerRef} className="w-full h-full bg-background border-r border-border flex flex-col">
       {/* Header */}
       <div className="px-6 py-4 border-b border-border bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
         <div className="flex items-center justify-between">
@@ -501,7 +538,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-[720px] space-y-4">
+          <div className="mx-auto max-w-[880px] space-y-4">
             {messages.map((message, index) => (
               <div key={index} className="space-y-1.5">
                 {message.role === "user" ? (
@@ -580,12 +617,32 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
       </ScrollArea>
 
       {/* Composer */}
-      <div className={`p-4 border-t border-border transition-all duration-300 ${
-        mode === "design" 
-          ? "bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40"
-          : "bg-accent/30 backdrop-blur supports-[backdrop-filter]:bg-accent/20"
-      }`}>
-        <div className="mx-auto max-w-[720px]">
+      <div className="p-4 transition-all duration-300">
+        <div className="mx-auto max-w-[880px]">
+          {showHistoryControls && (
+            <div className="mb-2 flex items-center gap-2 justify-end">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-8 px-2 rounded-md"
+                onClick={onCanvasUndo}
+                title="Undo (Ctrl/Cmd+Z)"
+              >
+                <Undo2 className="w-4 h-4 mr-1" />
+                Undo
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-8 px-2 rounded-md"
+                onClick={onCanvasRedo}
+                title="Redo (Ctrl+Shift+Z / Ctrl+Y)"
+              >
+                <Redo2 className="w-4 h-4 mr-1" />
+                Redo
+              </Button>
+            </div>
+          )}
           <div className={`rounded-xl border shadow-sm focus-within:ring-2 transition-all duration-300 ${
             mode === "design"
               ? "border-blue-200/50 bg-muted/70 bg-[linear-gradient(to_bottom_right,rgba(59,130,246,0.08),transparent)] focus-within:ring-blue-400/25"
@@ -597,7 +654,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                 <Button
                   onClick={handleUploadClick}
                   size="icon"
-                  className="h-6 w-6 p-0 rounded-lg shadow-sm bg-muted text-foreground hover:bg-muted/90 border border-border"
+                  className="h-6 w-6 p-0 rounded-full shadow-sm bg-muted text-foreground hover:bg-muted/90 border border-border"
                   title="Upload image"
                 >
                   <Plus className="w-3 h-3" />
@@ -606,7 +663,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                   <Button
                     onClick={() => { setIsGuidedMode(!isGuidedMode); setWizardPhase('interview'); setGuidedConversation([]); setWizardDirections([]); setWizardKeywords(null); }}
                     size="icon"
-                    className={`h-6 w-6 p-0 rounded-lg shadow-sm border transition-all duration-300 ${
+                    className={`h-6 w-6 p-0 rounded-full shadow-sm border transition-all duration-300 ${
                       isGuidedMode 
                         ? "bg-gradient-to-br from-blue-600 to-cyan-600 text-white border-transparent ring-2 ring-blue-400/30" 
                         : "bg-muted text-foreground hover:bg-muted/90 border-border"
@@ -620,13 +677,18 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
               </div>
               <Textarea
+                ref={textareaRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  // Resize immediately on keystroke so height grows before wrapping
+                  if (textareaRef.current) resizeTextareaEl(textareaRef.current);
+                }}
                 onKeyDown={handleKeyPress}
                 placeholder={
                   mode === "design" ? "Describe what to create..." : "Tell the canvas what to do..."
                 }
-                className="min-h-[96px] resize-none bg-transparent border-0 focus-visible:ring-0 px-4 pr-12 py-4 placeholder:text-muted-foreground/80"
+                className="min-h-[112px] resize-none bg-transparent border-0 focus-visible:ring-0 pl-4 pr-16 pt-4 pb-12 placeholder:text-muted-foreground/80"
                 disabled={isGenerating}
               />
               <div className="absolute right-2 bottom-2 flex items-center gap-2">
@@ -634,7 +696,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                   onClick={handleSend}
                   disabled={isGenerating || !input.trim()}
                   size="icon"
-                  className={`h-7 w-7 p-0 rounded-lg shadow-sm transition-all duration-300 ${
+                  className={`h-7 w-7 p-0 rounded-full shadow-sm transition-all duration-300 ${
                     mode === "canvas" ? "bg-foreground hover:bg-foreground/90" : ""
                   }`}
                   title={mode === "design" ? (isGuidedMode ? "Start Wizard" : "Generate Image") : "Execute Command"}

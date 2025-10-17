@@ -31,6 +31,8 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose }: InspectorS
     fontFamily: "Inter",
     fontWeight: "400",
     textAlign: "left",
+    lineHeight: 1.2,
+    letterSpacingPx: 0,
   });
 
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -87,6 +89,12 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose }: InspectorS
         fontFamily: (obj as FabricTextbox).fontFamily || "Inter",
         fontWeight: (obj as FabricTextbox).fontWeight?.toString() || "400",
         textAlign: (obj as FabricTextbox).textAlign || "left",
+        lineHeight: (obj as FabricTextbox).lineHeight || 1.2,
+        letterSpacingPx: (() => {
+          const fs = (obj as FabricTextbox).fontSize || 16;
+          const cs = (obj as FabricTextbox).charSpacing || 0; // fabric: thousandths of em
+          return Math.round((cs / 1000) * fs);
+        })(),
       });
 
       if (lockAspectRatio) {
@@ -152,6 +160,13 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose }: InspectorS
       if (updates.fontFamily !== undefined) selectedObject.set({ fontFamily: updates.fontFamily });
       if (updates.fontWeight !== undefined) selectedObject.set({ fontWeight: updates.fontWeight });
       if (updates.textAlign !== undefined) selectedObject.set({ textAlign: updates.textAlign as any });
+      if (updates.lineHeight !== undefined) selectedObject.set({ lineHeight: updates.lineHeight });
+      if (updates.letterSpacingPx !== undefined) {
+        const fs = updates.fontSize !== undefined ? updates.fontSize : (selectedObject.fontSize || 16);
+        const px = updates.letterSpacingPx;
+        const charSpacing = Math.round(((px || 0) / fs) * 1000);
+        selectedObject.set({ charSpacing });
+      }
     }
 
     canvas.renderAll();
@@ -442,6 +457,10 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose }: InspectorS
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Inter">Inter</SelectItem>
+                        <SelectItem value="Roboto">Roboto</SelectItem>
+                        <SelectItem value="Poppins">Poppins</SelectItem>
+                        <SelectItem value="Montserrat">Montserrat</SelectItem>
+                        <SelectItem value="Lato">Lato</SelectItem>
                         <SelectItem value="Arial">Arial</SelectItem>
                         <SelectItem value="Georgia">Georgia</SelectItem>
                         <SelectItem value="Courier New">Courier New</SelectItem>
@@ -490,6 +509,48 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose }: InspectorS
                         <SelectItem value="justify">Justify</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Line Height</Label>
+                      <Input
+                        type="number"
+                        step="0.05"
+                        min="0.5"
+                        value={properties.lineHeight}
+                        onChange={(e) => updateObject({ lineHeight: Number(e.target.value) })}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Letter Spacing (px)</Label>
+                      <Input
+                        type="number"
+                        step="0.5"
+                        value={properties.letterSpacingPx}
+                        onChange={(e) => updateObject({ letterSpacingPx: Number(e.target.value) })}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs">Text Color</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={properties.fill}
+                        onChange={(e) => updateObject({ fill: e.target.value })}
+                        className="h-8 w-12 p-1"
+                      />
+                      <Input
+                        type="text"
+                        value={properties.fill}
+                        onChange={(e) => updateObject({ fill: e.target.value })}
+                        className="h-8 text-xs flex-1"
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-1">
