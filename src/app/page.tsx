@@ -4,7 +4,7 @@
 import { useState, useRef } from "react";
 import PromptSidebar from "@/app/components/PromptSidebar";
 import Canvas from "@/app/components/Canvas";
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/app/components/ui/resizable";
+// Removed resizable panels to allow overlay layout (canvas behind floating sidebar)
 
 export default function Page() {
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
@@ -28,9 +28,19 @@ export default function Page() {
   };
 
   return (
-    <div className="w-full h-screen overflow-hidden bg-white">
-      <ResizablePanelGroup direction="horizontal">
-        <ResizablePanel defaultSize={28} minSize={20} maxSize={40}>
+    <div className="relative w-full h-screen overflow-hidden bg-white">
+      {/* Canvas fills the background */}
+      <Canvas
+        generatedImageUrl={generatedImageUrl}
+        onClear={handleClear}
+        onCanvasCommandRef={canvasCommandRef}
+        onCanvasHistoryRef={canvasHistoryRef}
+        onHistoryAvailableChange={setHistoryAvailable}
+      />
+
+      {/* Floating Prompt Sidebar overlay */}
+      <div className="pointer-events-none absolute inset-0 z-10">
+        <div className="pointer-events-auto absolute left-4 top-4 bottom-4 w-[28%] max-w-full">
           <PromptSidebar
             onImageGenerated={handleImageGenerated}
             currentImageUrl={generatedImageUrl}
@@ -39,18 +49,8 @@ export default function Page() {
             onCanvasRedo={() => canvasHistoryRef.current?.redo()}
             showHistoryControls={historyAvailable}
           />
-        </ResizablePanel>
-        <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={72} minSize={60}>
-          <Canvas
-            generatedImageUrl={generatedImageUrl}
-            onClear={handleClear}
-            onCanvasCommandRef={canvasCommandRef}
-            onCanvasHistoryRef={canvasHistoryRef}
-            onHistoryAvailableChange={setHistoryAvailable}
-          />
-        </ResizablePanel>
-      </ResizablePanelGroup>
+        </div>
+      </div>
     </div>
   );
 }

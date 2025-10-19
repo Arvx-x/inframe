@@ -425,19 +425,13 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
   };
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-background border-r border-border flex flex-col">
+    <div ref={containerRef} className="w-full h-[calc(100%-1rem)] my-2 bg-white border border-border rounded-xl overflow-hidden shadow-sm flex flex-col">
       {/* Header */}
       <div className="px-6 py-4 border-b border-border bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-sm transition-all duration-300 ${
-              mode === "design" ? "bg-primary" : "bg-foreground"
-            }`}>
-              {mode === "design" ? (
-                <Sparkles className="w-5 h-5 text-primary-foreground" />
-              ) : (
-                <Zap className="w-5 h-5 text-background" />
-              )}
+            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm">
+              <img src="/logooo2.png" alt="Logo" className="w-full h-full object-cover" />
             </div>
             <div>
               <h1 className="text-base font-semibold leading-none">{projectName}</h1>
@@ -464,7 +458,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
             onClick={() => setMode("design")}
             className={`flex-1 flex items-center justify-center gap-2 px-2 py-2 rounded-md text-xs font-medium transition-all duration-300 ${
               mode === "design"
-                ? "bg-background text-foreground shadow-sm"
+                ? "text-foreground bg-[hsl(var(--sidebar-ring)/0.10)] shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -475,7 +469,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
             onClick={() => setMode("canvas")}
             className={`flex-1 flex items-center justify-center gap-2 px-2 py-2 rounded-md text-xs font-medium transition-all duration-300 ${
               mode === "canvas"
-                ? "bg-background text-foreground shadow-sm"
+                ? "text-foreground bg-[hsl(var(--sidebar-ring)/0.10)] shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -488,54 +482,8 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
       {/* Chat Messages */}
       <ScrollArea className="flex-1 px-4 py-4">
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center px-4">
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-sm transition-all duration-300 ${
-              mode === "design" ? "bg-primary/10" : "bg-foreground/10"
-            }`}>
-              {mode === "design" ? (
-                <Sparkles className="w-8 h-8 text-primary" />
-              ) : (
-                <Zap className="w-8 h-8 text-foreground" />
-              )}
-            </div>
-            <h3 className="text-lg font-semibold mb-2">
-              {mode === "design" ? "Quick Design Mode" : "Command the canvas"}
-            </h3>
-            <p className="text-sm text-muted-foreground max-w-xs">
-              {mode === "design" 
-                ? "Describe what to create and get instant results. Click the pen icon for guided wizard mode."
-                : "Tell the canvas what to do in natural language. Align, move, resize, add elements."
-              }
-            </p>
-            <div className="mt-5 flex flex-wrap gap-2 max-w-sm justify-center">
-              {mode === "design" ? [
-                { icon: <Wand2 className="w-3.5 h-3.5" />, text: "Minimal logo for 'Stryde'" },
-                { icon: <ImagePlus className="w-3.5 h-3.5" />, text: "Poster for jazz night, bold retro" },
-                { icon: <Sparkles className="w-3.5 h-3.5" />, text: "Neon cyberpunk city at dusk" },
-              ].map((chip, i) => (
-                <button
-                  key={i}
-                  onClick={() => setInput(chip.text)}
-                  className="text-xs px-3 py-1.5 rounded-full border bg-white hover:bg-muted transition shadow-sm inline-flex items-center gap-1"
-                >
-                  {chip.icon}
-                  {chip.text}
-                </button>
-              )) : [
-                { icon: <Zap className="w-3.5 h-3.5" />, text: "Center everything" },
-                { icon: <Zap className="w-3.5 h-3.5" />, text: "Move logo to top-left" },
-                { icon: <Zap className="w-3.5 h-3.5" />, text: "Make images smaller" },
-              ].map((chip, i) => (
-                <button
-                  key={i}
-                  onClick={() => setInput(chip.text)}
-                  className="text-xs px-3 py-1.5 rounded-full border bg-white hover:bg-muted transition shadow-sm inline-flex items-center gap-1"
-                >
-                  {chip.icon}
-                  {chip.text}
-                </button>
-              ))}
-            </div>
+          <div className="mx-auto max-w-[880px] space-y-4">
+            <div ref={bottomRef} />
           </div>
         ) : (
           <div className="mx-auto max-w-[880px] space-y-4">

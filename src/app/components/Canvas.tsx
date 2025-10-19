@@ -49,6 +49,9 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const [activeTool, setActiveTool] = useState<"pointer" | "hand">("pointer");
   const activeToolRef = useRef<"pointer" | "hand">("pointer");
   const [activeShape, setActiveShape] = useState<"rect" | "circle" | "line">("rect");
+  const [activeToolbarButton, setActiveToolbarButton] = useState<
+    'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'new' | 'save'
+  >('pointer');
   const [selectedObject, setSelectedObject] = useState<any>(null);
   const setHistoryAvailability = () => {
     if (onHistoryAvailableChange) {
@@ -827,7 +830,9 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           <Button
             variant="default"
             size="sm"
-            className="h-8 px-3 rounded-lg flex items-center gap-1.5"
+            className={`h-8 px-3 rounded-lg flex items-center gap-1.5 ${
+              showAIEditPanel ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : ''
+            }`}
             onClick={() => {
               setShowAIEditPanel(true);
               setShowEditPanel(false);
@@ -844,7 +849,9 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           <Button
             variant="secondary"
             size="sm"
-            className="h-8 px-2 rounded-lg flex items-center gap-1"
+            className={`h-8 px-2 rounded-lg flex items-center gap-1 ${
+              showEditPanel ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : ''
+            }`}
             onClick={() => {
               const willShow = !showEditPanel;
               setShowEditPanel(willShow);
@@ -864,7 +871,9 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           <Button
             variant="outline"
             size="sm"
-            className="h-8 px-2 rounded-lg"
+            className={`h-8 px-2 rounded-lg ${
+              showOpacityPanel ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : ''
+            }`}
             onClick={() => {
               setShowOpacityPanel((v) => !v);
               setShowEditPanel(false);
@@ -879,7 +888,9 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           <Button
             variant="outline"
             size="sm"
-            className="h-8 px-2 rounded-lg"
+            className={`h-8 px-2 rounded-lg ${
+              showBlurPanel ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : ''
+            }`}
             onClick={() => {
               setShowBlurPanel((v) => !v);
               setShowEditPanel(false);
@@ -1000,16 +1011,23 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
 
       {/* Bottom Toolbar (Figma-like styling) */}
       <TooltipProvider>
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-white/70 dark:bg-neutral-900/60 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md px-3 py-2 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-border/60 ring-1 ring-black/5 z-50">
+        <div
+          className="absolute bottom-6 -translate-x-1/2 flex items-center gap-3 bg-white/70 dark:bg-neutral-900/60 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md px-3 py-2 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-border/60 ring-1 ring-black/5 z-50"
+          style={{ left: 'calc(1rem + 28% + (100% - (1rem + 28%)) / 2)' }}
+        >
           {/* Pointer/Hand tool (split button with dropdown chevron) */}
           <div className="relative inline-flex items-center">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  className={`h-10 w-10 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5 [&_svg]:!w-[19px] [&_svg]:!h-[19px] ${activeTool === 'hand' ? 'bg-muted/70' : ''}`}
+                  className={`h-10 w-10 p-0 rounded-lg [&_svg]:!w-[19px] [&_svg]:!h-[19px] ${activeToolbarButton === 'pointer' || activeToolbarButton === 'hand' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`}
                   aria-label="Current Tool"
-                  onClick={() => setActiveTool(activeTool)}
+                  onClick={() => {
+                    const next = activeTool === 'hand' ? 'pointer' : 'hand';
+                    setActiveTool(next);
+                    setActiveToolbarButton(next);
+                  }}
                 >
                   {activeTool === 'hand' ? (
                     <Hand />
@@ -1027,10 +1045,10 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="center" sideOffset={8} className="rounded-xl">
-                <DropdownMenuItem className="gap-2 text-sm" onClick={() => setActiveTool('pointer')}>
+                <DropdownMenuItem className="gap-2 text-sm" onClick={() => { setActiveTool('pointer'); setActiveToolbarButton('pointer'); }}>
                   <MousePointer className="w-4 h-4" /> Pointer
                 </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-sm" onClick={() => setActiveTool('hand')}>
+                <DropdownMenuItem className="gap-2 text-sm" onClick={() => { setActiveTool('hand'); setActiveToolbarButton('hand'); }}>
                   <Hand className="w-4 h-4" /> Hand
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -1040,7 +1058,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           {/* Text */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={handleAddText} variant="ghost" className="h-10 w-10 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5 [&_svg]:!w-[19px] [&_svg]:!h-[19px]" aria-label="Add Text">
+              <Button onClick={() => { setActiveToolbarButton('text'); handleAddText(); }} variant="ghost" className={`h-10 w-10 p-0 rounded-lg [&_svg]:!w-[19px] [&_svg]:!h-[19px] ${activeToolbarButton === 'text' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Add Text">
                 <Type />
               </Button>
             </TooltipTrigger>
@@ -1051,7 +1069,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           <div className="relative inline-flex items-center">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button onClick={handleAddActiveShape} variant="ghost" className={`h-10 w-10 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5 [&_svg]:!w-[19px] [&_svg]:!h-[19px]`} aria-label="Add Shape">
+              <Button onClick={() => { setActiveToolbarButton('shape'); handleAddActiveShape(); }} variant="ghost" className={`h-10 w-10 p-0 rounded-lg [&_svg]:!w-[19px] [&_svg]:!h-[19px] ${activeToolbarButton === 'shape' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Add Shape">
                   {activeShape === 'rect' && <Square />}
                   {activeShape === 'circle' && <CircleIcon />}
                   {activeShape === 'line' && <Minus />}
@@ -1068,13 +1086,13 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="center" sideOffset={8} className="rounded-xl">
-                <DropdownMenuItem className="gap-2 text-sm" onClick={() => setActiveShape('rect')}>
+                <DropdownMenuItem className="gap-2 text-sm" onClick={() => { setActiveToolbarButton('shape'); setActiveShape('rect'); }}>
                   <Square className="w-4 h-4" /> Rectangle
                 </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-sm" onClick={() => setActiveShape('circle')}>
+                <DropdownMenuItem className="gap-2 text-sm" onClick={() => { setActiveToolbarButton('shape'); setActiveShape('circle'); }}>
                   <CircleIcon className="w-4 h-4" /> Circle
                 </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-sm" onClick={() => setActiveShape('line')}>
+                <DropdownMenuItem className="gap-2 text-sm" onClick={() => { setActiveToolbarButton('shape'); setActiveShape('line'); }}>
                   <Minus className="w-4 h-4" /> Line
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -1084,7 +1102,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           {/* Upload */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={handleUploadClick} variant="ghost" className="h-10 w-10 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5 [&_svg]:!w-[19px] [&_svg]:!h-[19px]" aria-label="Upload Image">
+              <Button onClick={() => { setActiveToolbarButton('upload'); handleUploadClick(); }} variant="ghost" className={`h-10 w-10 p-0 rounded-lg [&_svg]:!w-[19px] [&_svg]:!h-[19px] ${activeToolbarButton === 'upload' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Upload Image">
                 <ImagePlus />
               </Button>
             </TooltipTrigger>
@@ -1095,7 +1113,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           {/* New Project */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={handleNewProject} variant="ghost" className="h-10 w-10 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5 [&_svg]:!w-[19px] [&_svg]:!h-[19px]" aria-label="New Project">
+              <Button onClick={() => { setActiveToolbarButton('new'); handleNewProject(); }} variant="ghost" className={`h-10 w-10 p-0 rounded-lg [&_svg]:!w-[19px] [&_svg]:!h-[19px] ${activeToolbarButton === 'new' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="New Project">
                 <RotateCcw />
               </Button>
             </TooltipTrigger>
@@ -1105,7 +1123,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           {/* Save/Download Project */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={handleDownload} variant="ghost" className="h-10 w-10 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5 [&_svg]:!w-[19px] [&_svg]:!h-[19px]" aria-label="Save Project">
+              <Button onClick={() => { setActiveToolbarButton('save'); handleDownload(); }} variant="ghost" className={`h-10 w-10 p-0 rounded-lg [&_svg]:!w-[19px] [&_svg]:!h-[19px] ${activeToolbarButton === 'save' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Save Project">
                 <Save />
               </Button>
             </TooltipTrigger>
