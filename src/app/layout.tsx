@@ -12,6 +12,11 @@ const lato = Lato({ subsets: ['latin'], variable: '--font-lato', weight: ['300',
 export const metadata = {
   title: 'Frame / Inframe',
   description: 'AI-native creative canvas',
+  icons: {
+    icon: '/logooo2.png',
+    shortcut: '/logooo2.png',
+    apple: '/logooo2.png',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
