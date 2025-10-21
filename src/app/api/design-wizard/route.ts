@@ -208,7 +208,71 @@ export async function POST(request: Request) {
     let systemPrompt = "";
     let responseFormat: any = undefined;
 
-    if (phase === "interview") {
+    if (phase === "chat") {
+      // Simplified conversational mode for chat UI
+      systemPrompt = `You are a friendly design assistant helping users create images. 
+
+Your goal: Have a natural conversation to understand what they want to create.
+
+Ask about (casually, not formally):
+- What they want to create (e.g., poster, logo, illustration, social media post)
+- The style/mood they prefer (e.g., minimal, bold, playful, professional)
+- Target audience or purpose
+- Any specific elements they want included
+
+Rules:
+- Be conversational and friendly, not robotic
+- Ask ONE question at a time naturally
+- After gathering enough info (usually 2-3 questions), respond with a JSON object indicating you're ready to generate
+- If you have enough information to create the image, return JSON: {"shouldGenerate": true, "finalPrompt": "detailed prompt here"}
+- Otherwise, just respond with normal conversational text asking your next question
+- Don't explain the JSON format to users, just return it when ready
+- Keep questions natural and brief
+
+Message count: ${messages?.length || 0}`;
+
+      const messageList: Array<{ role: string; content: string }> = [...(messages || [])];
+      const contents = messageList
+        .filter((m) => m && typeof m.content === "string" && (m.role === "user" || m.role === "assistant"))
+        .map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        }));
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${INFRAME_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        console.error("AI Gateway error:", res.status, errorText);
+        return NextResponse.json({ success: false, error: `AI Gateway error: ${res.status}` }, { status: 502 });
+      }
+
+      const data = await res.json().catch(() => null);
+      const content = data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).filter(Boolean).join("\n");
+
+      if (!content) {
+        return NextResponse.json({ success: false, error: "No content in AI response" }, { status: 502 });
+      }
+
+      // Try to parse as JSON first (in case AI is ready to generate)
+      try {
+        const parsed = JSON.parse(content);
+        if (parsed.shouldGenerate) {
+          return NextResponse.json({ success: true, shouldGenerate: true, finalPrompt: parsed.finalPrompt });
+        }
+      } catch (e) {
+        // Not JSON, just a regular conversational response
+      }
+
+      return NextResponse.json({ success: true, shouldGenerate: false, message: content });
+    } else if (phase === "interview") {
       systemPrompt = `You are a design consultant conducting a brief interview to understand the user's design needs. 
 
 Your goal: Ask 3-4 smart, targeted questions to clarify:

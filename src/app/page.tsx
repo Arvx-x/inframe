@@ -38,9 +38,9 @@ export default function Page() {
         onHistoryAvailableChange={setHistoryAvailable}
       />
 
-      {/* Floating Prompt Sidebar overlay */}
-      <div className="pointer-events-none absolute inset-0 z-10">
-        <div className="pointer-events-auto absolute left-4 top-4 bottom-4 w-[28%] max-w-full">
+      {/* Floating Chat Composer overlay at center-bottom */}
+      <div className="pointer-events-none absolute inset-0 z-10 overflow-visible">
+        <div className="pointer-events-auto absolute bottom-6 left-1/2 -translate-x-1/2 w-[40%] max-w-[600px] overflow-visible">
           <PromptSidebar
             onImageGenerated={handleImageGenerated}
             currentImageUrl={generatedImageUrl}

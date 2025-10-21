@@ -6,7 +6,7 @@ import { Textarea } from "@/app/components/ui/textarea";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
 import { Input } from "@/app/components/ui/input";
-import { Sparkles, Loader2, ArrowUp, Wand2, ImagePlus, Zap, Brain, PenTool, Plus, Undo2, Redo2, Minus, Palette } from "lucide-react";
+import { Sparkles, Loader2, ArrowUp, Wand2, ImagePlus, Zap, Brain, PenTool, Plus, Undo2, Redo2, Minus, Palette, MessageSquare, X } from "lucide-react";
 // Calls go to local Next.js API routes instead of Supabase Edge Functions
 import { toast } from "sonner";
 
@@ -81,6 +81,15 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerRef = useRef<HTMLDivElement | null>(null);
+  
+  // New states for expand/collapse
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [lastUserMessage, setLastUserMessage] = useState("");
+  
+  // Chat mode states
+  const [isChatMode, setIsChatMode] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [maxTextareaHeight, setMaxTextareaHeight] = useState<number>(0);
   const resizeTextareaEl = (el: HTMLTextAreaElement) => {
     if (!el) return;
@@ -131,6 +140,37 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
     resizeTextareaEl(el);
   }, [input, maxTextareaHeight, mode]);
 
+  // Click-outside detection to collapse the composer (skip if chat mode is active)
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (composerRef.current && !composerRef.current.contains(event.target as Node) && !isChatMode) {
+        setIsExpanded(false);
+      }
+    };
+    
+    if (isExpanded && !isChatMode) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isExpanded, isChatMode]);
+
+  // Auto-focus textarea when expanding
+  useEffect(() => {
+    if (isExpanded && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [isExpanded]);
+  
+  // Scroll chat messages to bottom when new messages arrive
+  useEffect(() => {
+    if (isChatMode && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, isChatMode]);
+
   const handleSend = async () => {
     if (!input.trim()) {
       toast.error("Please enter a message");
@@ -138,7 +178,87 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
     }
 
     const userMessage: Message = { role: "user", content: input, timestamp: Date.now() };
+    
+    // Handle chat mode separately
+    if (isChatMode) {
+      setChatMessages((prev) => [...prev, userMessage]);
+      setLastUserMessage(input);
+      setInput("");
+      setIsGenerating(true);
+      
+      try {
+        // Simplified conversational flow
+        const res = await fetch('/api/design-wizard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            phase: 'chat', 
+            messages: chatMessages.concat(userMessage),
+            preferences: {
+              exclude: (excludeText || "").trim() || undefined,
+              colors: selectedColors,
+            }
+          })
+        });
+        
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        
+        // Check if AI is ready to generate
+        if (data.shouldGenerate) {
+          // Generate the image
+          const category = classifyIdea(data.finalPrompt || userMessage.content);
+          const keywords = extractKeywords(data.finalPrompt || userMessage.content);
+          const refinedPrompt = buildRefinedPrompt(data.finalPrompt || userMessage.content, category, keywords, false);
+          
+          const genRes = await fetch('/api/multi-model-generation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: refinedPrompt,
+              preferences: { exclude: (excludeText || "").trim() || undefined, colors: selectedColors }
+            })
+          });
+          
+          if (!genRes.ok) throw new Error(await genRes.text());
+          const genData = await genRes.json();
+          
+          if (genData?.variants?.[0]?.imageUrl) {
+            onImageGenerated(genData.variants[0].imageUrl);
+            const confirmMessage: Message = {
+              role: "assistant",
+              content: "✨ Image created successfully! I've added it to your canvas.",
+              timestamp: Date.now()
+            };
+            setChatMessages((prev) => [...prev, confirmMessage]);
+          }
+        } else {
+          // Continue conversation
+          const assistantMessage: Message = {
+            role: "assistant",
+            content: data.message || "Tell me more about what you'd like to create.",
+            timestamp: Date.now()
+          };
+          setChatMessages((prev) => [...prev, assistantMessage]);
+        }
+      } catch (error) {
+        console.error('Chat error:', error);
+        toast.error("Failed to process message");
+        const errorMessage: Message = {
+          role: "assistant",
+          content: "Sorry, I encountered an error. Please try again.",
+          timestamp: Date.now()
+        };
+        setChatMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setIsGenerating(false);
+      }
+      return;
+    }
+    
+    // Original non-chat mode logic
     setMessages((prev) => [...prev, userMessage]);
+    setLastUserMessage(input); // Save last user message
     if (mode === 'design' && isGuidedMode) {
       // Keep a parallel guided conversation log
       setGuidedConversation(prev => [...prev, userMessage]);
@@ -436,178 +556,110 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
   };
 
   return (
-    <div ref={containerRef} className="w-full h-[calc(100%-1rem)] my-2 bg-white border border-border rounded-xl overflow-hidden shadow-sm flex flex-col">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-border bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm">
-              <img src="/logooo2.png" alt="Logo" className="w-full h-full object-cover" />
-            </div>
-            <div>
-              <h1 className="text-base font-semibold leading-none">{projectName}</h1>
-              <p className="text-xs text-muted-foreground mt-1">
-                {mode === "design" ? "Design Mode • Quick create" : "Canvas command agent"}
-              </p>
-            </div>
-          </div>
-          <div className={`text-xs px-2 py-1 rounded-full border transition-all duration-300 ${
-            mode === "design" 
-              ? "text-muted-foreground bg-muted/40" 
-              : "text-foreground bg-accent font-medium"
-          }`}>
-            {mode === "design" 
-              ? "Quick Create"
-              : "Active Agent"
-            }
-          </div>
+    <div ref={containerRef} className="w-full relative overflow-visible">
+      {/* Mode Switcher - Hidden but functionality preserved */}
+      <div className="hidden">
+        <button onClick={() => setMode("design")}>Design</button>
+        <button onClick={() => setMode("canvas")}>Canvas</button>
         </div>
         
-        {/* Mode Switcher */}
-        <div className="mt-4 flex items-center gap-1 p-1 bg-muted/40 rounded-lg border">
-          <button
-            onClick={() => setMode("design")}
-            className={`flex-1 flex items-center justify-center gap-2 px-2 py-2 rounded-md text-xs font-medium transition-all duration-300 ${
-              mode === "design"
-                ? "text-foreground bg-[hsl(var(--sidebar-ring)/0.10)] shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <PenTool className="w-3.5 h-3.5" />
-            Design
-          </button>
-          <button
-            onClick={() => setMode("canvas")}
-            className={`flex-1 flex items-center justify-center gap-2 px-2 py-2 rounded-md text-xs font-medium transition-all duration-300 ${
-              mode === "canvas"
-                ? "text-foreground bg-[hsl(var(--sidebar-ring)/0.10)] shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5" />
-            Canvas
-          </button>
-        </div>
-      </div>
-
-      {/* Chat Messages */}
-      <ScrollArea className="flex-1 px-4 py-4">
-        {messages.length === 0 ? (
-          <div className="mx-auto max-w-[880px] space-y-4">
-            <div ref={bottomRef} />
-          </div>
-        ) : (
-          <div className="mx-auto max-w-[880px] space-y-4">
-            {messages.map((message, index) => (
-              <div key={index} className="space-y-1.5">
-                {message.role === "user" ? (
-                  <div className="space-y-2">
-                    {message.imageUrl && (
-                      <div className="rounded-md border border-border overflow-hidden inline-block max-w-xs">
-                        <img src={message.imageUrl} alt="Uploaded" className="w-full h-auto" />
-                      </div>
-                    )}
-                    {message.content && (
-                      <div className="rounded-md border border-border bg-muted/60 px-3 py-2 font-inter text-[13px] text-foreground whitespace-pre-wrap">
-                        {message.content}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {message.imageUrl && (
-                      <div className="rounded-md border border-border overflow-hidden inline-block max-w-xs">
-                        <img src={message.imageUrl} alt="Generated" className="w-full h-auto" />
-                      </div>
-                    )}
-                    {message.content && (
-                      <div className="text-sm leading-6 text-foreground whitespace-pre-wrap">
-                        {message.content}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {message.timestamp && (
-                  <div className="text-[10px] text-muted-foreground">
-                    {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {/* Clickable design directions list */}
-            {isGuidedMode && wizardPhase === 'directions' && wizardDirections.length > 0 && (
-              <div className="space-y-3">
-                <div className="text-sm font-medium">Choose a design direction:</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {wizardDirections.map((d: any, idx: number) => (
-                    <button
-                      key={d?.id || idx}
-                      onClick={() => handleChooseDirection(idx)}
-                      className="text-left rounded-md border border-border bg-white hover:bg-muted transition p-3 shadow-sm"
-                    >
-                      <div className="font-semibold">{d?.name || `Direction ${idx + 1}`}</div>
-                      {d?.rationale && (
-                        <div className="text-xs text-muted-foreground mt-1 line-clamp-3">{d.rationale}</div>
-                      )}
-                      {(Array.isArray(d?.moodKeywords) && d.moodKeywords.length > 0) && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {d.moodKeywords.slice(0, 5).map((mk: string, i: number) => (
-                            <span key={i} className="text-[10px] px-2 py-0.5 rounded-full border bg-muted/60">{mk}</span>
-                          ))}
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {isGenerating && (
-              <div className="text-sm text-muted-foreground flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Thinking...
-              </div>
-            )}
-
-            <div ref={bottomRef} />
-          </div>
-        )}
-      </ScrollArea>
-
-      {/* Composer */}
-      <div className="px-2.5 pt-4 pb-2.5 transition-all duration-300">
-        <div className="mx-auto max-w-[1100px]">
-          {showHistoryControls && (
-            <div className="mb-2 flex items-center gap-2 justify-end">
+      {/* Chat Mode Message Area - appears above composer */}
+      <div 
+        className={`absolute bottom-full left-0 right-0 bg-white rounded-t-xl overflow-hidden transition-all duration-300 ease-in-out ${
+          isChatMode ? 'border border-b-0 border-blue-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.12)]' : ''
+        }`}
+        style={{ 
+          maxHeight: isChatMode ? '300px' : '0px',
+          opacity: isChatMode ? 1 : 0,
+        }}
+      >
+          {/* Chat header */}
+          <div className="flex items-center justify-between px-4 py-2 flex-shrink-0">
+            <span className="text-sm font-medium">My Project</span>
+            <div className="flex items-center gap-2">
               <Button
-                variant="secondary"
-                size="sm"
-                className="h-8 px-2 rounded-md"
-                onClick={onCanvasUndo}
-                title="Undo (Ctrl/Cmd+Z)"
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                onClick={() => {
+                  setChatMessages([]);
+                  setInput("");
+                }}
+                title="New chat"
               >
-                <Undo2 className="w-4 h-4 mr-1" />
-                Undo
+                <Plus className="w-3 h-3" />
               </Button>
               <Button
-                variant="secondary"
-                size="sm"
-                className="h-8 px-2 rounded-md"
-                onClick={onCanvasRedo}
-                title="Redo (Ctrl+Shift+Z / Ctrl+Y)"
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                onClick={() => setIsChatMode(false)}
+                title="Close chat mode"
               >
-                <Redo2 className="w-4 h-4 mr-1" />
-                Redo
+                <X className="w-3 h-3" />
               </Button>
             </div>
-          )}
-          <div className={`rounded-xl border shadow-sm focus-within:ring-2 transition-all duration-300 ${
-            mode === "design"
-              ? "border-blue-200/50 bg-[hsl(var(--sidebar-ring)/0.06)] focus-within:ring-blue-400/25"
-              : "border-blue-300/50 bg-[hsl(var(--sidebar-ring)/0.08)] focus-within:ring-blue-500/25"
-          }`}>
-            <div className="relative">
+          </div>
+          
+          {/* Chat messages area */}
+          <ScrollArea className="h-[calc(100%-40px)] px-4 py-2 border-t border-border">
+            {chatMessages.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                Start a conversation to create your design
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {chatMessages.map((message, index) => (
+                  <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-lg px-3 py-2 ${
+                      message.role === 'user' 
+                        ? 'bg-[hsl(var(--sidebar-ring)/0.12)] text-foreground' 
+                        : 'bg-muted text-foreground'
+                    }`}>
+                      <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                      {message.timestamp && (
+                        <div className="text-[10px] text-muted-foreground mt-1">
+                          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div ref={bottomRef} />
+              </div>
+            )}
+          </ScrollArea>
+        </div>
+        
+      {/* Composer */}
+      <div 
+        ref={composerRef}
+        className={`${isChatMode ? 'rounded-b-xl' : 'rounded-xl'} border shadow-[0_8px_30px_rgba(0,0,0,0.12)] hover:shadow-[0_8px_40px_rgba(0,0,0,0.16)] bg-white transition-all duration-300 ease-in-out overflow-hidden ${
+          isExpanded || isChatMode ? 'cursor-default focus-within:ring-2' : 'cursor-text'
+        } ${
+          mode === "design"
+            ? "border-blue-200/50 focus-within:ring-blue-400/25"
+            : "border-blue-300/50 focus-within:ring-blue-500/25"
+        }`}
+        style={{ 
+          height: (isExpanded || isChatMode) ? '120px' : '52px'
+        }}
+      >
+        <div className={`relative h-full flex flex-col ${isChatMode ? 'border-t border-border' : ''}`}>
+          
+          {!isExpanded && !isChatMode ? (
+            // Collapsed search-bar mode - without send button
+            <div 
+              onClick={() => setIsExpanded(true)}
+              className="relative h-full flex flex-col justify-start px-4 pt-4 cursor-pointer"
+            >
+              <div className="text-sm text-muted-foreground/80 truncate">
+                {lastUserMessage || (mode === "design" ? "What would you like to create?" : "Tell the canvas what to do...")}
+              </div>
+            </div>
+          ) : (
+            // Expanded mode with full composer (shown in both normal expanded and chat mode)
+            <div className="h-full">
               {/* Left buttons */}
               <div className="absolute left-2 bottom-1.5 flex items-center gap-3">
                 <Button
@@ -621,16 +673,21 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                 {mode === "design" && (
                   <>
                   <Button
-                    onClick={() => { setIsGuidedMode(!isGuidedMode); setWizardPhase('interview'); setGuidedConversation([]); setWizardDirections([]); setWizardKeywords(null); }}
+                    onClick={() => { 
+                      setIsChatMode(!isChatMode);
+                      if (!isChatMode) {
+                        setIsExpanded(true);
+                      }
+                    }}
                     size="icon"
                       className={`h-5 w-5 p-0 bg-transparent hover:bg-transparent border-0 rounded-none shadow-none transition-all duration-300 ${
-                      isGuidedMode 
+                      isChatMode 
                           ? "text-[hsl(var(--sidebar-ring))]" 
                           : "text-foreground/70 hover:text-foreground"
                     }`}
-                    title={isGuidedMode ? "Guided wizard mode active" : "Enable guided wizard mode"}
+                    title={isChatMode ? "Chat mode active" : "Enable chat mode"}
                   >
-                      <PenTool className="w-2.5 h-2.5" />
+                      <MessageSquare className="w-2.5 h-2.5" />
                     </Button>
                     {/* Exclude (negative prompt) */}
                     <Popover>
@@ -726,7 +783,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                 </Button>
               </div>
             </div>
-            </div>
+          )}
         </div>
       </div>
     </div>
