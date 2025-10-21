@@ -4,7 +4,9 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/app/components/ui/button";
 import { Textarea } from "@/app/components/ui/textarea";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
-import { Sparkles, Loader2, ArrowUp, Wand2, ImagePlus, Zap, Brain, PenTool, Plus, Undo2, Redo2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
+import { Input } from "@/app/components/ui/input";
+import { Sparkles, Loader2, ArrowUp, Wand2, ImagePlus, Zap, Brain, PenTool, Plus, Undo2, Redo2, Minus, Palette } from "lucide-react";
 // Calls go to local Next.js API routes instead of Supabase Edge Functions
 import { toast } from "sonner";
 
@@ -71,6 +73,11 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
   const [isGenerating, setIsGenerating] = useState(false);
   const [mode, setMode] = useState<ChatMode>("design");
   const [isGuidedMode, setIsGuidedMode] = useState(false);
+  // User preferences for generation
+  const [excludeText, setExcludeText] = useState<string>("");
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const toggleColor = (hex: string) => setSelectedColors(prev => prev.includes(hex) ? prev.filter(c => c !== hex) : [...prev, hex]);
+  const clearColors = () => setSelectedColors([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -120,7 +127,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
     const el = textareaRef.current;
     if (!el) return;
     // Ensure min-height is enforced before measuring to avoid collapsing due to padding
-    el.style.minHeight = '112px';
+    el.style.minHeight = '120px';
     resizeTextareaEl(el);
   }, [input, maxTextareaHeight, mode]);
 
@@ -140,6 +147,10 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
     setIsGenerating(true);
 
     try {
+      const preferences = {
+        exclude: (excludeText || "").trim() || undefined,
+        colors: selectedColors,
+      } as { exclude?: string; colors: string[] };
       if (mode === "canvas") {
         // Canvas mode - send command to canvas
         if (!onCanvasCommand) {
@@ -565,8 +576,8 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
       </ScrollArea>
 
       {/* Composer */}
-      <div className="p-4 transition-all duration-300">
-        <div className="mx-auto max-w-[880px]">
+      <div className="px-2.5 pt-4 pb-2.5 transition-all duration-300">
+        <div className="mx-auto max-w-[1100px]">
           {showHistoryControls && (
             <div className="mb-2 flex items-center gap-2 justify-end">
               <Button
@@ -593,35 +604,93 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
           )}
           <div className={`rounded-xl border shadow-sm focus-within:ring-2 transition-all duration-300 ${
             mode === "design"
-              ? "border-blue-200/50 bg-muted/70 bg-[linear-gradient(to_bottom_right,rgba(59,130,246,0.08),transparent)] focus-within:ring-blue-400/25"
-              : "border-blue-300/50 bg-muted/80 bg-[linear-gradient(to_bottom_right,rgba(59,130,246,0.10),transparent)] focus-within:ring-blue-500/25"
+              ? "border-blue-200/50 bg-[hsl(var(--sidebar-ring)/0.06)] focus-within:ring-blue-400/25"
+              : "border-blue-300/50 bg-[hsl(var(--sidebar-ring)/0.08)] focus-within:ring-blue-500/25"
           }`}>
             <div className="relative">
               {/* Left buttons */}
-              <div className="absolute left-2 bottom-2 flex items-center gap-2">
+              <div className="absolute left-2 bottom-1.5 flex items-center gap-3">
                 <Button
                   onClick={handleUploadClick}
                   size="icon"
-                  className="h-6 w-6 p-0 rounded-full shadow-sm bg-muted text-foreground hover:bg-muted/90 border border-border"
+                  className="h-4 w-4 p-0 bg-transparent border border-black rounded-full shadow-none text-foreground/70 hover:bg-muted/50"
                   title="Upload image"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-2 h-2" />
                 </Button>
                 {mode === "design" && (
+                  <>
                   <Button
                     onClick={() => { setIsGuidedMode(!isGuidedMode); setWizardPhase('interview'); setGuidedConversation([]); setWizardDirections([]); setWizardKeywords(null); }}
                     size="icon"
-                    className={`h-6 w-6 p-0 rounded-full shadow-sm border transition-all duration-300 ${
+                      className={`h-5 w-5 p-0 bg-transparent hover:bg-transparent border-0 rounded-none shadow-none transition-all duration-300 ${
                       isGuidedMode 
-                        ? "bg-gradient-to-br from-blue-600 to-cyan-600 text-white border-transparent ring-2 ring-blue-400/30" 
-                        : "bg-muted text-foreground hover:bg-muted/90 border-border"
+                          ? "text-[hsl(var(--sidebar-ring))]" 
+                          : "text-foreground/70 hover:text-foreground"
                     }`}
                     title={isGuidedMode ? "Guided wizard mode active" : "Enable guided wizard mode"}
                   >
-                    <PenTool className="w-3 h-3" />
+                      <PenTool className="w-2.5 h-2.5" />
+                    </Button>
+                    {/* Exclude (negative prompt) */}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          size="icon"
+                          className={`h-4 w-4 p-0 bg-transparent border border-black rounded-full shadow-none ${excludeText.trim() ? 'text-[hsl(var(--sidebar-ring))] hover:bg-muted/50' : 'text-foreground/70 hover:text-foreground hover:bg-muted/50'}`}
+                          title="Exclude from results"
+                        >
+                          <Minus className="w-2 h-2" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" sideOffset={8} className="w-64 p-3 rounded-xl border bg-background shadow">
+                        <div className="text-xs font-medium mb-1">Exclude from results</div>
+                        <Input
+                          value={excludeText}
+                          onChange={(e) => setExcludeText(e.target.value)}
+                          placeholder="e.g., text, watermark, hands"
+                          className="h-8 text-xs"
+                        />
+                        <div className="mt-2 text-[10px] text-muted-foreground">Sent as negative guidance.</div>
+                      </PopoverContent>
+                    </Popover>
+                    {/* Color wheel */}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          size="icon"
+                          className={`h-5 w-5 p-0 bg-transparent hover:bg-transparent border-0 rounded-none shadow-none ${selectedColors.length ? 'text-[hsl(var(--sidebar-ring))]' : 'text-foreground/70 hover:text-foreground'}`}
+                          title="Choose colors"
+                        >
+                          <span
+                            className="block h-3.5 w-3.5 rounded-full border border-black"
+                            style={{
+                              background: 'conic-gradient(#ef4444, #f59e0b, #22c55e, #3b82f6, #8b5cf6, #f472b6, #ef4444)'
+                            }}
+                          />
                   </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" sideOffset={8} className="w-72 p-3 rounded-xl border bg-background shadow">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs font-medium">Preferred colors</div>
+                          <button onClick={clearColors} className="text-[10px] text-muted-foreground hover:underline">Clear</button>
+                        </div>
+                        <div className="grid grid-cols-8 gap-2">
+                          {['#111827','#000000','#FFFFFF','#EF4444','#F59E0B','#10B981','#3B82F6','#8B5CF6','#14B8A6','#F472B6','#22C55E','#EAB308','#A855F7','#06B6D4','#F97316','#94A3B8'].map((hex) => (
+                            <button
+                              key={hex}
+                              onClick={() => toggleColor(hex)}
+                              className={`h-6 w-6 rounded-md border ${selectedColors.includes(hex) ? 'ring-2 ring-blue-400' : 'ring-0'}`}
+                              style={{ backgroundColor: hex }}
+                              title={hex}
+                            />
+                          ))}
+                        </div>
+                        <div className="mt-2 text-[10px] text-muted-foreground">Selected: {selectedColors.length}</div>
+                      </PopoverContent>
+                    </Popover>
+                  </>
                 )}
-                <span className="text-[10px] text-muted-foreground">Press Shift + Enter for new line</span>
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
               </div>
               <Textarea
@@ -632,14 +701,14 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                   // Resize immediately on keystroke so height grows before wrapping
                   if (textareaRef.current) resizeTextareaEl(textareaRef.current);
                 }}
-                onKeyDown={handleKeyPress}
-                placeholder={
-                  mode === "design" ? "Describe what to create..." : "Tell the canvas what to do..."
-                }
-                className="min-h-[112px] resize-none bg-transparent border-0 focus-visible:ring-0 pl-4 pr-16 pt-4 pb-12 placeholder:text-muted-foreground/80"
+                  onKeyDown={handleKeyPress}
+                  placeholder={
+                    mode === "design" ? "What would you like to create?" : "Tell the canvas what to do..."
+                  }
+                className="min-h-[120px] resize-none bg-transparent border-0 focus-visible:ring-0 pl-4 pr-16 pt-4 pb-8 placeholder:text-muted-foreground/80"
                 disabled={isGenerating}
               />
-              <div className="absolute right-2 bottom-2 flex items-center gap-2">
+              <div className="absolute right-2 bottom-1.5 flex items-center gap-2">
                 <Button
                   onClick={handleSend}
                   disabled={isGenerating || !input.trim()}

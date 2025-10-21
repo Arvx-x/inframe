@@ -243,6 +243,8 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     // initial sync
     syncGridToViewport(canvas);
 
+    
+
     return () => {
       window.removeEventListener('resize', handleResize);
       ro.disconnect();
@@ -817,6 +819,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       <div
         ref={gridRef}
         className="absolute inset-0 pointer-events-none bg-[radial-gradient(rgba(0,0,0,0.16)_1px,transparent_1px)]"
+        style={{ backgroundSize: '20px 20px' }}
       />
       <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
       
