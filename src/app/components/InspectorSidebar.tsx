@@ -13,9 +13,10 @@ interface InspectorSidebarProps {
   selectedObject: FabricObject | null;
   canvas: any;
   onClose: () => void;
+  isClosing?: boolean;
 }
 
-export const InspectorSidebar = ({ selectedObject, canvas, onClose }: InspectorSidebarProps) => {
+export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = false }: InspectorSidebarProps) => {
   const [properties, setProperties] = useState({
     x: 0,
     y: 0,
@@ -216,14 +217,16 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose }: InspectorS
     <div
       ref={sidebarRef}
       className={cn(
-        "fixed top-0 right-0 h-screen bg-background/95 backdrop-blur-sm border-l border-border z-50 flex flex-col",
+        "fixed top-12 right-0 bg-white border-l border-border z-50 flex flex-col transition-all duration-300 ease-in-out",
         isCollapsed && "w-12",
-        isResizing && "transition-none",
-        !isResizing && !isCollapsed && "transition-all duration-200 ease-in-out"
+        isResizing && "transition-none"
       )}
       style={{ 
+        height: 'calc(100vh - 48px)',
         boxShadow: "0 0 16px rgba(0,0,0,0.06)",
-        width: isCollapsed ? undefined : `${sidebarWidth}px`
+        width: isCollapsed ? undefined : `${sidebarWidth}px`,
+        transform: 'translateX(0)',
+        animation: isClosing ? 'slideOutToRight 0.3s ease-in forwards' : 'slideInFromRight 0.3s ease-out'
       }}
     >
       {/* Resize Handle */}
@@ -267,7 +270,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose }: InspectorS
               <Button variant="ghost" size="icon" onClick={handleDelete}>
                 <Trash2 className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(true)}>
+              <Button variant="ghost" size="icon" onClick={onClose}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
             </div>

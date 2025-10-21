@@ -5,8 +5,9 @@ import { Button } from "@/app/components/ui/button";
 import { Textarea } from "@/app/components/ui/textarea";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
 import { Input } from "@/app/components/ui/input";
-import { Sparkles, Loader2, ArrowUp, Wand2, ImagePlus, Zap, Brain, PenTool, Plus, Undo2, Redo2, Minus, Palette, MessageSquare, X } from "lucide-react";
+import { Sparkles, Loader2, ArrowUp, Wand2, ImagePlus, Zap, Brain, PenTool, Plus, Undo2, Redo2, Minus, Palette, X, Palette as DesignIcon, MousePointer as CanvasIcon, ChevronDown } from "lucide-react";
 // Calls go to local Next.js API routes instead of Supabase Edge Functions
 import { toast } from "sonner";
 
@@ -45,15 +46,28 @@ const buildRefinedPrompt = (
   idea: string,
   category: GenerationCategory,
   keywords: string[],
-  isEdit: boolean
+  isEdit: boolean,
+  excludeText?: string,
+  colors?: string[]
 ): string => {
   const role = category === "logo" ? "Logo design" : category === "poster" ? "Poster graphic" : "Image";
   const goal = isEdit ? "Refine the existing visual" : "Generate a new visual";
   const kw = keywords.length ? `Keywords: ${keywords.join(", ")}.` : "";
+  
+  const colorGuidance = colors && colors.length > 0 
+    ? `Preferred color palette: ${colors.join(", ")}.`
+    : "";
+  
+  const exclusions = excludeText && excludeText.trim()
+    ? `Avoid including: ${excludeText.trim()}.`
+    : "";
+  
   return [
     `${role} — ${goal}.`,
     `Idea: ${idea}.`,
     kw,
+    colorGuidance,
+    exclusions,
     "Use balanced composition, coherent color harmony, and crisp details.",
   ].filter(Boolean).join("\n");
 };
@@ -65,9 +79,10 @@ interface PromptSidebarProps {
   onCanvasUndo?: () => void;
   onCanvasRedo?: () => void;
   showHistoryControls?: boolean;
+  onProjectNameUpdate?: (name: string) => void;
 }
 
-export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCanvasCommand, onCanvasUndo, onCanvasRedo, showHistoryControls = false }: PromptSidebarProps) {
+export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCanvasCommand, onCanvasUndo, onCanvasRedo, showHistoryControls = false, onProjectNameUpdate }: PromptSidebarProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -76,8 +91,72 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
   // User preferences for generation
   const [excludeText, setExcludeText] = useState<string>("");
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
-  const toggleColor = (hex: string) => setSelectedColors(prev => prev.includes(hex) ? prev.filter(c => c !== hex) : [...prev, hex]);
-  const clearColors = () => setSelectedColors([]);
+  const [isExcludeOpen, setIsExcludeOpen] = useState(false);
+  const [isColorOpen, setIsColorOpen] = useState(false);
+  const [tempExcludeText, setTempExcludeText] = useState<string>("");
+  const [tempSelectedColors, setTempSelectedColors] = useState<string[]>([]);
+  const [hasSetProjectName, setHasSetProjectName] = useState(false);
+  
+  // Extract project name from user message
+  const extractProjectName = (message: string): string => {
+    // Clean the message
+    const cleaned = message.trim();
+    
+    // Extract first few words (max 5 words or 50 chars)
+    const words = cleaned.split(/\s+/).slice(0, 5);
+    let name = words.join(' ');
+    
+    // Truncate if too long
+    if (name.length > 50) {
+      name = name.substring(0, 47) + '...';
+    }
+    
+    // Capitalize first letter
+    name = name.charAt(0).toUpperCase() + name.slice(1);
+    
+    return name || "Untitled Project";
+  };
+  
+  // Handlers for preferences
+  const toggleTempColor = (hex: string) => {
+    setTempSelectedColors(prev => prev.includes(hex) ? prev.filter(c => c !== hex) : [...prev, hex]);
+  };
+  
+  const handleExcludeOpen = (open: boolean) => {
+    setIsExcludeOpen(open);
+    if (open) {
+      setTempExcludeText(excludeText);
+    }
+  };
+  
+  const handleColorOpen = (open: boolean) => {
+    setIsColorOpen(open);
+    if (open) {
+      setTempSelectedColors(selectedColors);
+    }
+  };
+  
+  const applyExcludePreferences = () => {
+    setExcludeText(tempExcludeText);
+    setIsExcludeOpen(false);
+  };
+  
+  const clearExcludePreferences = () => {
+    setTempExcludeText("");
+    setExcludeText("");
+    setIsExcludeOpen(false);
+  };
+  
+  const applyColorPreferences = () => {
+    setSelectedColors(tempSelectedColors);
+    setIsColorOpen(false);
+  };
+  
+  const clearColorPreferences = () => {
+    setTempSelectedColors([]);
+    setSelectedColors([]);
+    setIsColorOpen(false);
+  };
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -85,7 +164,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
   
   // New states for expand/collapse
   const [isExpanded, setIsExpanded] = useState(true);
-  const [lastUserMessage, setLastUserMessage] = useState("");
+  const [firstUserMessage, setFirstUserMessage] = useState("");
   
   // Chat mode states
   const [isChatMode, setIsChatMode] = useState(false);
@@ -140,10 +219,31 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
     resizeTextareaEl(el);
   }, [input, maxTextareaHeight, mode]);
 
-  // Click-outside detection to collapse the composer (skip if chat mode is active)
+  // Click-outside detection to collapse the composer (skip if chat mode is active or clicking in popovers)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (composerRef.current && !composerRef.current.contains(event.target as Node) && !isChatMode) {
+      const target = event.target as Node;
+      
+      // Check if click is inside composer
+      if (composerRef.current && composerRef.current.contains(target)) {
+        return;
+      }
+      
+      // Check if click is inside any popover content (Radix UI popovers)
+      const clickedElement = event.target as Element;
+      if (clickedElement.closest('[role="dialog"]') || 
+          clickedElement.closest('[data-radix-popper-content-wrapper]') ||
+          clickedElement.closest('[data-state="open"]')) {
+        return;
+      }
+      
+      // Check if any of our preference popovers are open
+      if (isExcludeOpen || isColorOpen) {
+        return;
+      }
+      
+      // Only collapse if not in chat mode
+      if (!isChatMode) {
         setIsExpanded(false);
       }
     };
@@ -155,7 +255,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isExpanded, isChatMode]);
+  }, [isExpanded, isChatMode, isExcludeOpen, isColorOpen]);
 
   // Auto-focus textarea when expanding
   useEffect(() => {
@@ -179,10 +279,17 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
 
     const userMessage: Message = { role: "user", content: input, timestamp: Date.now() };
     
+    // Update project name from first message
+    if (!hasSetProjectName && onProjectNameUpdate) {
+      const projectName = extractProjectName(input);
+      onProjectNameUpdate(projectName);
+      setHasSetProjectName(true);
+    }
+    
     // Handle chat mode separately
     if (isChatMode) {
       setChatMessages((prev) => [...prev, userMessage]);
-      setLastUserMessage(input);
+      if (!firstUserMessage) setFirstUserMessage(input);
       setInput("");
       setIsGenerating(true);
       
@@ -204,33 +311,52 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         
+        console.log('Chat API response:', data);
+        
         // Check if AI is ready to generate
-        if (data.shouldGenerate) {
+        if (data.success && data.shouldGenerate) {
           // Generate the image
           const category = classifyIdea(data.finalPrompt || userMessage.content);
           const keywords = extractKeywords(data.finalPrompt || userMessage.content);
-          const refinedPrompt = buildRefinedPrompt(data.finalPrompt || userMessage.content, category, keywords, false);
+          const refinedPrompt = buildRefinedPrompt(
+            data.finalPrompt || userMessage.content, 
+            category, 
+            keywords, 
+            false,
+            excludeText,
+            selectedColors
+          );
           
-          const genRes = await fetch('/api/multi-model-generation', {
+          console.log('Generating image with refined prompt:', refinedPrompt);
+          
+          const genRes = await fetch('/api/generate-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              prompt: refinedPrompt,
-              preferences: { exclude: (excludeText || "").trim() || undefined, colors: selectedColors }
+              prompt: refinedPrompt
             })
           });
           
-          if (!genRes.ok) throw new Error(await genRes.text());
-          const genData = await genRes.json();
+          if (!genRes.ok) {
+            const errorText = await genRes.text();
+            console.error('Image generation failed:', errorText);
+            throw new Error(errorText);
+          }
           
-          if (genData?.variants?.[0]?.imageUrl) {
-            onImageGenerated(genData.variants[0].imageUrl);
+          const genData = await genRes.json();
+          console.log('Image generation response:', genData);
+          
+          if (genData?.imageUrl) {
+            onImageGenerated(genData.imageUrl);
             const confirmMessage: Message = {
               role: "assistant",
               content: "✨ Image created successfully! I've added it to your canvas.",
               timestamp: Date.now()
             };
             setChatMessages((prev) => [...prev, confirmMessage]);
+            toast.success("Image generated!");
+          } else {
+            throw new Error("No image URL in generation response");
           }
         } else {
           // Continue conversation
@@ -258,7 +384,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
     
     // Original non-chat mode logic
     setMessages((prev) => [...prev, userMessage]);
-    setLastUserMessage(input); // Save last user message
+    if (!firstUserMessage) setFirstUserMessage(input); // Save first user message
     if (mode === 'design' && isGuidedMode) {
       // Keep a parallel guided conversation log
       setGuidedConversation(prev => [...prev, userMessage]);
@@ -312,7 +438,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
               setGuidedConversation(prev => [...prev, assistantMessage]);
               setWizardPhase('refinement');
             } else {
-              // Generate variants via direction -> multi-model-generation
+              // Generate image using simple generate-image API
               const chosen = picks
                 .map((i) => wizardDirections[i])
                 .filter(Boolean);
@@ -565,8 +691,8 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
         
       {/* Chat Mode Message Area - appears above composer */}
       <div 
-        className={`absolute bottom-full left-0 right-0 bg-white rounded-t-xl overflow-hidden transition-all duration-300 ease-in-out ${
-          isChatMode ? 'border border-b-0 border-blue-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.12)]' : ''
+        className={`absolute bottom-full left-0 right-0 bg-white rounded-t-xl transition-all duration-300 ease-in-out flex flex-col ${
+          isChatMode ? 'border border-b-0 border-blue-200/50' : ''
         }`}
         style={{ 
           maxHeight: isChatMode ? '300px' : '0px',
@@ -574,7 +700,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
         }}
       >
           {/* Chat header */}
-          <div className="flex items-center justify-between px-4 py-2 flex-shrink-0">
+          <div className="flex items-center justify-between px-4 py-2 flex-shrink-0 h-10 min-h-[40px]">
             <span className="text-sm font-medium">My Project</span>
             <div className="flex items-center gap-2">
               <Button
@@ -584,6 +710,8 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                 onClick={() => {
                   setChatMessages([]);
                   setInput("");
+                  setFirstUserMessage("");
+                  setHasSetProjectName(false);
                 }}
                 title="New chat"
               >
@@ -602,7 +730,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
           </div>
           
           {/* Chat messages area */}
-          <ScrollArea className="h-[calc(100%-40px)] px-4 py-2 border-t border-border">
+          <ScrollArea className="flex-1 px-4 py-2 border-t border-border overflow-y-auto">
             {chatMessages.length === 0 ? (
               <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                 Start a conversation to create your design
@@ -611,18 +739,15 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
               <div className="space-y-3">
                 {chatMessages.map((message, index) => (
                   <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                      message.role === 'user' 
-                        ? 'bg-[hsl(var(--sidebar-ring)/0.12)] text-foreground' 
-                        : 'bg-muted text-foreground'
-                    }`}>
-                      <div className="text-sm whitespace-pre-wrap">{message.content}</div>
-                      {message.timestamp && (
-                        <div className="text-[10px] text-muted-foreground mt-1">
-                          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      )}
-                    </div>
+                    {message.role === 'user' ? (
+                      <div className="max-w-[80%] rounded-lg px-3 py-2 bg-muted text-foreground">
+                        <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                      </div>
+                    ) : (
+                      <div className="max-w-[80%] text-foreground">
+                        <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                      </div>
+                    )}
                   </div>
                 ))}
                 <div ref={bottomRef} />
@@ -651,25 +776,46 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
             // Collapsed search-bar mode - without send button
             <div 
               onClick={() => setIsExpanded(true)}
-              className="relative h-full flex flex-col justify-start px-4 pt-4 cursor-pointer"
+              className="relative h-full flex flex-col justify-start px-4 pt-4 cursor-pointer caret-transparent overflow-hidden"
             >
-              <div className="text-sm text-muted-foreground/80 truncate">
-                {lastUserMessage || (mode === "design" ? "What would you like to create?" : "Tell the canvas what to do...")}
+              <div className="text-sm text-muted-foreground/80 whitespace-nowrap overflow-hidden">
+                {firstUserMessage || (mode === "design" ? "What would you like to create?" : "Tell the canvas what to do...")}
               </div>
+              {/* Fade-out gradient on the right */}
+              {firstUserMessage && (
+                <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white to-transparent pointer-events-none" />
+              )}
             </div>
           ) : (
             // Expanded mode with full composer (shown in both normal expanded and chat mode)
             <div className="h-full">
               {/* Left buttons */}
               <div className="absolute left-2 bottom-1.5 flex items-center gap-3">
-                <Button
-                  onClick={handleUploadClick}
-                  size="icon"
-                  className="h-4 w-4 p-0 bg-transparent border border-black rounded-full shadow-none text-foreground/70 hover:bg-muted/50"
-                  title="Upload image"
-                >
-                  <Plus className="w-2 h-2" />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="icon"
+                      className="h-4 w-4 p-0 bg-transparent border border-black rounded-full shadow-none text-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200"
+                      title={`Current mode: ${mode === "design" ? "Design" : "Canvas"}`}
+                    >
+                      {mode === "design" ? <DesignIcon className="w-2 h-2" /> : <CanvasIcon className="w-2 h-2" />}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" sideOffset={8} className="rounded-xl">
+                    <DropdownMenuItem 
+                      className="gap-2 text-sm" 
+                      onClick={() => setMode("design")}
+                    >
+                      <DesignIcon className="w-4 h-4" /> Design Mode
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      className="gap-2 text-sm" 
+                      onClick={() => setMode("canvas")}
+                    >
+                      <CanvasIcon className="w-4 h-4" /> Canvas Mode
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 {mode === "design" && (
                   <>
                   <Button
@@ -687,10 +833,10 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                     }`}
                     title={isChatMode ? "Chat mode active" : "Enable chat mode"}
                   >
-                      <MessageSquare className="w-2.5 h-2.5" />
+                      <PenTool className="w-2.5 h-2.5" />
                     </Button>
                     {/* Exclude (negative prompt) */}
-                    <Popover>
+                    <Popover open={isExcludeOpen} onOpenChange={handleExcludeOpen}>
                       <PopoverTrigger asChild>
                         <Button
                           size="icon"
@@ -700,19 +846,43 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                           <Minus className="w-2 h-2" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent align="start" sideOffset={8} className="w-64 p-3 rounded-xl border bg-background shadow">
-                        <div className="text-xs font-medium mb-1">Exclude from results</div>
-                        <Input
-                          value={excludeText}
-                          onChange={(e) => setExcludeText(e.target.value)}
-                          placeholder="e.g., text, watermark, hands"
-                          className="h-8 text-xs"
-                        />
-                        <div className="mt-2 text-[10px] text-muted-foreground">Sent as negative guidance.</div>
+                      <PopoverContent align="start" sideOffset={8} className="w-80 p-0 rounded-xl border bg-white shadow-lg">
+                        <div className="p-4 border-b">
+                          <h3 className="text-sm font-semibold mb-1">Exclude from results</h3>
+                          <p className="text-xs text-muted-foreground">Specify elements to avoid in generated images</p>
+                        </div>
+                        <div className="p-4 space-y-3">
+                          <Textarea
+                            value={tempExcludeText}
+                            onChange={(e) => setTempExcludeText(e.target.value)}
+                            placeholder="e.g., text, watermark, hands, low quality..."
+                            className="min-h-[80px] text-sm resize-none"
+                          />
+                          <div className="text-xs text-muted-foreground">
+                            These elements will be avoided using negative guidance during generation.
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 p-3 bg-muted/30 rounded-b-xl">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={clearExcludePreferences}
+                            className="text-xs h-8"
+                          >
+                            Clear
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={applyExcludePreferences}
+                            className="text-xs h-8 bg-foreground hover:bg-foreground/90 text-background"
+                          >
+                            Done
+                          </Button>
+                        </div>
                       </PopoverContent>
                     </Popover>
                     {/* Color wheel */}
-                    <Popover>
+                    <Popover open={isColorOpen} onOpenChange={handleColorOpen}>
                       <PopoverTrigger asChild>
                         <Button
                           size="icon"
@@ -727,23 +897,59 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                           />
                   </Button>
                       </PopoverTrigger>
-                      <PopoverContent align="start" sideOffset={8} className="w-72 p-3 rounded-xl border bg-background shadow">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="text-xs font-medium">Preferred colors</div>
-                          <button onClick={clearColors} className="text-[10px] text-muted-foreground hover:underline">Clear</button>
+                      <PopoverContent align="start" sideOffset={8} className="w-80 p-0 rounded-xl border bg-white shadow-lg">
+                        <div className="p-4 border-b">
+                          <h3 className="text-sm font-semibold mb-1">Preferred colors</h3>
+                          <p className="text-xs text-muted-foreground">Select colors to guide the image generation</p>
                         </div>
-                        <div className="grid grid-cols-8 gap-2">
-                          {['#111827','#000000','#FFFFFF','#EF4444','#F59E0B','#10B981','#3B82F6','#8B5CF6','#14B8A6','#F472B6','#22C55E','#EAB308','#A855F7','#06B6D4','#F97316','#94A3B8'].map((hex) => (
-                            <button
-                              key={hex}
-                              onClick={() => toggleColor(hex)}
-                              className={`h-6 w-6 rounded-md border ${selectedColors.includes(hex) ? 'ring-2 ring-blue-400' : 'ring-0'}`}
-                              style={{ backgroundColor: hex }}
-                              title={hex}
-                            />
-                          ))}
+                        <div className="p-4 space-y-4">
+                          <div className="grid grid-cols-8 gap-2.5">
+                            {['#111827','#000000','#FFFFFF','#EF4444','#F59E0B','#10B981','#3B82F6','#8B5CF6','#14B8A6','#F472B6','#22C55E','#EAB308','#A855F7','#06B6D4','#F97316','#94A3B8'].map((hex) => (
+                              <button
+                                key={hex}
+                                onClick={() => toggleTempColor(hex)}
+                                className={`h-8 w-8 rounded-lg border-2 transition-all ${
+                                  tempSelectedColors.includes(hex) 
+                                    ? 'ring-2 ring-[hsl(var(--sidebar-ring))] ring-offset-2 border-white scale-110' 
+                                    : 'border-border hover:border-foreground/30 hover:scale-105'
+                                }`}
+                                style={{ backgroundColor: hex }}
+                                title={hex}
+                              />
+                            ))}
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                            <span>{tempSelectedColors.length} color{tempSelectedColors.length !== 1 ? 's' : ''} selected</span>
+                            {tempSelectedColors.length > 0 && (
+                              <div className="flex gap-1">
+                                {tempSelectedColors.map((color, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="w-4 h-4 rounded border border-border"
+                                    style={{ backgroundColor: color }}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className="mt-2 text-[10px] text-muted-foreground">Selected: {selectedColors.length}</div>
+                        <div className="flex items-center justify-end gap-2 p-3 bg-muted/30 rounded-b-xl">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={clearColorPreferences}
+                            className="text-xs h-8"
+                          >
+                            Clear
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={applyColorPreferences}
+                            className="text-xs h-8 bg-foreground hover:bg-foreground/90 text-background"
+                          >
+                            Done
+                          </Button>
+                        </div>
                       </PopoverContent>
                     </Popover>
                   </>

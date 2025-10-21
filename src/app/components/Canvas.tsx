@@ -53,6 +53,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'new' | 'save'
   >('pointer');
   const [selectedObject, setSelectedObject] = useState<any>(null);
+  const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const setHistoryAvailability = () => {
     if (onHistoryAvailableChange) {
       onHistoryAvailableChange((undoStackRef.current?.length || 0) > 0);
@@ -115,11 +116,22 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     // Selection tracking for InspectorSidebar (supports images and text)
     const syncSelection = () => {
       const active = canvas.getActiveObject();
-      setSelectedObject(active || null);
-      if (active && active instanceof FabricImage) {
-        setSelectedImage(active);
-      } else if (!active || !(active instanceof FabricImage)) {
-        setSelectedImage(null);
+      
+      if (!active && selectedObject) {
+        // User deselected - trigger closing animation
+        setIsSidebarClosing(true);
+        setTimeout(() => {
+          setSelectedObject(null);
+          setSelectedImage(null);
+          setIsSidebarClosing(false);
+        }, 300); // Match animation duration
+      } else {
+        setSelectedObject(active || null);
+        if (active && active instanceof FabricImage) {
+          setSelectedImage(active);
+        } else if (!active || !(active instanceof FabricImage)) {
+          setSelectedImage(null);
+        }
       }
     };
     canvas.on('selection:created', syncSelection);
@@ -1154,13 +1166,18 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       <InspectorSidebar
         selectedObject={selectedObject}
         canvas={fabricCanvas}
+        isClosing={isSidebarClosing}
         onClose={() => {
           if (fabricCanvas) {
             fabricCanvas.discardActiveObject();
             fabricCanvas.requestRenderAll();
           }
-          setSelectedImage(null);
-          setSelectedObject(null);
+          setIsSidebarClosing(true);
+          setTimeout(() => {
+            setSelectedImage(null);
+            setSelectedObject(null);
+            setIsSidebarClosing(false);
+          }, 300);
         }}
       />
     )}

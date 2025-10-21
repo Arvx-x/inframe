@@ -181,7 +181,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, imageUrl });
     }
 
-    // Generate images from a chosen direction via multi-model-generation API
+    // Generate image(s) from a chosen direction using simple generate-image API
     if (phase === "generateFromDirection") {
       if (!direction || !direction.id) {
         return NextResponse.json({ success: false, error: "Missing direction" }, { status: 400 });
@@ -190,18 +190,24 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: "Missing basePrompt" }, { status: 400 });
       }
 
+      const fullPrompt = `${basePrompt}\n\nStyle direction: ${direction.name}\nComposition: ${direction.compositionRules ?? ""}\nMood: ${(direction.moodKeywords || []).join(", ")}\n\nCreate a high-quality, professional image following these guidelines precisely.`;
+
       const origin = new URL(request.url).origin;
-      const resp = await fetch(`${origin}/api/multi-model-generation`, {
+      const resp = await fetch(`${origin}/api/generate-image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ direction, basePrompt }),
+        body: JSON.stringify({ prompt: fullPrompt }),
       });
       if (!resp.ok) {
         const text = await resp.text().catch(() => "");
-        return NextResponse.json({ success: false, error: `Variant generation failed: ${resp.status}`, details: text }, { status: 502 });
+        return NextResponse.json({ success: false, error: `Image generation failed: ${resp.status}`, details: text }, { status: 502 });
       }
-      const variantsPayload = await resp.json().catch(() => null);
-      return NextResponse.json(variantsPayload ?? { success: false, error: "Invalid response from multi-model-generation" }, { status: 200 });
+      const data = await resp.json().catch(() => null);
+      const imageUrl = data?.imageUrl || null;
+      if (!imageUrl) {
+        return NextResponse.json({ success: false, error: "No image URL returned" }, { status: 502 });
+      }
+      return NextResponse.json({ success: true, variants: [{ imageUrl }] }, { status: 200 });
     }
 
     // Build system prompt and response format depending on phase
@@ -223,11 +229,13 @@ Ask about (casually, not formally):
 Rules:
 - Be conversational and friendly, not robotic
 - Ask ONE question at a time naturally
-- After gathering enough info (usually 2-3 questions), respond with a JSON object indicating you're ready to generate
-- If you have enough information to create the image, return JSON: {"shouldGenerate": true, "finalPrompt": "detailed prompt here"}
-- Otherwise, just respond with normal conversational text asking your next question
-- Don't explain the JSON format to users, just return it when ready
+- After gathering enough info (usually 2-3 questions), or when the user explicitly asks to generate/create, return a JSON object
+- If you have enough information to create the image, OR if the user says things like "create it", "generate", "make it", "yes create", "go ahead", return ONLY this JSON: {"shouldGenerate": true, "finalPrompt": "detailed descriptive prompt based on the conversation"}
+- The finalPrompt should be detailed and incorporate all information gathered from the conversation
+- Otherwise, respond with normal conversational text asking your next question
+- NEVER explain the JSON format to users, just return the raw JSON when ready
 - Keep questions natural and brief
+- Even if you only have minimal information, if the user asks to generate, you MUST return the JSON with shouldGenerate: true
 
 Message count: ${messages?.length || 0}`;
 
@@ -239,19 +247,38 @@ Message count: ${messages?.length || 0}`;
           parts: [{ text: m.content }],
         }));
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${INFRAME_API_KEY}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents,
-        }),
-      });
+      // Retry logic for transient overloads (429/5xx)
+      let res: Response | null = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 60000);
+          res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${INFRAME_API_KEY}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents,
+            }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          if (res.ok) break;
+          const text = await res.text().catch(() => "");
+          console.error("AI Gateway error:", res.status, text);
+          if (res.status === 429 || res.status >= 500) {
+            await new Promise((r) => setTimeout(r, attempt * 700));
+            continue;
+          }
+          return NextResponse.json({ success: false, error: `AI Gateway error: ${res.status}`, details: text }, { status: 502 });
+        } catch (e) {
+          await new Promise((r) => setTimeout(r, attempt * 700));
+        }
+      }
 
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => "");
-        console.error("AI Gateway error:", res.status, errorText);
-        return NextResponse.json({ success: false, error: `AI Gateway error: ${res.status}` }, { status: 502 });
+      if (!res || !res.ok) {
+        // Graceful degrade: continue chat with a polite message rather than erroring out
+        return NextResponse.json({ success: true, shouldGenerate: false, message: "I’m experiencing heavy load right now. Please try again in a moment." });
       }
 
       const data = await res.json().catch(() => null);
@@ -261,14 +288,45 @@ Message count: ${messages?.length || 0}`;
         return NextResponse.json({ success: false, error: "No content in AI response" }, { status: 502 });
       }
 
+      console.log('Chat phase AI response:', content);
+
       // Try to parse as JSON first (in case AI is ready to generate)
       try {
         const parsed = JSON.parse(content);
+        console.log('Parsed JSON from AI:', parsed);
         if (parsed.shouldGenerate) {
+          console.log('Should generate image with prompt:', parsed.finalPrompt);
           return NextResponse.json({ success: true, shouldGenerate: true, finalPrompt: parsed.finalPrompt });
         }
       } catch (e) {
+        // Try extracting JSON from code fences or substrings
+        let jsonCandidate: string | null = null;
+        const fenceStart = content.indexOf('```');
+        const fenceEnd = fenceStart >= 0 ? content.indexOf('```', fenceStart + 3) : -1;
+        if (fenceStart >= 0 && fenceEnd > fenceStart) {
+          let inside = content.slice(fenceStart + 3, fenceEnd).trim();
+          if (inside.toLowerCase().startsWith('json')) {
+            inside = inside.slice(4).trimStart();
+          }
+          jsonCandidate = inside;
+        } else {
+          const firstBrace = content.indexOf('{');
+          const lastBrace = content.lastIndexOf('}');
+          if (firstBrace >= 0 && lastBrace > firstBrace) {
+            jsonCandidate = content.slice(firstBrace, lastBrace + 1);
+          }
+        }
+        if (jsonCandidate) {
+          try {
+            const parsed2 = JSON.parse(jsonCandidate);
+            console.log('Parsed JSON from extracted block:', parsed2);
+            if (parsed2.shouldGenerate) {
+              return NextResponse.json({ success: true, shouldGenerate: true, finalPrompt: parsed2.finalPrompt });
+            }
+          } catch {}
+        }
         // Not JSON, just a regular conversational response
+        console.log('AI response is not JSON, continuing conversation');
       }
 
       return NextResponse.json({ success: true, shouldGenerate: false, message: content });

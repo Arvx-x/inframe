@@ -226,10 +226,10 @@ Elements: ${keywords?.elements.join(", ") || "none specified"}.`;
         const direction = directions.find(d => d.id === directionId);
         if (!direction) return;
 
-        const res = await fetch('/api/multi-model-generation', {
+        const res = await fetch('/api/design-wizard', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ direction, basePrompt })
+          body: JSON.stringify({ phase: 'generateFromDirection', direction, basePrompt })
         });
         if (!res.ok) {
           console.error(`Generation failed for ${directionId}:`, await res.text());
