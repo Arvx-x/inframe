@@ -45,7 +45,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isPanningRef = useRef(false);
-  const gridRef = useRef<HTMLDivElement | null>(null);
   const [activeTool, setActiveTool] = useState<"pointer" | "hand">("pointer");
   const activeToolRef = useRef<"pointer" | "hand">("pointer");
   const [activeShape, setActiveShape] = useState<"rect" | "circle" | "line">("rect");
@@ -62,19 +61,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const undoStackRef = useRef<AgentAction[][]>([]);
   const redoStackRef = useRef<AgentAction[][]>([]);
 
-  const syncGridToViewport = (canvas: FabricCanvas) => {
-    const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
-    const zoom = canvas.getZoom();
-    const base = 20; // base grid size
-    const size = Math.max(4, base * zoom);
-    const mod = (n: number, m: number) => ((n % m) + m) % m;
-    const offsetX = mod(vpt[4], size);
-    const offsetY = mod(vpt[5], size);
-    if (gridRef.current) {
-      gridRef.current.style.backgroundSize = `${size}px ${size}px`;
-      gridRef.current.style.backgroundPosition = `${offsetX}px ${offsetY}px`;
-    }
-  };
 
   // Initialize canvas (browser-only)
   useEffect(() => {
@@ -105,7 +91,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       vpt[4] += e.movementX;
       vpt[5] += e.movementY;
       canvas.setViewportTransform(vpt);
-      syncGridToViewport(canvas);
     });
     canvas.on('mouse:up', () => {
       isPanningRef.current = false;
@@ -150,14 +135,12 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         zoom = Math.min(4, Math.max(0.1, zoom));
         const point = new Point(e.offsetX, e.offsetY);
         canvas.zoomToPoint(point, zoom);
-        syncGridToViewport(canvas);
       } else {
         const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
         // natural scroll: swipe moves content; move viewport opposite of scroll
         vpt[4] -= e.deltaX;
         vpt[5] -= e.deltaY;
         canvas.setViewportTransform(vpt);
-        syncGridToViewport(canvas);
       }
       e.preventDefault();
       e.stopPropagation();
@@ -241,7 +224,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       canvas.setWidth(width);
       canvas.setHeight(height);
       canvas.renderAll();
-      syncGridToViewport(canvas);
       if (showTopToolbar) {
         positionTopToolbar(null, canvas);
       }
@@ -251,9 +233,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     if (canvasRef.current?.parentElement) ro.observe(canvasRef.current.parentElement);
 
     window.addEventListener('resize', handleResize);
-
-    // initial sync
-    syncGridToViewport(canvas);
 
     return () => {
       window.removeEventListener('resize', handleResize);
@@ -825,12 +804,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   return (
     <>
     <div className="relative w-full h-screen overflow-hidden bg-[#f5f5f5]">
-      {/* Grid background (not included in exports) */}
-      <div
-        ref={gridRef}
-        className="absolute inset-0 pointer-events-none bg-[radial-gradient(rgba(0,0,0,0.16)_1px,transparent_1px)]"
-        style={{ backgroundSize: '20px 20px' }}
-      />
       <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
       
       {/* Top Floating Toolbar (shows on image double-click) */}
