@@ -690,17 +690,16 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
         </div>
         
       {/* Chat Mode Message Area - appears above composer */}
-      <div 
-        className={`absolute bottom-full left-0 right-0 bg-white rounded-t-xl transition-all duration-300 ease-in-out flex flex-col ${
-          isChatMode ? 'border border-b-0 border-blue-200/50' : ''
-        }`}
-        style={{ 
-          maxHeight: isChatMode ? '300px' : '0px',
-          opacity: isChatMode ? 1 : 0,
-        }}
-      >
-          {/* Chat header */}
-          <div className="flex items-center justify-between px-4 py-2 flex-shrink-0 h-10 min-h-[40px]">
+      {isChatMode && chatMessages.length > 0 && (
+        <div 
+          className="absolute bottom-full left-0 right-0 bg-white rounded-t-xl border border-b-0 border-blue-200/50 focus-within:ring-2 focus-within:ring-blue-400/25 transition-all duration-300 ease-in-out flex flex-col"
+          style={{ 
+            maxHeight: '300px',
+            opacity: 1,
+          }}
+        >
+          {/* Chat header - moves up when messages appear */}
+          <div className="flex items-center justify-between px-4 py-2 flex-shrink-0 h-10 min-h-[40px] border-b border-border">
             <span className="text-sm font-medium">My Project</span>
             <div className="flex items-center gap-2">
               <Button
@@ -730,32 +729,67 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
           </div>
           
           {/* Chat messages area */}
-          <ScrollArea className="flex-1 px-4 py-2 border-t border-border overflow-y-auto">
-            {chatMessages.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                Start a conversation to create your design
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {chatMessages.map((message, index) => (
-                  <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    {message.role === 'user' ? (
-                      <div className="max-w-[80%] rounded-lg px-3 py-2 bg-muted text-foreground">
-                        <div className="text-sm whitespace-pre-wrap">{message.content}</div>
-                      </div>
-                    ) : (
-                      <div className="max-w-[80%] text-foreground">
-                        <div className="text-sm whitespace-pre-wrap">{message.content}</div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div ref={bottomRef} />
-              </div>
-            )}
+          <ScrollArea className="flex-1 px-4 py-2 border-t border-l border-r border-blue-200/50 focus-within:ring-2 focus-within:ring-blue-400/25 overflow-y-auto">
+            <div className="space-y-3">
+              {chatMessages.map((message, index) => (
+                <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {message.role === 'user' ? (
+                    <div className="max-w-[80%] rounded-lg px-3 py-2 bg-muted text-foreground">
+                      <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                    </div>
+                  ) : (
+                    <div className="max-w-[80%] text-foreground">
+                      <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div ref={bottomRef} />
+            </div>
           </ScrollArea>
         </div>
+      )}
         
+      {/* Chat header - appears above composer when no messages */}
+      <div 
+        className={`absolute bottom-full left-0 right-0 bg-white rounded-t-xl border border-b-0 border-blue-200/50 focus-within:ring-2 focus-within:ring-blue-400/25 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+          isChatMode && chatMessages.length === 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+        }`}
+        style={{
+          height: isChatMode && chatMessages.length === 0 ? '40px' : '0px',
+          overflow: 'hidden'
+        }}
+        >
+          <div className="flex items-center justify-between px-4 py-2 flex-shrink-0 h-10 min-h-[40px]">
+            <span className="text-sm font-medium">My Project</span>
+            <div className="flex items-center gap-2">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                onClick={() => {
+                  setChatMessages([]);
+                  setInput("");
+                  setFirstUserMessage("");
+                  setHasSetProjectName(false);
+                }}
+                title="New chat"
+              >
+                <Plus className="w-3 h-3" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                onClick={() => setIsChatMode(false)}
+                title="Close chat mode"
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
       {/* Composer */}
       <div 
         ref={composerRef}
@@ -767,10 +801,10 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
             : "border-blue-300/50 focus-within:ring-blue-500/25"
         }`}
         style={{ 
-          height: (isExpanded || isChatMode) ? '120px' : '52px'
+          height: (isExpanded || isChatMode) ? '100px' : '52px'
         }}
       >
-        <div className={`relative h-full flex flex-col ${isChatMode ? 'border-t border-border' : ''}`}>
+        <div className="relative h-full flex flex-col">
           
           {!isExpanded && !isChatMode ? (
             // Collapsed search-bar mode - without send button
