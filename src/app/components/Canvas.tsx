@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Canvas as FabricCanvas, Image as FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine, filters, Point } from "fabric";
 import { Button } from "@/app/components/ui/button";
 import { Slider } from "@/app/components/ui/slider";
-import { Download, RotateCcw, Type, Square, Circle as CircleIcon, Minus, ImagePlus, SlidersHorizontal, Droplet, Crop, Trash2, Filter, Check, X, Wand2, Save, MousePointer, Hand, ChevronDown } from "lucide-react";
+import { Download, RotateCcw, Type, Square, Circle as CircleIcon, Minus, ImagePlus, SlidersHorizontal, Droplet, Crop, Trash2, Filter, Check, X, Wand2, Save, MousePointer, Hand, ChevronDown, BookOpen, Pencil, Plus } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { toast } from "sonner";
@@ -49,7 +49,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const activeToolRef = useRef<"pointer" | "hand">("pointer");
   const [activeShape, setActiveShape] = useState<"rect" | "circle" | "line">("rect");
   const [activeToolbarButton, setActiveToolbarButton] = useState<
-    'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'new' | 'save'
+    'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference'
   >('pointer');
   const [selectedObject, setSelectedObject] = useState<any>(null);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
@@ -998,7 +998,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       {/* Left Toolbar (Vertical layout) */}
       <TooltipProvider>
         <div
-          className="absolute left-6 flex flex-col gap-2.5 bg-white/70 dark:bg-neutral-900/60 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md px-1.5 py-3 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-border/60 ring-1 ring-black/5 z-50"
+          className="absolute left-4 flex flex-col gap-2.5 bg-white/70 dark:bg-neutral-900/60 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md px-1.5 py-3 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-border/60 ring-1 ring-black/5 z-50"
           style={{
             top: 'calc((100vh - 76px) / 2)',
             transform: 'translateY(-50%)'
@@ -1092,31 +1092,26 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => { setActiveToolbarButton('upload'); handleUploadClick(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'upload' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Upload Image">
-                <ImagePlus />
+                <Pencil />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">Upload Image</TooltipContent>
           </Tooltip>
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
 
-          {/* New Project */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => { setActiveToolbarButton('new'); handleNewProject(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'new' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="New Project">
-                <RotateCcw />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">New Project</TooltipContent>
-          </Tooltip>
+          {/* Divider */}
+          <div className="w-3/4 h-px bg-black/30 mx-1" />
 
-          {/* Save/Download Project */}
+          {/* Reference */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => { setActiveToolbarButton('save'); handleDownload(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'save' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Save Project">
-                <Save />
+              <Button onClick={() => { setActiveToolbarButton('reference'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'reference' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Reference">
+                <div className="relative w-[32px] h-[32px] bg-gray-700 rounded-lg flex items-center justify-center">
+                  <Plus className="w-6 h-6 text-white" />
+                </div>
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Save</TooltipContent>
+            <TooltipContent side="right">Reference</TooltipContent>
           </Tooltip>
         </div>
       </TooltipProvider>

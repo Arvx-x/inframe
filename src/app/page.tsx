@@ -51,7 +51,7 @@ export default function Page() {
 
       {/* Floating Chat Composer overlay at center-bottom */}
       <div className="pointer-events-none fixed inset-0 z-10 overflow-visible">
-        <div className="pointer-events-auto fixed bottom-6 left-1/2 -translate-x-1/2 w-[40%] max-w-[600px] overflow-visible">
+        <div className="pointer-events-auto fixed bottom-4 left-1/2 -translate-x-1/2 w-[40%] max-w-[600px] overflow-visible">
           <PromptSidebar
             onImageGenerated={handleImageGenerated}
             currentImageUrl={generatedImageUrl}

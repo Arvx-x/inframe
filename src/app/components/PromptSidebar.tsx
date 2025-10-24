@@ -793,18 +793,209 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
       {/* Composer */}
       <div 
         ref={composerRef}
-        className={`${isChatMode ? 'rounded-b-xl' : 'rounded-xl'} border shadow-[0_8px_30px_rgba(0,0,0,0.12)] hover:shadow-[0_8px_40px_rgba(0,0,0,0.16)] bg-white transition-all duration-300 ease-in-out overflow-hidden ${
-          isExpanded || isChatMode ? 'cursor-default focus-within:ring-2' : 'cursor-text'
+        className={`${isChatMode ? 'rounded-b-xl' : 'rounded-xl'} border shadow-[0_4px_8px_rgba(0,0,0,0.12)] hover:shadow-[0_6px_12px_rgba(0,0,0,0.16)] bg-white transition-all duration-300 ease-in-out overflow-hidden ${
+          isExpanded || isChatMode ? 'cursor-default' : 'cursor-text'
         } ${
           mode === "design"
-            ? "border-blue-200/50 focus-within:ring-blue-400/25"
-            : "border-blue-300/50 focus-within:ring-blue-500/25"
+            ? "border-blue-200/50"
+            : "border-blue-300/50"
         }`}
         style={{ 
           height: (isExpanded || isChatMode) ? '100px' : '52px'
         }}
       >
         <div className="relative h-full flex flex-col">
+          
+          {/* Left buttons - always rendered but animated */}
+          <div className={`absolute left-4 bottom-3 flex items-center gap-4 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+            !isExpanded && !isChatMode ? 'opacity-0 translate-y-6 pointer-events-none' : 'opacity-100 translate-y-0'
+          }`}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon"
+                  className="h-4 w-4 p-0 bg-transparent border border-black rounded-full shadow-none text-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200"
+                  title={`Current mode: ${mode === "design" ? "Design" : "Canvas"}`}
+                >
+                  {mode === "design" ? <DesignIcon className="w-2 h-2" /> : <CanvasIcon className="w-2 h-2" />}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" sideOffset={8} className="rounded-xl">
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setMode("design")}
+                >
+                  <DesignIcon className="w-4 h-4" /> Design Mode
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setMode("canvas")}
+                >
+                  <CanvasIcon className="w-4 h-4" /> Canvas Mode
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {mode === "design" && (
+              <>
+              <Button
+                onClick={() => { 
+                  setIsChatMode(!isChatMode);
+                  if (!isChatMode) {
+                    setIsExpanded(true);
+                  }
+                }}
+                size="icon"
+                  className={`h-5 w-5 p-0 bg-transparent hover:bg-transparent border-0 rounded-none shadow-none transition-all duration-300 ${
+                  isChatMode 
+                      ? "text-[hsl(var(--sidebar-ring))]" 
+                      : "text-foreground/70 hover:text-foreground"
+                }`}
+                title={isChatMode ? "Chat mode active" : "Enable chat mode"}
+              >
+                <PenTool className="w-2.5 h-2.5" />
+              </Button>
+              {/* Exclude (negative prompt) */}
+              <Popover open={isExcludeOpen} onOpenChange={handleExcludeOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    size="icon"
+                    className={`h-4 w-4 p-0 bg-transparent border border-black rounded-full shadow-none ${excludeText.trim() ? 'text-[hsl(var(--sidebar-ring))] hover:bg-muted/50' : 'text-foreground/70 hover:text-foreground hover:bg-muted/50'}`}
+                    title="Exclude from results"
+                  >
+                    <Minus className="w-2 h-2" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" sideOffset={8} className="w-80 p-0 rounded-xl border bg-white shadow-lg">
+                  <div className="p-4 border-b">
+                    <h3 className="text-sm font-semibold mb-1">Exclude from results</h3>
+                    <p className="text-xs text-muted-foreground">Specify elements to avoid in generated images</p>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    <Textarea
+                      value={tempExcludeText}
+                      onChange={(e) => setTempExcludeText(e.target.value)}
+                      placeholder="e.g., text, watermark, hands, low quality..."
+                      className="min-h-[80px] text-sm resize-none"
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      These elements will be avoided using negative guidance during generation.
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2 p-3 bg-muted/30 rounded-b-xl">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearExcludePreferences}
+                      className="text-xs h-8"
+                    >
+                      Clear
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={applyExcludePreferences}
+                      className="text-xs h-8 bg-foreground hover:bg-foreground/90 text-background"
+                    >
+                      Done
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              {/* Color wheel */}
+              <Popover open={isColorOpen} onOpenChange={handleColorOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    size="icon"
+                    className={`h-5 w-5 p-0 bg-transparent hover:bg-transparent border-0 rounded-none shadow-none ${selectedColors.length ? 'text-[hsl(var(--sidebar-ring))]' : 'text-foreground/70 hover:text-foreground'}`}
+                    title="Choose colors"
+                  >
+                    <span
+                      className="block h-3.5 w-3.5 rounded-full border border-black"
+                      style={{
+                        background: 'conic-gradient(#ef4444, #f59e0b, #22c55e, #3b82f6, #8b5cf6, #f472b6, #ef4444)'
+                      }}
+                    />
+            </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" sideOffset={8} className="w-80 p-0 rounded-xl border bg-white shadow-lg">
+                  <div className="p-4 border-b">
+                    <h3 className="text-sm font-semibold mb-1">Preferred colors</h3>
+                    <p className="text-xs text-muted-foreground">Select colors to guide the image generation</p>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    <div className="grid grid-cols-8 gap-2.5">
+                      {['#111827','#000000','#FFFFFF','#EF4444','#F59E0B','#10B981','#3B82F6','#8B5CF6','#14B8A6','#F472B6','#22C55E','#EAB308','#A855F7','#06B6D4','#F97316','#94A3B8'].map((hex) => (
+                        <button
+                          key={hex}
+                          onClick={() => toggleTempColor(hex)}
+                          className={`h-8 w-8 rounded-lg border-2 transition-all ${
+                            tempSelectedColors.includes(hex) 
+                              ? 'ring-2 ring-[hsl(var(--sidebar-ring))] ring-offset-2 border-white scale-110' 
+                              : 'border-border hover:border-foreground/30 hover:scale-105'
+                          }`}
+                          style={{ backgroundColor: hex }}
+                          title={hex}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                      <span>{tempSelectedColors.length} color{tempSelectedColors.length !== 1 ? 's' : ''} selected</span>
+                      {tempSelectedColors.length > 0 && (
+                        <div className="flex gap-1">
+                          {tempSelectedColors.map((color, idx) => (
+                            <div
+                              key={idx}
+                              className="w-4 h-4 rounded border border-border"
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2 p-3 bg-muted/30 rounded-b-xl">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearColorPreferences}
+                      className="text-xs h-8"
+                    >
+                      Clear
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={applyColorPreferences}
+                      className="text-xs h-8 bg-foreground hover:bg-foreground/90 text-background"
+                    >
+                      Done
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              </>
+            )}
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+          </div>
+
+          {/* Right button - always rendered but animated */}
+          <div className={`absolute right-2 bottom-3 flex items-center gap-3 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+            !isExpanded && !isChatMode ? 'opacity-0 translate-y-6 pointer-events-none' : 'opacity-100 translate-y-0'
+          }`}>
+            <Button
+              onClick={handleSend}
+              disabled={isGenerating || !input.trim()}
+              size="icon"
+              className={`h-7 w-7 p-0 rounded-full shadow-sm transition-all duration-300 ${
+                mode === "canvas" ? "bg-foreground hover:bg-foreground/90" : ""
+              }`}
+              title={mode === "design" ? (isGuidedMode ? "Start Wizard" : "Generate Image") : "Execute Command"}
+            >
+              {isGenerating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <ArrowUp className="w-3 h-3" />
+              )}
+            </Button>
+          </div>
           
           {!isExpanded && !isChatMode ? (
             // Collapsed search-bar mode - without send button
@@ -823,173 +1014,6 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
           ) : (
             // Expanded mode with full composer (shown in both normal expanded and chat mode)
             <div className="h-full">
-              {/* Left buttons */}
-              <div className="absolute left-2 bottom-1.5 flex items-center gap-3">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="icon"
-                      className="h-4 w-4 p-0 bg-transparent border border-black rounded-full shadow-none text-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200"
-                      title={`Current mode: ${mode === "design" ? "Design" : "Canvas"}`}
-                    >
-                      {mode === "design" ? <DesignIcon className="w-2 h-2" /> : <CanvasIcon className="w-2 h-2" />}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" sideOffset={8} className="rounded-xl">
-                    <DropdownMenuItem 
-                      className="gap-2 text-sm" 
-                      onClick={() => setMode("design")}
-                    >
-                      <DesignIcon className="w-4 h-4" /> Design Mode
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      className="gap-2 text-sm" 
-                      onClick={() => setMode("canvas")}
-                    >
-                      <CanvasIcon className="w-4 h-4" /> Canvas Mode
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                {mode === "design" && (
-                  <>
-                  <Button
-                    onClick={() => { 
-                      setIsChatMode(!isChatMode);
-                      if (!isChatMode) {
-                        setIsExpanded(true);
-                      }
-                    }}
-                    size="icon"
-                      className={`h-5 w-5 p-0 bg-transparent hover:bg-transparent border-0 rounded-none shadow-none transition-all duration-300 ${
-                      isChatMode 
-                          ? "text-[hsl(var(--sidebar-ring))]" 
-                          : "text-foreground/70 hover:text-foreground"
-                    }`}
-                    title={isChatMode ? "Chat mode active" : "Enable chat mode"}
-                  >
-                      <PenTool className="w-2.5 h-2.5" />
-                    </Button>
-                    {/* Exclude (negative prompt) */}
-                    <Popover open={isExcludeOpen} onOpenChange={handleExcludeOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          size="icon"
-                          className={`h-4 w-4 p-0 bg-transparent border border-black rounded-full shadow-none ${excludeText.trim() ? 'text-[hsl(var(--sidebar-ring))] hover:bg-muted/50' : 'text-foreground/70 hover:text-foreground hover:bg-muted/50'}`}
-                          title="Exclude from results"
-                        >
-                          <Minus className="w-2 h-2" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="start" sideOffset={8} className="w-80 p-0 rounded-xl border bg-white shadow-lg">
-                        <div className="p-4 border-b">
-                          <h3 className="text-sm font-semibold mb-1">Exclude from results</h3>
-                          <p className="text-xs text-muted-foreground">Specify elements to avoid in generated images</p>
-                        </div>
-                        <div className="p-4 space-y-3">
-                          <Textarea
-                            value={tempExcludeText}
-                            onChange={(e) => setTempExcludeText(e.target.value)}
-                            placeholder="e.g., text, watermark, hands, low quality..."
-                            className="min-h-[80px] text-sm resize-none"
-                          />
-                          <div className="text-xs text-muted-foreground">
-                            These elements will be avoided using negative guidance during generation.
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-end gap-2 p-3 bg-muted/30 rounded-b-xl">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={clearExcludePreferences}
-                            className="text-xs h-8"
-                          >
-                            Clear
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={applyExcludePreferences}
-                            className="text-xs h-8 bg-foreground hover:bg-foreground/90 text-background"
-                          >
-                            Done
-                          </Button>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                    {/* Color wheel */}
-                    <Popover open={isColorOpen} onOpenChange={handleColorOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          size="icon"
-                          className={`h-5 w-5 p-0 bg-transparent hover:bg-transparent border-0 rounded-none shadow-none ${selectedColors.length ? 'text-[hsl(var(--sidebar-ring))]' : 'text-foreground/70 hover:text-foreground'}`}
-                          title="Choose colors"
-                        >
-                          <span
-                            className="block h-3.5 w-3.5 rounded-full border border-black"
-                            style={{
-                              background: 'conic-gradient(#ef4444, #f59e0b, #22c55e, #3b82f6, #8b5cf6, #f472b6, #ef4444)'
-                            }}
-                          />
-                  </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="start" sideOffset={8} className="w-80 p-0 rounded-xl border bg-white shadow-lg">
-                        <div className="p-4 border-b">
-                          <h3 className="text-sm font-semibold mb-1">Preferred colors</h3>
-                          <p className="text-xs text-muted-foreground">Select colors to guide the image generation</p>
-                        </div>
-                        <div className="p-4 space-y-4">
-                          <div className="grid grid-cols-8 gap-2.5">
-                            {['#111827','#000000','#FFFFFF','#EF4444','#F59E0B','#10B981','#3B82F6','#8B5CF6','#14B8A6','#F472B6','#22C55E','#EAB308','#A855F7','#06B6D4','#F97316','#94A3B8'].map((hex) => (
-                              <button
-                                key={hex}
-                                onClick={() => toggleTempColor(hex)}
-                                className={`h-8 w-8 rounded-lg border-2 transition-all ${
-                                  tempSelectedColors.includes(hex) 
-                                    ? 'ring-2 ring-[hsl(var(--sidebar-ring))] ring-offset-2 border-white scale-110' 
-                                    : 'border-border hover:border-foreground/30 hover:scale-105'
-                                }`}
-                                style={{ backgroundColor: hex }}
-                                title={hex}
-                              />
-                            ))}
-                          </div>
-                          <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-                            <span>{tempSelectedColors.length} color{tempSelectedColors.length !== 1 ? 's' : ''} selected</span>
-                            {tempSelectedColors.length > 0 && (
-                              <div className="flex gap-1">
-                                {tempSelectedColors.map((color, idx) => (
-                                  <div
-                                    key={idx}
-                                    className="w-4 h-4 rounded border border-border"
-                                    style={{ backgroundColor: color }}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-end gap-2 p-3 bg-muted/30 rounded-b-xl">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={clearColorPreferences}
-                            className="text-xs h-8"
-                          >
-                            Clear
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={applyColorPreferences}
-                            className="text-xs h-8 bg-foreground hover:bg-foreground/90 text-background"
-                          >
-                            Done
-                          </Button>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  </>
-                )}
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-              </div>
               <Textarea
                 ref={textareaRef}
                 value={input}
@@ -1005,23 +1029,6 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                 className="min-h-[120px] resize-none bg-transparent border-0 focus-visible:ring-0 pl-4 pr-16 pt-4 pb-8 placeholder:text-muted-foreground/80"
                 disabled={isGenerating}
               />
-              <div className="absolute right-2 bottom-1.5 flex items-center gap-2">
-                <Button
-                  onClick={handleSend}
-                  disabled={isGenerating || !input.trim()}
-                  size="icon"
-                  className={`h-7 w-7 p-0 rounded-full shadow-sm transition-all duration-300 ${
-                    mode === "canvas" ? "bg-foreground hover:bg-foreground/90" : ""
-                  }`}
-                  title={mode === "design" ? (isGuidedMode ? "Start Wizard" : "Generate Image") : "Execute Command"}
-                >
-                  {isGenerating ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <ArrowUp className="w-3 h-3" />
-                  )}
-                </Button>
-              </div>
             </div>
           )}
         </div>
