@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Canvas as FabricCanvas, Image as FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine, filters, Point } from "fabric";
 import { Button } from "@/app/components/ui/button";
 import { Slider } from "@/app/components/ui/slider";
-import { Download, RotateCcw, Type, Square, Circle as CircleIcon, Minus, ImagePlus, SlidersHorizontal, Droplet, Crop, Trash2, Filter, Check, X, Wand2, Save, MousePointer, Hand, ChevronDown, BookOpen, Pencil, Plus } from "lucide-react";
+import { Download, RotateCcw, Type, Square, Circle as CircleIcon, Minus, ImagePlus, SlidersHorizontal, Droplet, Crop, Trash2, Filter, Check, X, Wand2, Save, MousePointer, Hand, ChevronDown, BookOpen, Pencil, Plus, Share } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { toast } from "sonner";
@@ -21,9 +21,12 @@ interface CanvasProps {
   onCanvasCommandRef?: React.MutableRefObject<((command: string) => Promise<string>) | null>;
   onCanvasHistoryRef?: React.MutableRefObject<{ undo: () => void; redo: () => void } | null>;
   onHistoryAvailableChange?: (available: boolean) => void;
+  onCanvasExportRef?: React.MutableRefObject<(() => void) | null>;
+  onCanvasColorRef?: React.MutableRefObject<((color: string) => void) | null>;
+  initialCanvasColor?: string;
 }
 
-export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange }: CanvasProps) {
+export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasColorRef, initialCanvasColor = "#f5f5f5" }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [selectedImage, setSelectedImage] = useState<FabricImage | null>(null);
@@ -69,7 +72,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     const canvas = new FabricCanvas(canvasRef.current, {
       width: canvasRef.current.parentElement?.clientWidth || window.innerWidth,
       height: canvasRef.current.parentElement?.clientHeight || window.innerHeight,
-      backgroundColor: 'transparent',
+      backgroundColor: initialCanvasColor,
     });
 
     // Enable panning with middle mouse drag (or left-drag when Hand tool active)
@@ -659,7 +662,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const handleNewProject = () => {
     if (!fabricCanvas) return;
     fabricCanvas.clear();
-    fabricCanvas.backgroundColor = 'transparent';
+    fabricCanvas.backgroundColor = initialCanvasColor;
     fabricCanvas.renderAll();
     setSelectedImage(null);
     setImageFilters({
@@ -794,12 +797,18 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     }
   }, [onCanvasHistoryRef, fabricCanvas]);
 
-  // Expose command handler via ref
+  const handleCanvasColorChange = (color: string) => {
+    if (!fabricCanvas) return;
+    fabricCanvas.backgroundColor = color;
+    fabricCanvas.renderAll();
+  };
+
+  // Expose color change handler via ref
   useEffect(() => {
-    if (onCanvasCommandRef) {
-      onCanvasCommandRef.current = handleCanvasCommand;
+    if (onCanvasColorRef) {
+      onCanvasColorRef.current = handleCanvasColorChange;
     }
-  }, [fabricCanvas, onCanvasCommandRef]);
+  }, [onCanvasColorRef, fabricCanvas]);
 
   return (
     <>
@@ -1000,7 +1009,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         <div
           className="absolute left-4 flex flex-col gap-2.5 bg-white/70 dark:bg-neutral-900/60 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md px-1.5 py-3 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-border/60 ring-1 ring-black/5 z-50"
           style={{
-            top: 'calc((100vh - 76px) / 2)',
+            top: 'calc((100vh - 76px) / 2 - 20px)',
             transform: 'translateY(-50%)'
           }}
         >
