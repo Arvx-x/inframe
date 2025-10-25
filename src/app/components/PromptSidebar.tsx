@@ -808,7 +808,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
           
           {/* Left buttons - always rendered but animated */}
           <div className={`absolute left-4 bottom-3 flex items-center gap-4 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-            !isExpanded && !isChatMode ? 'opacity-0 translate-y-6 pointer-events-none' : 'opacity-100 translate-y-0'
+            !isExpanded && !isChatMode ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
           }`}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -978,7 +978,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
 
           {/* Right button - always rendered but animated */}
           <div className={`absolute right-2 bottom-3 flex items-center gap-3 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-            !isExpanded && !isChatMode ? 'opacity-0 translate-y-6 pointer-events-none' : 'opacity-100 translate-y-0'
+            !isExpanded && !isChatMode ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
           }`}>
             <Button
               onClick={handleSend}
