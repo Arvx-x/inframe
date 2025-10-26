@@ -1100,7 +1100,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           {/* Upload */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => { setActiveToolbarButton('upload'); handleUploadClick(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'upload' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Upload Image">
+              <Button onClick={() => { setActiveToolbarButton('upload'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'upload' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Upload Image">
                 <Pencil />
               </Button>
             </TooltipTrigger>
@@ -1114,7 +1114,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           {/* Reference */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => { setActiveToolbarButton('reference'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'reference' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Reference">
+              <Button onClick={() => { setActiveToolbarButton('reference'); handleUploadClick(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'reference' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Reference">
                 <div className="relative w-[32px] h-[32px] bg-gray-700 rounded-lg flex items-center justify-center">
                   <Plus className="w-6 h-6 text-white" />
                 </div>
@@ -1138,8 +1138,8 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       
       {/* (Removed old Bottom Action Bar; consolidated into Bottom Toolbar above) */}
     </div>
-    {/* Inspector Sidebar (shows when an image or text is selected) */}
-    {selectedObject && (
+    {/* Inspector Sidebar (shows only when an image is selected) */}
+    {selectedObject && selectedObject instanceof FabricImage && (
       <InspectorSidebar
         selectedObject={selectedObject}
         canvas={fabricCanvas}

@@ -1,13 +1,9 @@
 import { useEffect, useState, useRef } from "react";
-import { Copy, Trash2, Lock, MoreHorizontal, FlipHorizontal, FlipVertical, ChevronLeft, RotateCw, Undo, Redo } from "lucide-react";
+import { Copy, Trash2, Lock, MoreHorizontal, FlipHorizontal, FlipVertical, ChevronLeft, RotateCw, RotateCcw, Undo, Redo, HelpCircle } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
-import { Input } from "@/app/components/ui/input";
-import { Label } from "@/app/components/ui/label";
-import { Slider } from "@/app/components/ui/slider";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
-import { Separator } from "@/app/components/ui/separator";
 import { cn } from "@/app/lib/utils";
 import { FabricObject, FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle } from "fabric";
+import { Properties } from "@/app/components/Properties";
 
 interface InspectorSidebarProps {
   selectedObject: FabricObject | null;
@@ -27,6 +23,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     fill: "#000000",
     stroke: "#000000",
     strokeWidth: 0,
+    strokePosition: "inside",
     cornerRadius: 0,
     fontSize: 16,
     fontFamily: "Inter",
@@ -36,11 +33,12 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     letterSpacingPx: 0,
   });
 
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState<"tools" | "adjustments" | "properties">("properties");
   const [lockAspectRatio, setLockAspectRatio] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(1);
-  const [sidebarWidth, setSidebarWidth] = useState(240);
+  const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
+  const [cropRatio, setCropRatio] = useState("default");
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   // Handle sidebar resizing
@@ -85,6 +83,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         fill: obj.fill?.toString() || "#000000",
         stroke: obj.stroke?.toString() || "#000000",
         strokeWidth: obj.strokeWidth || 0,
+        strokePosition: (obj as any).strokePosition || "inside",
         cornerRadius: (obj as any).rx || 0,
         fontSize: (obj as FabricTextbox).fontSize || 16,
         fontFamily: (obj as FabricTextbox).fontFamily || "Inter",
@@ -152,6 +151,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     if (updates.fill !== undefined) selectedObject.set({ fill: updates.fill });
     if (updates.stroke !== undefined) selectedObject.set({ stroke: updates.stroke });
     if (updates.strokeWidth !== undefined) selectedObject.set({ strokeWidth: updates.strokeWidth });
+    if (updates.strokePosition !== undefined) selectedObject.set({ strokePosition: updates.strokePosition });
     if (updates.cornerRadius !== undefined && (selectedObject instanceof FabricRect)) {
       selectedObject.set({ rx: updates.cornerRadius, ry: updates.cornerRadius });
     }
@@ -203,419 +203,131 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     canvas.renderAll();
   };
 
-  if (!selectedObject) return null;
+  const handleCropRatioChange = (ratio: string) => {
+    setCropRatio(ratio);
+    if (!selectedObject || !canvas) return;
 
-  const isImage = selectedObject instanceof FabricImage;
-  const isText = selectedObject instanceof FabricTextbox;
-  const isRect = selectedObject instanceof FabricRect;
-  const isCircle = selectedObject instanceof FabricCircle;
-  const isShape = isRect || isCircle;
+    if (ratio === "default") {
+      // Remove aspect ratio constraint
+      selectedObject.set({ lockUniScaling: false });
+      setLockAspectRatio(false);
+    } else {
+      // Parse ratio and apply aspect ratio constraint
+      const [widthRatio, heightRatio] = ratio.split(':').map(Number);
+      const targetRatio = widthRatio / heightRatio;
+      
+      // Calculate new dimensions maintaining aspect ratio
+      const currentWidth = selectedObject.getScaledWidth();
+      const currentHeight = selectedObject.getScaledHeight();
+      const currentRatio = currentWidth / currentHeight;
+      
+      let newWidth = currentWidth;
+      let newHeight = currentHeight;
+      
+      if (currentRatio > targetRatio) {
+        // Current is wider than target, adjust width
+        newWidth = currentHeight * targetRatio;
+      } else {
+        // Current is taller than target, adjust height
+        newHeight = currentWidth / targetRatio;
+      }
+      
+      // Apply the new dimensions
+      const scaleX = newWidth / (selectedObject.width || 1);
+      const scaleY = newHeight / (selectedObject.height || 1);
+      
+      selectedObject.set({ 
+        scaleX, 
+        scaleY,
+        lockUniScaling: true 
+      });
+      
+      setLockAspectRatio(true);
+      setAspectRatio(targetRatio);
+    }
+    
+    canvas.renderAll();
+  };
 
-  const elementType = isImage ? "Image" : isText ? "Text" : isShape ? "Shape" : "Object";
+  // Only show for images
+  if (!selectedObject || !(selectedObject instanceof FabricImage)) return null;
 
   return (
     <div
       ref={sidebarRef}
       className={cn(
-        "fixed top-12 right-0 bg-white border-l border-border z-50 flex flex-col transition-all duration-300 ease-in-out",
-        isCollapsed && "w-12",
+        "fixed top-12 right-0 bg-white border-l border-gray-200 z-50 flex flex-col transition-all duration-300 ease-in-out",
         isResizing && "transition-none"
       )}
       style={{ 
         height: 'calc(100vh - 48px)',
-        boxShadow: "0 0 16px rgba(0,0,0,0.06)",
-        width: isCollapsed ? undefined : `${sidebarWidth}px`,
+        width: `${sidebarWidth}px`,
         transform: 'translateX(0)',
         animation: isClosing ? 'slideOutToRight 0.3s ease-in forwards' : 'slideInFromRight 0.3s ease-out'
       }}
     >
       {/* Resize Handle */}
-      {!isCollapsed && (
-        <div
-          className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/20 active:bg-primary/40 transition-colors z-10"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            setIsResizing(true);
-          }}
-        />
-      )}
-      {isCollapsed ? (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setIsCollapsed(false)}
-          className="m-2"
+      <div
+        className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-500/20 active:bg-blue-500/40 transition-colors z-10"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          setIsResizing(true);
+        }}
+      />
+      
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200">
+        <button
+          className={cn(
+            "px-4 py-3 text-sm font-medium transition-colors",
+            activeTab === "tools" 
+              ? "text-gray-900 bg-white border-b-2 border-blue-500" 
+              : "text-gray-500 hover:text-gray-700"
+          )}
+          onClick={() => setActiveTab("tools")}
         >
-          <ChevronLeft className="h-4 w-4 rotate-180" />
+          Tools
+        </button>
+        <button
+          className={cn(
+            "px-4 py-3 text-sm font-medium transition-colors",
+            activeTab === "adjustments" 
+              ? "text-gray-900 bg-white border-b-2 border-blue-500" 
+              : "text-gray-500 hover:text-gray-700"
+          )}
+          onClick={() => setActiveTab("adjustments")}
+        >
+          Adjustments
+        </button>
+        <button
+          className={cn(
+            "px-4 py-3 text-sm font-medium transition-colors",
+            activeTab === "properties" 
+              ? "text-gray-900 bg-white border-b-2 border-blue-500" 
+              : "text-gray-500 hover:text-gray-700"
+          )}
+          onClick={() => setActiveTab("properties")}
+        >
+          Properties
+        </button>
+      </div>
+
+      {/* Content */}
+      <Properties 
+        selectedObject={selectedObject}
+        canvas={canvas}
+        properties={properties}
+        updateObject={updateObject}
+        cropRatio={cropRatio}
+        handleCropRatioChange={handleCropRatioChange}
+      />
+
+      {/* Help Button */}
+      <div className="absolute bottom-4 right-4">
+        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full bg-gray-200 hover:bg-gray-300">
+          <HelpCircle className="h-4 w-4 text-gray-600" />
         </Button>
-      ) : (
-        <>
-          {/* Header */}
-          <div className="p-4 border-b border-border flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-muted rounded flex items-center justify-center text-xs">
-                {elementType[0]}
-              </div>
-              <div>
-                <div className="text-sm font-medium">{elementType}</div>
-                <div className="text-xs text-muted-foreground">
-                  {Math.round(properties.width)} × {Math.round(properties.height)}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" onClick={handleDuplicate}>
-                <Copy className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={handleDelete}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={onClose}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-6">
-            {/* Transform */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Transform</h3>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">X</Label>
-                  <Input
-                    type="number"
-                    value={properties.x}
-                    onChange={(e) => updateObject({ x: Number(e.target.value) })}
-                    className="h-8 text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Y</Label>
-                  <Input
-                    type="number"
-                    value={properties.y}
-                    onChange={(e) => updateObject({ y: Number(e.target.value) })}
-                    className="h-8 text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">W</Label>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-4 w-4"
-                      onClick={() => setLockAspectRatio(!lockAspectRatio)}
-                    >
-                      <Lock className={cn("h-3 w-3", lockAspectRatio ? "text-primary" : "text-muted-foreground")} />
-                    </Button>
-                  </div>
-                  <Input
-                    type="number"
-                    value={properties.width}
-                    onChange={(e) => updateObject({ width: Number(e.target.value) })}
-                    className="h-8 text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">H</Label>
-                  <Input
-                    type="number"
-                    value={properties.height}
-                    onChange={(e) => updateObject({ height: Number(e.target.value) })}
-                    className="h-8 text-xs"
-                    disabled={lockAspectRatio}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs">Rotation</Label>
-                <Input
-                  type="number"
-                  value={properties.rotation}
-                  onChange={(e) => updateObject({ rotation: Number(e.target.value) })}
-                  className="h-8 text-xs"
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1" onClick={handleFlipX}>
-                  <FlipHorizontal className="h-3 w-3 mr-1" />
-                  Flip X
-                </Button>
-                <Button variant="outline" size="sm" className="flex-1" onClick={handleFlipY}>
-                  <FlipVertical className="h-3 w-3 mr-1" />
-                  Flip Y
-                </Button>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Fill & Stroke */}
-            {!isImage && (
-              <>
-                <div className="space-y-3">
-                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Fill & Stroke</h3>
-                  
-                  <div className="space-y-1">
-                    <Label className="text-xs">Fill Color</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        type="color"
-                        value={properties.fill}
-                        onChange={(e) => updateObject({ fill: e.target.value })}
-                        className="h-8 w-12 p-1"
-                      />
-                      <Input
-                        type="text"
-                        value={properties.fill}
-                        onChange={(e) => updateObject({ fill: e.target.value })}
-                        className="h-8 text-xs flex-1"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs">Opacity</Label>
-                    <Slider
-                      value={[properties.opacity]}
-                      onValueChange={([value]) => updateObject({ opacity: value })}
-                      max={100}
-                      step={1}
-                      className="w-full"
-                    />
-                    <div className="text-xs text-right text-muted-foreground">{properties.opacity}%</div>
-                  </div>
-
-                  {isShape && (
-                    <>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Stroke Color</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            type="color"
-                            value={properties.stroke}
-                            onChange={(e) => updateObject({ stroke: e.target.value })}
-                            className="h-8 w-12 p-1"
-                          />
-                          <Input
-                            type="text"
-                            value={properties.stroke}
-                            onChange={(e) => updateObject({ stroke: e.target.value })}
-                            className="h-8 text-xs flex-1"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs">Stroke Width</Label>
-                        <Input
-                          type="number"
-                          value={properties.strokeWidth}
-                          onChange={(e) => updateObject({ strokeWidth: Number(e.target.value) })}
-                          className="h-8 text-xs"
-                          min={0}
-                        />
-                      </div>
-
-                      {isRect && (
-                        <div className="space-y-1">
-                          <Label className="text-xs">Corner Radius</Label>
-                          <Input
-                            type="number"
-                            value={properties.cornerRadius}
-                            onChange={(e) => updateObject({ cornerRadius: Number(e.target.value) })}
-                            className="h-8 text-xs"
-                            min={0}
-                          />
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                <Separator />
-              </>
-            )}
-
-            {/* Typography */}
-            {isText && (
-              <>
-                <div className="space-y-3">
-                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Typography</h3>
-                  
-                  <div className="space-y-1">
-                    <Label className="text-xs">Font Family</Label>
-                    <Select value={properties.fontFamily} onValueChange={(value) => updateObject({ fontFamily: value })}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Inter">Inter</SelectItem>
-                        <SelectItem value="Roboto">Roboto</SelectItem>
-                        <SelectItem value="Poppins">Poppins</SelectItem>
-                        <SelectItem value="Montserrat">Montserrat</SelectItem>
-                        <SelectItem value="Lato">Lato</SelectItem>
-                        <SelectItem value="Arial">Arial</SelectItem>
-                        <SelectItem value="Georgia">Georgia</SelectItem>
-                        <SelectItem value="Courier New">Courier New</SelectItem>
-                        <SelectItem value="Times New Roman">Times New Roman</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Size</Label>
-                      <Input
-                        type="number"
-                        value={properties.fontSize}
-                        onChange={(e) => updateObject({ fontSize: Number(e.target.value) })}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Weight</Label>
-                      <Select value={properties.fontWeight} onValueChange={(value) => updateObject({ fontWeight: value })}>
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="300">Light</SelectItem>
-                          <SelectItem value="400">Regular</SelectItem>
-                          <SelectItem value="500">Medium</SelectItem>
-                          <SelectItem value="600">Semibold</SelectItem>
-                          <SelectItem value="700">Bold</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs">Alignment</Label>
-                    <Select value={properties.textAlign} onValueChange={(value) => updateObject({ textAlign: value })}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="left">Left</SelectItem>
-                        <SelectItem value="center">Center</SelectItem>
-                        <SelectItem value="right">Right</SelectItem>
-                        <SelectItem value="justify">Justify</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Line Height</Label>
-                      <Input
-                        type="number"
-                        step="0.05"
-                        min="0.5"
-                        value={properties.lineHeight}
-                        onChange={(e) => updateObject({ lineHeight: Number(e.target.value) })}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Letter Spacing (px)</Label>
-                      <Input
-                        type="number"
-                        step="0.5"
-                        value={properties.letterSpacingPx}
-                        onChange={(e) => updateObject({ letterSpacingPx: Number(e.target.value) })}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs">Text Color</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        type="color"
-                        value={properties.fill}
-                        onChange={(e) => updateObject({ fill: e.target.value })}
-                        className="h-8 w-12 p-1"
-                      />
-                      <Input
-                        type="text"
-                        value={properties.fill}
-                        onChange={(e) => updateObject({ fill: e.target.value })}
-                        className="h-8 text-xs flex-1"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs">Opacity</Label>
-                    <Slider
-                      value={[properties.opacity]}
-                      onValueChange={([value]) => updateObject({ opacity: value })}
-                      max={100}
-                      step={1}
-                      className="w-full"
-                    />
-                    <div className="text-xs text-right text-muted-foreground">{properties.opacity}%</div>
-                  </div>
-                </div>
-
-                <Separator />
-              </>
-            )}
-
-            {/* Image-specific opacity */}
-            {isImage && (
-              <>
-                <div className="space-y-3">
-                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Appearance</h3>
-                  
-                  <div className="space-y-1">
-                    <Label className="text-xs">Opacity</Label>
-                    <Slider
-                      value={[properties.opacity]}
-                      onValueChange={([value]) => updateObject({ opacity: value })}
-                      max={100}
-                      step={1}
-                      className="w-full"
-                    />
-                    <div className="text-xs text-right text-muted-foreground">{properties.opacity}%</div>
-                  </div>
-                </div>
-
-                <Separator />
-              </>
-            )}
-
-            {/* AI Suggestions */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">AI Suggestions</h3>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" className="text-xs">
-                  Match palette
-                </Button>
-                <Button variant="outline" size="sm" className="text-xs">
-                  Balance spacing
-                </Button>
-                {isText && (
-                  <Button variant="outline" size="sm" className="text-xs">
-                    Suggest fonts
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-        </>
-      )}
+      </div>
     </div>
   );
 };
