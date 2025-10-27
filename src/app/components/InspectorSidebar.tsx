@@ -2,8 +2,9 @@ import { useEffect, useState, useRef } from "react";
 import { Copy, Trash2, Lock, MoreHorizontal, FlipHorizontal, FlipVertical, ChevronLeft, RotateCw, RotateCcw, Undo, Redo, HelpCircle } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { cn } from "@/app/lib/utils";
-import { FabricObject, FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle } from "fabric";
+import { FabricObject, FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine } from "fabric";
 import { Properties } from "@/app/components/Properties";
+import { Shapes } from "@/app/components/Shapes";
 
 interface InspectorSidebarProps {
   selectedObject: FabricObject | null;
@@ -25,6 +26,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     strokeWidth: 0,
     strokePosition: "inside",
     cornerRadius: 0,
+    radius: 0,
     fontSize: 16,
     fontFamily: "Inter",
     fontWeight: "400",
@@ -85,6 +87,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         strokeWidth: obj.strokeWidth || 0,
         strokePosition: (obj as any).strokePosition || "inside",
         cornerRadius: (obj as any).rx || 0,
+        radius: (obj as FabricCircle).radius || 0,
         fontSize: (obj as FabricTextbox).fontSize || 16,
         fontFamily: (obj as FabricTextbox).fontFamily || "Inter",
         fontWeight: (obj as FabricTextbox).fontWeight?.toString() || "400",
@@ -154,6 +157,11 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     if (updates.strokePosition !== undefined) selectedObject.set({ strokePosition: updates.strokePosition });
     if (updates.cornerRadius !== undefined && (selectedObject instanceof FabricRect)) {
       selectedObject.set({ rx: updates.cornerRadius, ry: updates.cornerRadius });
+    }
+    
+    if (updates.radius !== undefined && (selectedObject instanceof FabricCircle)) {
+      const scale = updates.radius / ((selectedObject as FabricCircle).radius || 1);
+      selectedObject.set({ scaleX: scale, scaleY: scale });
     }
     
     if (selectedObject instanceof FabricTextbox) {
@@ -249,8 +257,14 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     canvas.renderAll();
   };
 
-  // Only show for images
-  if (!selectedObject || !(selectedObject instanceof FabricImage)) return null;
+  // Only show for images and shapes
+  const isImage = selectedObject instanceof FabricImage;
+  const isRect = selectedObject instanceof FabricRect;
+  const isCircle = selectedObject instanceof FabricCircle;
+  const isLine = selectedObject instanceof FabricLine;
+  const isShape = isRect || isCircle || isLine;
+  
+  if (!selectedObject || (!isImage && !isShape)) return null;
 
   return (
     <div
@@ -275,52 +289,29 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         }}
       />
       
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200">
-        <button
-          className={cn(
-            "px-4 py-3 text-sm font-medium transition-colors",
-            activeTab === "tools" 
-              ? "text-gray-900 bg-white border-b-2 border-blue-500" 
-              : "text-gray-500 hover:text-gray-700"
-          )}
-          onClick={() => setActiveTab("tools")}
-        >
-          Tools
-        </button>
-        <button
-          className={cn(
-            "px-4 py-3 text-sm font-medium transition-colors",
-            activeTab === "adjustments" 
-              ? "text-gray-900 bg-white border-b-2 border-blue-500" 
-              : "text-gray-500 hover:text-gray-700"
-          )}
-          onClick={() => setActiveTab("adjustments")}
-        >
-          Adjustments
-        </button>
-        <button
-          className={cn(
-            "px-4 py-3 text-sm font-medium transition-colors",
-            activeTab === "properties" 
-              ? "text-gray-900 bg-white border-b-2 border-blue-500" 
-              : "text-gray-500 hover:text-gray-700"
-          )}
-          onClick={() => setActiveTab("properties")}
-        >
-          Properties
-        </button>
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+        <h2 className="text-sm font-semibold text-gray-900">Properties</h2>
       </div>
 
       {/* Content */}
-      <Properties 
-        selectedObject={selectedObject}
-        canvas={canvas}
-        properties={properties}
-        updateObject={updateObject}
-        cropRatio={cropRatio}
-        handleCropRatioChange={handleCropRatioChange}
-      />
+      {isImage ? (
+        <Properties 
+          selectedObject={selectedObject}
+          canvas={canvas}
+          properties={properties}
+          updateObject={updateObject}
+          cropRatio={cropRatio}
+          handleCropRatioChange={handleCropRatioChange}
+        />
+      ) : (
+        <Shapes
+          selectedObject={selectedObject}
+          canvas={canvas}
+          properties={properties}
+          updateObject={updateObject}
+        />
+      )}
 
       {/* Help Button */}
       <div className="absolute bottom-4 right-4">
