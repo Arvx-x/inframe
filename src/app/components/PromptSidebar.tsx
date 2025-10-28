@@ -18,7 +18,7 @@ interface Message {
   timestamp?: number;
 }
 
-type ChatMode = "canvas" | "design";
+type ChatMode = "canvas" | "design" | "chat";
 type GenerationCategory = "logo" | "poster" | "image";
 
 const classifyIdea = (idea: string): GenerationCategory => {
@@ -96,6 +96,8 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
   const [tempExcludeText, setTempExcludeText] = useState<string>("");
   const [tempSelectedColors, setTempSelectedColors] = useState<string[]>([]);
   const [hasSetProjectName, setHasSetProjectName] = useState(false);
+  const [selectedRatio, setSelectedRatio] = useState<string>("1×1");
+  const [selectedModel, setSelectedModel] = useState<string>("DALL-E 3");
   
   // Extract project name from user message
   const extractProjectName = (message: string): string => {
@@ -243,19 +245,19 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
       }
       
       // Only collapse if not in chat mode
-      if (!isChatMode) {
+      if (!isChatMode && mode !== "chat") {
         setIsExpanded(false);
       }
     };
     
-    if (isExpanded && !isChatMode) {
+    if (isExpanded && !isChatMode && mode !== "chat") {
       document.addEventListener('mousedown', handleClickOutside);
     }
     
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isExpanded, isChatMode, isExcludeOpen, isColorOpen]);
+  }, [isExpanded, isChatMode, mode, isExcludeOpen, isColorOpen]);
 
   // Auto-focus textarea when expanding
   useEffect(() => {
@@ -287,7 +289,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
     }
     
     // Handle chat mode separately
-    if (isChatMode) {
+    if (isChatMode || mode === "chat") {
       setChatMessages((prev) => [...prev, userMessage]);
       if (!firstUserMessage) setFirstUserMessage(input);
       setInput("");
@@ -690,7 +692,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
         </div>
         
       {/* Chat Mode Message Area - appears above composer */}
-      {isChatMode && chatMessages.length > 0 && (
+      {(isChatMode || mode === "chat") && chatMessages.length > 0 && (
         <div 
           className="absolute bottom-full left-0 right-0 bg-white rounded-t-xl border border-b-0 border-blue-200/50 focus-within:ring-2 focus-within:ring-blue-400/25 transition-all duration-300 ease-in-out flex flex-col"
           style={{ 
@@ -720,7 +722,10 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                 size="icon"
                 variant="ghost"
                 className="h-6 w-6"
-                onClick={() => setIsChatMode(false)}
+                onClick={() => {
+                  setIsChatMode(false);
+                  setMode("design");
+                }}
                 title="Close chat mode"
               >
                 <X className="w-3 h-3" />
@@ -753,10 +758,10 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
       {/* Chat header - appears above composer when no messages */}
       <div 
         className={`absolute bottom-full left-0 right-0 bg-white rounded-t-xl border border-b-0 border-blue-200/50 focus-within:ring-2 focus-within:ring-blue-400/25 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-          isChatMode && chatMessages.length === 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+          (isChatMode || mode === "chat") && chatMessages.length === 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
         }`}
         style={{
-          height: isChatMode && chatMessages.length === 0 ? '40px' : '0px',
+          height: (isChatMode || mode === "chat") && chatMessages.length === 0 ? '40px' : '0px',
           overflow: 'hidden'
         }}
         >
@@ -781,7 +786,10 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                 size="icon"
                 variant="ghost"
                 className="h-6 w-6"
-                onClick={() => setIsChatMode(false)}
+                onClick={() => {
+                  setIsChatMode(false);
+                  setMode("design");
+                }}
                 title="Close chat mode"
               >
                 <X className="w-3 h-3" />
@@ -793,39 +801,60 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
       {/* Composer */}
       <div 
         ref={composerRef}
-        className={`${isChatMode ? 'rounded-b-xl' : 'rounded-xl'} border shadow-[0_4px_8px_rgba(0,0,0,0.12)] hover:shadow-[0_6px_12px_rgba(0,0,0,0.16)] bg-white transition-all duration-300 ease-in-out overflow-hidden ${
-          isExpanded || isChatMode ? 'cursor-default' : 'cursor-text'
+        className={`${isChatMode || mode === "chat" ? 'rounded-b-xl' : 'rounded-xl'} border shadow-[0_4px_8px_rgba(0,0,0,0.12)] hover:shadow-[0_6px_12px_rgba(0,0,0,0.16)] bg-white transition-all duration-300 ease-in-out overflow-hidden ${
+          isExpanded || isChatMode || mode === "chat" ? 'cursor-default' : 'cursor-text'
         } ${
           mode === "design"
             ? "border-blue-200/50"
-            : "border-blue-300/50"
+            : mode === "canvas"
+            ? "border-blue-300/50"
+            : "border-green-200/50"
         }`}
         style={{ 
-          height: (isExpanded || isChatMode) ? '100px' : '52px'
+          height: (isExpanded || isChatMode || mode === "chat") ? '100px' : '52px'
         }}
       >
         <div className="relative h-full flex flex-col">
           
           {/* Left buttons - always rendered but animated */}
-          <div className={`absolute left-4 bottom-3 flex items-center gap-4 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-            !isExpanded && !isChatMode ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
+          <div className={`absolute left-2 bottom-3 flex items-center gap-3 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+            !isExpanded && !isChatMode && mode !== "chat" ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
           }`}>
+            {/* Mode toggle button */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
-                  size="icon"
-                  className="h-4 w-4 p-0 bg-transparent border border-black rounded-full shadow-none text-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200"
-                  title={`Current mode: ${mode === "design" ? "Design" : "Canvas"}`}
+                  size="sm"
+                  className="h-6 px-2 py-1 bg-transparent hover:bg-gray-100 border-0 rounded-sm shadow-none text-gray-700 hover:text-gray-900 transition-all duration-200 flex items-center gap-1.5"
+                  title={`Current mode: ${mode === "design" ? "Design" : mode === "canvas" ? "Canvas" : "Chat"}`}
                 >
-                  {mode === "design" ? <DesignIcon className="w-2 h-2" /> : <CanvasIcon className="w-2 h-2" />}
+                  {mode === "design" ? (
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21,15 16,10 5,21"/>
+                    </svg>
+                  ) : mode === "canvas" ? (
+                    <CanvasIcon className="w-3 h-3" />
+                  ) : (
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                  )}
+                  <span className="text-xs font-medium">{mode === "design" ? "Design Mode" : mode === "canvas" ? "Canvas Mode" : "Chat Mode"}</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" sideOffset={8} className="rounded-xl">
+              <DropdownMenuContent align="start" sideOffset={8} className="rounded-xl border bg-white shadow-lg">
                 <DropdownMenuItem 
                   className="gap-2 text-sm" 
                   onClick={() => setMode("design")}
                 >
-                  <DesignIcon className="w-4 h-4" /> Design Mode
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21,15 16,10 5,21"/>
+                  </svg>
+                  Design Mode
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   className="gap-2 text-sm" 
@@ -833,178 +862,399 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                 >
                   <CanvasIcon className="w-4 h-4" /> Canvas Mode
                 </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => {
+                    setMode("chat");
+                    setIsChatMode(true);
+                  }}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  Chat Mode
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            {mode === "design" && (
-              <>
-              <Button
-                onClick={() => { 
-                  setIsChatMode(!isChatMode);
-                  if (!isChatMode) {
-                    setIsExpanded(true);
-                  }
-                }}
-                size="icon"
-                  className={`h-5 w-5 p-0 bg-transparent hover:bg-transparent border-0 rounded-none shadow-none transition-all duration-300 ${
-                  isChatMode 
-                      ? "text-[hsl(var(--sidebar-ring))]" 
-                      : "text-foreground/70 hover:text-foreground"
-                }`}
-                title={isChatMode ? "Chat mode active" : "Enable chat mode"}
-              >
-                <PenTool className="w-2.5 h-2.5" />
-              </Button>
-              {/* Exclude (negative prompt) */}
-              <Popover open={isExcludeOpen} onOpenChange={handleExcludeOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    size="icon"
-                    className={`h-4 w-4 p-0 bg-transparent border border-black rounded-full shadow-none ${excludeText.trim() ? 'text-[hsl(var(--sidebar-ring))] hover:bg-muted/50' : 'text-foreground/70 hover:text-foreground hover:bg-muted/50'}`}
-                    title="Exclude from results"
-                  >
-                    <Minus className="w-2 h-2" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" sideOffset={8} className="w-80 p-0 rounded-xl border bg-white shadow-lg">
-                  <div className="p-4 border-b">
-                    <h3 className="text-sm font-semibold mb-1">Exclude from results</h3>
-                    <p className="text-xs text-muted-foreground">Specify elements to avoid in generated images</p>
+
+            {/* Models dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon"
+                  className="h-5 w-5 p-0 bg-transparent hover:bg-gray-100 border-0 rounded-sm shadow-none text-gray-700 hover:text-gray-900 transition-all duration-200 -ml-0.5"
+                  title="Models"
+                >
+                  <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    <polyline points="3.27,6.96 12,12.01 20.73,6.96"/>
+                    <line x1="12" y1="22.08" x2="12" y2="12"/>
+                  </svg>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" sideOffset={8} className="rounded-xl border bg-white shadow-lg">
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedModel("DALL-E 3")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                  </svg>
+                  DALL-E 3
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedModel("DALL-E 2")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                  </svg>
+                  DALL-E 2
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedModel("Midjourney")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M8 12h8"/>
+                    <path d="M12 8v8"/>
+                  </svg>
+                  Midjourney
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedModel("Stable Diffusion")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21,15 16,10 5,21"/>
+                  </svg>
+                  Stable Diffusion
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedModel("Imagen")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21,15 16,10 5,21"/>
+                  </svg>
+                  Imagen
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedModel("SeaDream")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                  </svg>
+                  SeaDream
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedModel("Nano Banana")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                  </svg>
+                  Nano Banana
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedModel("Kandinsky")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M8 12h8"/>
+                    <path d="M12 8v8"/>
+                  </svg>
+                  Kandinsky
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Exclude popup */}
+            <Popover open={isExcludeOpen} onOpenChange={handleExcludeOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  size="icon"
+                  className="h-4 w-4 p-0 bg-transparent hover:bg-gray-100 border border-black rounded-full shadow-none text-gray-700 hover:text-gray-900 transition-all duration-200 ml-2"
+                  title="Exclude elements"
+                >
+                  <Minus className="w-2 h-2" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-4 bg-white border border-gray-200 shadow-xl rounded-2xl" align="start" sideOffset={8}>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-700">Exclude Elements</h3>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs"
+                        onClick={clearExcludePreferences}
+                      >
+                        Clear
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={applyExcludePreferences}
+                      >
+                        Apply
+                      </Button>
+                    </div>
                   </div>
-                  <div className="p-4 space-y-3">
-                    <Textarea
+                  
+                  <div className="space-y-2">
+                    <label className="text-xs text-gray-600">What should be avoided in the image?</label>
+                    <textarea
                       value={tempExcludeText}
                       onChange={(e) => setTempExcludeText(e.target.value)}
-                      placeholder="e.g., text, watermark, hands, low quality..."
-                      className="min-h-[80px] text-sm resize-none"
+                      placeholder="e.g., text, watermarks, logos, people..."
+                      className="w-full h-20 px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
-                    <div className="text-xs text-muted-foreground">
-                      These elements will be avoided using negative guidance during generation.
+                  </div>
+                  
+                  {tempExcludeText && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-600">Preview:</p>
+                      <div className="px-3 py-2 bg-gray-100 rounded-md text-xs text-gray-700">
+                        Avoid including: {tempExcludeText}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Aspect Ratio dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  className="h-6 px-2 py-1 bg-transparent hover:bg-gray-100 border-0 rounded-sm shadow-none text-gray-700 hover:text-gray-900 transition-all duration-200 flex items-center gap-1.5"
+                  title="Aspect Ratio"
+                >
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="7"/>
+                    <rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/>
+                  </svg>
+                  <span className="text-xs font-medium">{selectedRatio}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" sideOffset={8} className="rounded-xl border bg-white shadow-lg">
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedRatio("1×1")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  </svg>
+                  1×1 (Square)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedRatio("16×9")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="6" width="18" height="12" rx="2" ry="2"/>
+                  </svg>
+                  16×9 (Widescreen)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedRatio("4×3")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="5" width="18" height="14" rx="2" ry="2"/>
+                  </svg>
+                  4×3 (Standard)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedRatio("3×2")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="4" width="18" height="16" rx="2" ry="2"/>
+                  </svg>
+                  3×2 (Photo)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedRatio("9×16")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="6" y="3" width="12" height="18" rx="2" ry="2"/>
+                  </svg>
+                  9×16 (Portrait)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedRatio("2×3")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="5" y="3" width="14" height="18" rx="2" ry="2"/>
+                  </svg>
+                  2×3 (Portrait Photo)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedRatio("21×9")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="2" y="7" width="20" height="10" rx="2" ry="2"/>
+                  </svg>
+                  21×9 (Ultrawide)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm" 
+                  onClick={() => setSelectedRatio("5×4")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="4" width="18" height="16" rx="2" ry="2"/>
+                  </svg>
+                  5×4 (Large Format)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+
+            {/* Color wheel button */}
+            <Popover open={isColorOpen} onOpenChange={handleColorOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  size="icon"
+                  className="h-5 w-5 p-0 bg-transparent hover:bg-gray-100 border-0 rounded-sm shadow-none transition-all duration-200"
+                  title="Choose colors"
+                >
+                  <span
+                    className="block h-4 w-4 rounded-full border border-gray-300"
+                    style={{
+                      background: 'conic-gradient(#ef4444, #f59e0b, #22c55e, #3b82f6, #8b5cf6, #f472b6, #ef4444)'
+                    }}
+                  />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-4 bg-white border border-gray-200 shadow-xl rounded-2xl" align="start" sideOffset={8}>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-700">Color Palette</h3>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs"
+                        onClick={clearColorPreferences}
+                      >
+                        Clear
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={applyColorPreferences}
+                      >
+                        Apply
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center justify-end gap-2 p-3 bg-muted/30 rounded-b-xl">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearExcludePreferences}
-                      className="text-xs h-8"
-                    >
-                      Clear
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={applyExcludePreferences}
-                      className="text-xs h-8 bg-foreground hover:bg-foreground/90 text-background"
-                    >
-                      Done
-                    </Button>
+                  
+                  {/* Color grid */}
+                  <div className="grid grid-cols-8 gap-2">
+                    {[
+                      '#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#f472b6', '#ef4444', '#f97316',
+                      '#84cc16', '#06b6d4', '#6366f1', '#ec4899', '#dc2626', '#ea580c', '#16a34a', '#2563eb',
+                      '#7c3aed', '#db2777', '#b91c1c', '#c2410c', '#15803d', '#0891b2', '#4f46e5', '#be185d',
+                      '#991b1b', '#9a3412', '#166534', '#0e7490', '#3730a3', '#9d174d', '#7f1d1d', '#92400e',
+                      '#14532d', '#155e75', '#312e81', '#831843', '#450a0a', '#78350f', '#052e16', '#164e63',
+                      '#1e1b4b', '#500724', '#1c1917', '#365314', '#1e3a8a', '#581c87', '#7c2d12', '#374151'
+                    ].map((color) => (
+                      <button
+                        key={color}
+                        className={`w-8 h-8 rounded-lg border-2 transition-all duration-200 hover:scale-110 ${
+                          tempSelectedColors.includes(color) 
+                            ? 'border-gray-800 ring-2 ring-gray-300' 
+                            : 'border-gray-200 hover:border-gray-400'
+                        }`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => toggleTempColor(color)}
+                        title={color}
+                      />
+                    ))}
                   </div>
-                </PopoverContent>
-              </Popover>
-              {/* Color wheel */}
-              <Popover open={isColorOpen} onOpenChange={handleColorOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    size="icon"
-                    className={`h-5 w-5 p-0 bg-transparent hover:bg-transparent border-0 rounded-none shadow-none ${selectedColors.length ? 'text-[hsl(var(--sidebar-ring))]' : 'text-foreground/70 hover:text-foreground'}`}
-                    title="Choose colors"
-                  >
-                    <span
-                      className="block h-3.5 w-3.5 rounded-full border border-black"
-                      style={{
-                        background: 'conic-gradient(#ef4444, #f59e0b, #22c55e, #3b82f6, #8b5cf6, #f472b6, #ef4444)'
-                      }}
-                    />
-            </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" sideOffset={8} className="w-80 p-0 rounded-xl border bg-white shadow-lg">
-                  <div className="p-4 border-b">
-                    <h3 className="text-sm font-semibold mb-1">Preferred colors</h3>
-                    <p className="text-xs text-muted-foreground">Select colors to guide the image generation</p>
-                  </div>
-                  <div className="p-4 space-y-4">
-                    <div className="grid grid-cols-8 gap-2.5">
-                      {['#111827','#000000','#FFFFFF','#EF4444','#F59E0B','#10B981','#3B82F6','#8B5CF6','#14B8A6','#F472B6','#22C55E','#EAB308','#A855F7','#06B6D4','#F97316','#94A3B8'].map((hex) => (
-                        <button
-                          key={hex}
-                          onClick={() => toggleTempColor(hex)}
-                          className={`h-8 w-8 rounded-lg border-2 transition-all ${
-                            tempSelectedColors.includes(hex) 
-                              ? 'ring-2 ring-[hsl(var(--sidebar-ring))] ring-offset-2 border-white scale-110' 
-                              : 'border-border hover:border-foreground/30 hover:scale-105'
-                          }`}
-                          style={{ backgroundColor: hex }}
-                          title={hex}
-                        />
-                      ))}
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-                      <span>{tempSelectedColors.length} color{tempSelectedColors.length !== 1 ? 's' : ''} selected</span>
-                      {tempSelectedColors.length > 0 && (
-                        <div className="flex gap-1">
-                          {tempSelectedColors.map((color, idx) => (
-                            <div
-                              key={idx}
-                              className="w-4 h-4 rounded border border-border"
+                  
+                  {/* Selected colors preview */}
+                  {tempSelectedColors.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-600">Selected colors:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {tempSelectedColors.map((color) => (
+                          <div
+                            key={color}
+                            className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-md text-xs"
+                          >
+                            <div 
+                              className="w-3 h-3 rounded-full border border-gray-300"
                               style={{ backgroundColor: color }}
                             />
-                          ))}
-                        </div>
-                      )}
+                            <span className="text-gray-700">{color}</span>
+                            <button
+                              onClick={() => toggleTempColor(color)}
+                              className="text-gray-400 hover:text-gray-600"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center justify-end gap-2 p-3 bg-muted/30 rounded-b-xl">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearColorPreferences}
-                      className="text-xs h-8"
-                    >
-                      Clear
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={applyColorPreferences}
-                      className="text-xs h-8 bg-foreground hover:bg-foreground/90 text-background"
-                    >
-                      Done
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-              </>
-            )}
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
           </div>
 
           {/* Right button - always rendered but animated */}
-          <div className={`absolute right-2 bottom-3 flex items-center gap-3 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-            !isExpanded && !isChatMode ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
+          <div className={`absolute right-4 bottom-3 flex items-center gap-4 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+            !isExpanded && !isChatMode && mode !== "chat" ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
           }`}>
             <Button
               onClick={handleSend}
               disabled={isGenerating || !input.trim()}
               size="icon"
-              className={`h-7 w-7 p-0 rounded-full shadow-sm transition-all duration-300 ${
-                mode === "canvas" ? "bg-foreground hover:bg-foreground/90" : ""
+              className={`h-7 w-7 p-0 rounded-full shadow-sm transition-all duration-300 focus-visible:ring-0 focus-visible:ring-offset-0 ${
+                mode === "canvas" ? "bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90" : mode === "chat" ? "bg-green-600 hover:bg-green-700" : ""
               }`}
-              title={mode === "design" ? (isGuidedMode ? "Start Wizard" : "Generate Image") : "Execute Command"}
+              title={mode === "design" ? (isGuidedMode ? "Start Wizard" : "Generate Image") : mode === "canvas" ? "Execute Command" : "Send Message"}
             >
               {isGenerating ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <ArrowUp className="w-3 h-3" />
+                <ArrowUp className={`w-3 h-3 ${mode === "chat" || mode === "canvas" ? "text-white" : ""}`} />
               )}
             </Button>
           </div>
           
-          {!isExpanded && !isChatMode ? (
+          {!isExpanded && !isChatMode && mode !== "chat" ? (
             // Collapsed search-bar mode - without send button
             <div 
               onClick={() => setIsExpanded(true)}
               className="relative h-full flex flex-col justify-start px-4 pt-4 cursor-pointer caret-transparent overflow-hidden"
             >
               <div className="text-sm text-muted-foreground/80 whitespace-nowrap overflow-hidden">
-                {firstUserMessage || (mode === "design" ? "What would you like to create?" : "Tell the canvas what to do...")}
+                {firstUserMessage || (mode === "design" ? "What would you like to create?" : mode === "canvas" ? "Tell the canvas what to do..." : "Start a conversation...")}
               </div>
               {/* Fade-out gradient on the right */}
               {firstUserMessage && (
@@ -1024,7 +1274,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                 }}
                   onKeyDown={handleKeyPress}
                   placeholder={
-                    mode === "design" ? "What would you like to create?" : "Tell the canvas what to do..."
+                    mode === "design" ? "What would you like to create?" : mode === "canvas" ? "Tell the canvas what to do..." : "Start a conversation..."
                   }
                 className="min-h-[120px] resize-none bg-transparent border-0 focus-visible:ring-0 pl-4 pr-16 pt-4 pb-8 placeholder:text-muted-foreground/80"
                 disabled={isGenerating}
