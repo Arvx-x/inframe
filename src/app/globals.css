@@ -40,6 +40,8 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+  
+  --font-family-sans: 'Satoshi', sans-serif;
 }
 
 @layer base {
@@ -139,10 +141,12 @@
   /* Global base styling */
   * {
     @apply border-border;
+    font-family: 'Satoshi', sans-serif !important;
   }
 
   body {
     @apply bg-background text-foreground antialiased transition-colors duration-300;
+    font-family: 'Satoshi', sans-serif !important;
   }
 }
 

@@ -817,15 +817,15 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
         <div className="relative h-full flex flex-col">
           
           {/* Left buttons - always rendered but animated */}
-          <div className={`absolute left-2 bottom-3 flex items-center gap-3 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+          <div className={`absolute left-2 bottom-3 flex items-center gap-2 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
             !isExpanded && !isChatMode && mode !== "chat" ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
           }`}>
             {/* Mode toggle button */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
-                  size="sm"
-                  className="h-6 px-2 py-1 bg-transparent hover:bg-gray-100 border-0 rounded-sm shadow-none text-gray-700 hover:text-gray-900 transition-all duration-200 flex items-center gap-1.5"
+                  size="icon"
+                  className="h-6 w-6 bg-transparent hover:bg-gray-100 border-0 rounded-sm shadow-none text-gray-700 hover:text-gray-900 transition-all duration-200 ml-1 -m"
                   title={`Current mode: ${mode === "design" ? "Design" : mode === "canvas" ? "Canvas" : "Chat"}`}
                 >
                   {mode === "design" ? (
@@ -841,7 +841,6 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                     </svg>
                   )}
-                  <span className="text-xs font-medium">{mode === "design" ? "Design Mode" : mode === "canvas" ? "Canvas Mode" : "Chat Mode"}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" sideOffset={8} className="rounded-xl border bg-white shadow-lg">
@@ -877,115 +876,13 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Models dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="icon"
-                  className="h-5 w-5 p-0 bg-transparent hover:bg-gray-100 border-0 rounded-sm shadow-none text-gray-700 hover:text-gray-900 transition-all duration-200 -ml-0.5"
-                  title="Models"
-                >
-                  <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                    <polyline points="3.27,6.96 12,12.01 20.73,6.96"/>
-                    <line x1="12" y1="22.08" x2="12" y2="12"/>
-                  </svg>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" sideOffset={8} className="rounded-xl border bg-white shadow-lg">
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
-                  onClick={() => setSelectedModel("DALL-E 3")}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                  </svg>
-                  DALL-E 3
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
-                  onClick={() => setSelectedModel("DALL-E 2")}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                  </svg>
-                  DALL-E 2
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
-                  onClick={() => setSelectedModel("Midjourney")}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M8 12h8"/>
-                    <path d="M12 8v8"/>
-                  </svg>
-                  Midjourney
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
-                  onClick={() => setSelectedModel("Stable Diffusion")}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21,15 16,10 5,21"/>
-                  </svg>
-                  Stable Diffusion
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
-                  onClick={() => setSelectedModel("Imagen")}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21,15 16,10 5,21"/>
-                  </svg>
-                  Imagen
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
-                  onClick={() => setSelectedModel("SeaDream")}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                    <path d="M2 17l10 5 10-5"/>
-                    <path d="M2 12l10 5 10-5"/>
-                  </svg>
-                  SeaDream
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
-                  onClick={() => setSelectedModel("Nano Banana")}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                    <path d="M2 17l10 5 10-5"/>
-                    <path d="M2 12l10 5 10-5"/>
-                  </svg>
-                  Nano Banana
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
-                  onClick={() => setSelectedModel("Kandinsky")}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M8 12h8"/>
-                    <path d="M12 8v8"/>
-                  </svg>
-                  Kandinsky
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
 
             {/* Exclude popup */}
             <Popover open={isExcludeOpen} onOpenChange={handleExcludeOpen}>
               <PopoverTrigger asChild>
                 <Button
                   size="icon"
-                  className="h-4 w-4 p-0 bg-transparent hover:bg-gray-100 border border-black rounded-full shadow-none text-gray-700 hover:text-gray-900 transition-all duration-200 ml-2"
+                  className="h-4 w-4 p-0 bg-transparent hover:bg-gray-100 border border-black rounded-full shadow-none text-gray-700 hover:text-gray-900 transition-all duration-200 ml-1.5"
                   title="Exclude elements"
                 >
                   <Minus className="w-2 h-2" />
@@ -1227,9 +1124,109 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
           </div>
 
           {/* Right button - always rendered but animated */}
-          <div className={`absolute right-4 bottom-3 flex items-center gap-4 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+          <div className={`absolute right-3.5 bottom-3 flex items-center gap-1.5 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
             !isExpanded && !isChatMode && mode !== "chat" ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
           }`}>
+            {/* Models dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  className="h-7 px-1.5 py-1 bg-transparent hover:bg-gray-100 border-0 rounded-md shadow-none text-gray-700 hover:text-gray-900 transition-all duration-200 flex items-center gap-1.5 text-xs font-medium"
+                  title="Select model"
+                >
+                  <span className="max-w-[80px] truncate">{selectedModel}</span>
+                  <ChevronDown className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" sideOffset={8} className="rounded-xl border bg-white shadow-lg">
+                <DropdownMenuItem 
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                  onClick={() => setSelectedModel("DALL-E 3")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                  </svg>
+                  DALL-E 3
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                  onClick={() => setSelectedModel("DALL-E 2")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                  </svg>
+                  DALL-E 2
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                  onClick={() => setSelectedModel("Midjourney")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M8 12h8"/>
+                    <path d="M12 8v8"/>
+                  </svg>
+                  Midjourney
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                  onClick={() => setSelectedModel("Stable Diffusion")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21,15 16,10 5,21"/>
+                  </svg>
+                  Stable Diffusion
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                  onClick={() => setSelectedModel("Imagen")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21,15 16,10 5,21"/>
+                  </svg>
+                  Imagen
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                  onClick={() => setSelectedModel("SeaDream")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                  </svg>
+                  SeaDream
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                  onClick={() => setSelectedModel("Nano Banana")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                  </svg>
+                  Nano Banana
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                  onClick={() => setSelectedModel("Kandinsky")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M8 12h8"/>
+                    <path d="M12 8v8"/>
+                  </svg>
+                  Kandinsky
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <Button
               onClick={handleSend}
               disabled={isGenerating || !input.trim()}
