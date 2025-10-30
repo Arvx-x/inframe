@@ -744,7 +744,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                     </div>
                   ) : (
                     <div className="max-w-[80%] text-foreground">
-                      <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                      <div className="text-sm whitespace-normal">{message.content}</div>
                     </div>
                   )}
                 </div>
