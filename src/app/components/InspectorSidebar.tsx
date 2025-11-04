@@ -38,7 +38,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
   const [activeTab, setActiveTab] = useState<"tools" | "adjustments" | "properties">("properties");
   const [lockAspectRatio, setLockAspectRatio] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(1);
-  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [sidebarWidth, setSidebarWidth] = useState(250);
   const [isResizing, setIsResizing] = useState(false);
   const [cropRatio, setCropRatio] = useState("default");
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -270,7 +270,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     <div
       ref={sidebarRef}
       className={cn(
-        "fixed top-12 right-0 bg-white border-l border-gray-200 z-50 flex flex-col transition-all duration-300 ease-in-out",
+        "fixed top-12 right-0 bg-[#F7F7F7] border-l border-[#E5E5E5] z-50 flex flex-col transition-all duration-300 ease-in-out shadow-lg",
         isResizing && "transition-none"
       )}
       style={{ 
@@ -289,11 +289,6 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         }}
       />
       
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-        <h2 className="text-sm font-semibold text-gray-900">Properties</h2>
-      </div>
-
       {/* Content */}
       {isImage ? (
         <Properties 
@@ -313,12 +308,6 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         />
       )}
 
-      {/* Help Button */}
-      <div className="absolute bottom-4 right-4">
-        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full bg-gray-200 hover:bg-gray-300">
-          <HelpCircle className="h-4 w-4 text-gray-600" />
-        </Button>
-      </div>
     </div>
   );
 };

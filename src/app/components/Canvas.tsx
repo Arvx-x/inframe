@@ -4,13 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { Canvas as FabricCanvas, Image as FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine, filters, Point, Object as FabricObject } from "fabric";
 import { Button } from "@/app/components/ui/button";
 import { Slider } from "@/app/components/ui/slider";
-import { Download, RotateCcw, Type, Square, Circle as CircleIcon, Minus, ImagePlus, SlidersHorizontal, Droplet, Crop, Trash2, Filter, Check, X, Wand2, Save, MousePointer, Hand, ChevronDown, BookOpen, Pencil, Plus, Share } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
+import { Download, RotateCcw, ImagePlus, SlidersHorizontal, Droplet, Crop, Trash2, Filter, Check, X, Wand2, Save, Share } from "lucide-react";
 import { toast } from "sonner";
 import ImageEditPanel from "@/app/components/ImageEditPanel";
 import EditImagePanel from "@/app/components/EditImagePanel";
 import { InspectorSidebar } from "@/app/components/InspectorSidebar";
+import { Toolbar } from "@/app/components/Toolbar";
 // use local Next.js API route for canvas commands
 import { executeActions } from "@/app/lib/agent/executor";
 import type { AgentAction } from "@/app/lib/agent/canvas-schema";
@@ -50,12 +49,13 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const isPanningRef = useRef(false);
   const [activeTool, setActiveTool] = useState<"pointer" | "hand">("pointer");
   const activeToolRef = useRef<"pointer" | "hand">("pointer");
-  const activeToolbarButtonRef = useRef<'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference'>('pointer');
+  const activeToolbarButtonRef = useRef<'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut'>('pointer');
   const [activeShape, setActiveShape] = useState<"rect" | "circle" | "line">("rect");
   const activeShapeRef = useRef<"rect" | "circle" | "line">("rect");
   const [activeToolbarButton, setActiveToolbarButton] = useState<
-    'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference'
+    'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut'
   >('pointer');
+  const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
   const [selectedObject, setSelectedObject] = useState<any>(null);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const isDrawingShapeRef = useRef(false);
@@ -1462,125 +1462,20 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       )}
 
       {/* Left Toolbar (Vertical layout) */}
-      <TooltipProvider>
-        <div
-          className="absolute left-4 flex flex-col gap-2.5 bg-white/70 dark:bg-neutral-900/60 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md px-1.5 py-3 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-border/60 ring-1 ring-black/5 z-50"
-          style={{
-            top: 'calc((100vh - 76px) / 2 - 20px)',
-            transform: 'translateY(-50%)'
-          }}
-        >
-          {/* Pointer/Hand tool (split button with dropdown chevron) */}
-          <div className="relative inline-flex items-center">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'pointer' || activeToolbarButton === 'hand' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`}
-                  aria-label="Current Tool"
-                  onClick={() => {
-                    const next = activeTool === 'hand' ? 'pointer' : 'hand';
-                    setActiveTool(next);
-                    setActiveToolbarButton(next);
-                  }}
-                >
-                  {activeTool === 'hand' ? (
-                    <Hand />
-                  ) : (
-                    <MousePointer />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">Tools</TooltipContent>
-            </Tooltip>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="absolute right-0 top-1/2 -translate-y-1/2 h-2.5 w-2.5 p-0 rounded-none bg-transparent hover:bg-transparent focus-visible:ring-0 [&_svg]:!size-2" aria-label="More tools">
-                  <ChevronDown className="w-2 h-2 text-foreground/80" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="center" sideOffset={8} className="rounded-xl">
-                <DropdownMenuItem className="gap-2 text-sm" onClick={() => { setActiveTool('pointer'); setActiveToolbarButton('pointer'); }}>
-                  <MousePointer className="w-4 h-4" /> Pointer
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-sm" onClick={() => { setActiveTool('hand'); setActiveToolbarButton('hand'); }}>
-                  <Hand className="w-4 h-4" /> Hand
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          {/* Text */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => { setActiveToolbarButton('text'); handleAddText(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'text' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Add Text">
-                <Type />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Add Text</TooltipContent>
-          </Tooltip>
-
-          {/* Shapes (split button with dropdown chevron) */}
-          <div className="relative inline-flex items-center">
-            <Tooltip>
-              <TooltipTrigger asChild>
-              <Button onClick={() => { setActiveToolbarButton('shape'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'shape' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Add Shape">
-                  {activeShape === 'rect' && <Square />}
-                  {activeShape === 'circle' && <CircleIcon />}
-                  {activeShape === 'line' && <Minus />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                {activeShape === 'rect' ? 'Add Rectangle' : activeShape === 'circle' ? 'Add Circle' : 'Add Line'}
-              </TooltipContent>
-            </Tooltip>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="absolute right-0 top-1/2 -translate-y-1/2 h-2.5 w-2.5 p-0 rounded-none bg-transparent hover:bg-transparent focus-visible:ring-0 [&_svg]:!size-2" aria-label="More shapes">
-                  <ChevronDown className="w-2 h-2 text-foreground/80" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="center" sideOffset={8} className="rounded-xl">
-                <DropdownMenuItem className="gap-2 text-sm" onClick={() => { setActiveToolbarButton('shape'); setActiveShape('rect'); }}>
-                  <Square className="w-4 h-4" /> Rectangle
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-sm" onClick={() => { setActiveToolbarButton('shape'); setActiveShape('circle'); }}>
-                  <CircleIcon className="w-4 h-4" /> Circle
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-sm" onClick={() => { setActiveToolbarButton('shape'); setActiveShape('line'); }}>
-                  <Minus className="w-4 h-4" /> Line
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          {/* Upload */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => { setActiveToolbarButton('upload'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'upload' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Upload Image">
-                <Pencil />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Upload Image</TooltipContent>
-          </Tooltip>
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-
-          {/* Divider */}
-          <div className="w-3/4 h-px bg-black/30 mx-1" />
-
-          {/* Reference */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => { setActiveToolbarButton('reference'); handleUploadClick(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'reference' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Reference">
-                <div className="relative w-[32px] h-[32px] bg-gray-700 rounded-lg flex items-center justify-center">
-                  <Plus className="w-6 h-6 text-white" />
-                </div>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Reference</TooltipContent>
-          </Tooltip>
-        </div>
-      </TooltipProvider>
+      <Toolbar
+        activeTool={activeTool}
+        setActiveTool={setActiveTool}
+        activeToolbarButton={activeToolbarButton}
+        setActiveToolbarButton={setActiveToolbarButton}
+        activeShape={activeShape}
+        setActiveShape={setActiveShape}
+        isToolbarExpanded={isToolbarExpanded}
+        setIsToolbarExpanded={setIsToolbarExpanded}
+        onAddText={handleAddText}
+        fileInputRef={fileInputRef}
+        onFileChange={handleFileChange}
+        onUploadClick={handleUploadClick}
+      />
       
       {/* Adjustments Panel (compact) */}
       {selectedImage && showTopToolbar && showEditPanel && (
