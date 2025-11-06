@@ -3,11 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Canvas as FabricCanvas, Image as FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine, filters, Point, Object as FabricObject } from "fabric";
 import { Button } from "@/app/components/ui/button";
-import { Slider } from "@/app/components/ui/slider";
-import { Download, RotateCcw, ImagePlus, SlidersHorizontal, Droplet, Crop, Trash2, Filter, Check, X, Wand2, Save, Share } from "lucide-react";
+import { Download, RotateCcw, ImagePlus, Crop, Trash2, Save, Share } from "lucide-react";
 import { toast } from "sonner";
-import ImageEditPanel from "@/app/components/ImageEditPanel";
-import EditImagePanel from "@/app/components/EditImagePanel";
 import { InspectorSidebar } from "@/app/components/InspectorSidebar";
 import { Toolbar } from "@/app/components/Toolbar";
 // use local Next.js API route for canvas commands
@@ -29,13 +26,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [selectedImage, setSelectedImage] = useState<FabricImage | null>(null);
-  const [editPanelPosition, setEditPanelPosition] = useState({ x: 0, y: 0 });
-  const [showEditPanel, setShowEditPanel] = useState(false);
-  const [showAIEditPanel, setShowAIEditPanel] = useState(false);
-  const [topToolbarPosition, setTopToolbarPosition] = useState({ x: 0, y: 0 });
-  const [showTopToolbar, setShowTopToolbar] = useState(false);
-  const [showOpacityPanel, setShowOpacityPanel] = useState(false);
-  const [showBlurPanel, setShowBlurPanel] = useState(false);
   const [isCropping, setIsCropping] = useState(false);
   const cropRectRef = useRef<FabricRect | null>(null);
   const [imageFilters, setImageFilters] = useState({
@@ -293,8 +283,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       const obj = e.selected?.[0];
       if (obj && obj instanceof (FabricImage as any)) {
         setSelectedImage(obj as FabricImage);
-        updateEditPanelPosition(obj, canvas);
-        setShowEditPanel(false);
       }
     });
 
@@ -302,25 +290,14 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       const obj = e.selected?.[0];
       if (obj && obj instanceof (FabricImage as any)) {
         setSelectedImage(obj as FabricImage);
-        updateEditPanelPosition(obj, canvas);
-        setShowEditPanel(false);
       }
     });
 
     canvas.on('selection:cleared', () => {
       setSelectedImage(null);
-      setShowEditPanel(false);
-      setShowAIEditPanel(false);
-      setShowTopToolbar(false);
-      setShowOpacityPanel(false);
-      setShowBlurPanel(false);
     });
 
     canvas.on('object:moving', (e) => {
-      if (e.target && e.target instanceof (FabricImage as any) && selectedImage) {
-        updateEditPanelPosition(e.target, canvas);
-      }
-      
       // Magnetic snapping
       const obj = e.target as FabricObject;
       if (!obj) return;
@@ -528,11 +505,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       setGuideLines([]);
     });
 
-    canvas.on('object:scaling', (e) => {
-      if (e.target && e.target instanceof (FabricImage as any) && selectedImage) {
-        updateEditPanelPosition(e.target, canvas);
-      }
-    });
 
     // Track viewport changes for guide line rendering (on zoom/pan)
     let lastVpt = canvas.viewportTransform;
@@ -558,34 +530,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     canvas.on('mouse:up', checkViewportChange);
     canvas.on('mouse:wheel', checkViewportChange);
 
-    // Show top toolbar on double click on an image
-    canvas.on('mouse:down', (evt: any) => {
-      const isDouble = (evt?.e as MouseEvent)?.detail === 2;
-      const target = evt?.target;
-      if (isDouble && target && target instanceof (FabricImage as any)) {
-        setSelectedImage(target as FabricImage);
-        setShowTopToolbar(true);
-        positionTopToolbar(null, canvas);
-        setShowEditPanel(false);
-        setShowAIEditPanel(false);
-        setShowOpacityPanel(false);
-        setShowBlurPanel(false);
-      }
-    });
-
-    // Explicit dblclick handler to ensure consistent behavior
-    canvas.on('mouse:dblclick', (evt: any) => {
-      const target = evt?.target;
-      if (target && target instanceof (FabricImage as any)) {
-        setSelectedImage(target as FabricImage);
-        setShowTopToolbar(true);
-        positionTopToolbar(null, canvas);
-        setShowEditPanel(false);
-        setShowAIEditPanel(false);
-        setShowOpacityPanel(false);
-        setShowBlurPanel(false);
-      }
-    });
 
     setFabricCanvas(canvas);
 
@@ -596,9 +540,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       canvas.setWidth(width);
       canvas.setHeight(height);
       canvas.renderAll();
-      if (showTopToolbar) {
-        positionTopToolbar(null, canvas);
-      }
     };
 
     const ro = new ResizeObserver(() => handleResize());
@@ -650,11 +591,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       fabricCanvas.discardActiveObject();
       fabricCanvas.requestRenderAll();
       setSelectedImage(null);
-      setShowTopToolbar(false);
-      setShowEditPanel(false);
-      setShowAIEditPanel(false);
-      setShowOpacityPanel(false);
-      setShowBlurPanel(false);
     }
   }, [activeTool, activeToolbarButton, fabricCanvas]);
 
@@ -664,48 +600,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     return handleAddLine();
   };
 
-  // Helper function to update edit panel position (adjacent to image)
-  const updateEditPanelPosition = (obj: any, canvas: FabricCanvas) => {
-    const objBounds = obj.getBoundingRect();
-    const canvasElement = canvas.getElement();
-    const canvasRect = canvasElement.getBoundingClientRect();
-    const panelWidth = 320; // matches w-80
-    const gap = 0;
-
-    const objectRight = canvasRect.left + objBounds.left + objBounds.width;
-    const objectLeft = canvasRect.left + objBounds.left;
-    const availableRight = window.innerWidth - objectRight - 16;
-
-    // Prefer placing the panel to the right of the image; if not enough space, place to the left
-    const canPlaceRight = availableRight >= panelWidth + gap;
-    const left = canPlaceRight
-      ? objectRight + gap
-      : Math.max(16, objectLeft - panelWidth - gap);
-
-    const top = canvasRect.top + objBounds.top; // align to object top
-    
-    setEditPanelPosition({
-      x: left,
-      y: top,
-    });
-  };
-
-  // Position top toolbar fixed at top center of the canvas
-  const positionTopToolbar = (_obj: any, canvas: FabricCanvas) => {
-    const canvasElement = canvas.getElement();
-    const canvasRect = canvasElement.getBoundingClientRect();
-    const containerRect = canvasElement.parentElement?.getBoundingClientRect() || canvasRect;
-    const toolbarWidth = 280;
-    // Center relative to the canvas container, not the viewport
-    const centeredLeft = containerRect.width / 2 - toolbarWidth / 2;
-    const left = Math.max(16, Math.min(centeredLeft, containerRect.width - toolbarWidth - 16));
-    // Pin near the top inside the container
-    const top = 12;
-    setTopToolbarPosition({ x: left, y: top });
-    if (showEditPanel) {
-      setEditPanelPosition({ x: left, y: top + 40 + 8 });
-    }
-  };
 
   // Add generated image to canvas
   useEffect(() => {
@@ -735,7 +629,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       fabricCanvas.renderAll();
       
       setSelectedImage(img);
-      updateEditPanelPosition(img, fabricCanvas);
       
       toast.success("Image added to canvas");
     }).catch((error) => {
@@ -801,17 +694,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     toast.success("Filters reset");
   };
 
-  // Opacity control
-  const handleOpacityChange = (value: number) => {
-    if (!selectedImage || !fabricCanvas) return;
-    selectedImage.set({ opacity: value });
-    fabricCanvas.renderAll();
-  };
-
-  // Blur control via filters
-  const handleBlurChange = (value: number) => {
-    handleFilterChange('blur', value);
-  };
 
   // Crop helpers
   const startCrop = () => {
@@ -977,7 +859,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       fabricCanvas.renderAll();
 
       setSelectedImage(img);
-      updateEditPanelPosition(img, fabricCanvas);
       toast.success("Image uploaded onto canvas");
     }).catch(() => {
       toast.error("Failed to upload image");
@@ -1039,7 +920,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       fabricCanvas.renderAll();
       
       setSelectedImage(img);
-      setShowAIEditPanel(false);
+      setSelectedObject(img); // Update selectedObject so sidebar stays open
     }).catch((error) => {
       console.error("Error loading edited image:", error);
       toast.error("Failed to load edited image");
@@ -1271,195 +1152,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           </svg>
         );
       })()}
-      
-      {/* Top Floating Toolbar (shows on image double-click) */}
-      {selectedImage && showTopToolbar && (
-        <div
-          className="absolute z-50 bg-[hsl(var(--toolbar-bg))] border border-border rounded-xl shadow-[0_4px_12px_hsl(var(--shadow-medium))] px-2 py-1 flex items-center gap-1"
-          style={{ left: `${topToolbarPosition.x}px`, top: `${topToolbarPosition.y}px`, width: 280, height: 40 }}
-        >
-          {/* AI Edit */}
-          <Button
-            variant="default"
-            size="sm"
-            className={`h-8 px-3 rounded-lg flex items-center gap-1.5 ${
-              showAIEditPanel ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : ''
-            }`}
-            onClick={() => {
-              setShowAIEditPanel(true);
-              setShowEditPanel(false);
-              setShowOpacityPanel(false);
-              setShowBlurPanel(false);
-            }}
-            title="AI Edit"
-          >
-            <Wand2 className="w-3.5 h-3.5" />
-            <span className="text-xs">Edit</span>
-          </Button>
-
-          {/* Adjustments */}
-          <Button
-            variant="secondary"
-            size="sm"
-            className={`h-8 px-2 rounded-lg flex items-center gap-1 ${
-              showEditPanel ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : ''
-            }`}
-            onClick={() => {
-              const willShow = !showEditPanel;
-              setShowEditPanel(willShow);
-              setShowAIEditPanel(false);
-              setShowOpacityPanel(false);
-              setShowBlurPanel(false);
-              if (willShow) {
-                setEditPanelPosition({ x: topToolbarPosition.x, y: topToolbarPosition.y + 40 + 8 });
-              }
-            }}
-            title="Adjustments"
-          >
-            <SlidersHorizontal className="w-4 h-4" />
-          </Button>
-
-          {/* Opacity */}
-          <Button
-            variant="outline"
-            size="sm"
-            className={`h-8 px-2 rounded-lg ${
-              showOpacityPanel ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : ''
-            }`}
-            onClick={() => {
-              setShowOpacityPanel((v) => !v);
-              setShowEditPanel(false);
-              setShowBlurPanel(false);
-            }}
-            title="Opacity"
-          >
-            <Droplet className="w-4 h-4" />
-          </Button>
-
-          {/* Blur */}
-          <Button
-            variant="outline"
-            size="sm"
-            className={`h-8 px-2 rounded-lg ${
-              showBlurPanel ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : ''
-            }`}
-            onClick={() => {
-              setShowBlurPanel((v) => !v);
-              setShowEditPanel(false);
-              setShowOpacityPanel(false);
-            }}
-            title="Blur"
-          >
-            <Filter className="w-4 h-4" />
-          </Button>
-
-          {/* Crop */}
-          {!isCropping && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-2 rounded-lg"
-              onClick={startCrop}
-              title="Crop"
-            >
-              <Crop className="w-4 h-4" />
-            </Button>
-          )}
-          {isCropping && (
-            <>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="h-8 px-2 rounded-lg"
-                onClick={applyCrop}
-                title="Apply Crop"
-              >
-                <Check className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-2 rounded-lg"
-                onClick={cancelCrop}
-                title="Cancel Crop"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </>
-          )}
-
-          {/* Delete */}
-          <Button
-            variant="destructive"
-            size="sm"
-            className="h-8 px-2 rounded-lg"
-            onClick={() => {
-              if (!fabricCanvas || !selectedImage) return;
-              fabricCanvas.remove(selectedImage);
-              setSelectedImage(null);
-              setShowTopToolbar(false);
-              setShowEditPanel(false);
-              setShowAIEditPanel(false);
-              setShowOpacityPanel(false);
-              setShowBlurPanel(false);
-              fabricCanvas.renderAll();
-            }}
-            title="Delete"
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      )}
-
-      {/* AI Edit Panel */}
-      {selectedImage && showAIEditPanel && (
-        <EditImagePanel
-          position={editPanelPosition}
-          imageElement={selectedImage.getElement() as HTMLImageElement}
-          onEditComplete={handleEditComplete}
-          onClose={() => setShowAIEditPanel(false)}
-        />
-      )}
-
-      {/* Opacity Panel */}
-      {selectedImage && showTopToolbar && showOpacityPanel && (
-        <div
-          className="absolute z-50 mt-2 bg-background border border-border rounded-xl shadow p-3 w-56"
-          style={{ left: `${topToolbarPosition.x}px`, top: `${topToolbarPosition.y + 40 + 8}px` }}
-        >
-          <div className="flex items-center justify-between mb-2 text-xs">
-            <span>Opacity</span>
-            <span>{Math.round((selectedImage?.opacity ?? 1) * 100)}%</span>
-          </div>
-          <Slider
-            value={[selectedImage?.opacity ?? 1]}
-            onValueChange={([v]) => handleOpacityChange(v)}
-            min={0}
-            max={1}
-            step={0.01}
-          />
-        </div>
-      )}
-
-      {/* Blur Panel */}
-      {selectedImage && showTopToolbar && showBlurPanel && (
-        <div
-          className="absolute z-50 mt-2 bg-background border border-border rounded-xl shadow p-3 w-56"
-          style={{ left: `${topToolbarPosition.x}px`, top: `${topToolbarPosition.y + 40 + 8}px` }}
-        >
-          <div className="flex items-center justify-between mb-2 text-xs">
-            <span>Blur</span>
-            <span>{imageFilters.blur.toFixed(2)}</span>
-          </div>
-          <Slider
-            value={[imageFilters.blur]}
-            onValueChange={([v]) => handleBlurChange(v)}
-            min={0}
-            max={1}
-            step={0.01}
-          />
-        </div>
-      )}
 
       {/* Left Toolbar (Vertical layout) */}
       <Toolbar
@@ -1476,17 +1168,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         onFileChange={handleFileChange}
         onUploadClick={handleUploadClick}
       />
-      
-      {/* Adjustments Panel (compact) */}
-      {selectedImage && showTopToolbar && showEditPanel && (
-        <ImageEditPanel
-          position={editPanelPosition}
-          filters={imageFilters}
-          onFilterChange={handleFilterChange}
-          onReset={handleResetFilters}
-          compact
-        />
-      )}
       
       {/* (Removed old Bottom Action Bar; consolidated into Bottom Toolbar above) */}
     </div>
@@ -1508,6 +1189,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
             setIsSidebarClosing(false);
           }, 300);
         }}
+        onImageEdit={handleEditComplete}
       />
     )}
     </>

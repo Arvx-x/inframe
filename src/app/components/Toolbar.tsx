@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/
 import { 
   Type, Square, Circle as CircleIcon, Minus, Pencil, Plus, 
   MousePointer, Hand, ChevronDown, PenTool, Layout, Pipette, 
-  Paintbrush, Move, Layers, Grid, Ruler, Eraser 
+  Paintbrush, Move, Layers, Grid, Ruler, Eraser, Image as ImageIcon 
 } from "lucide-react";
 
 type ToolbarButton = 'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut';
@@ -75,7 +75,7 @@ export function Toolbar({
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Tools</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">{activeTool === 'hand' ? 'Hand' : 'Pointer'}</TooltipContent>
           </Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -101,7 +101,7 @@ export function Toolbar({
               <Type />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Add Text</TooltipContent>
+          <TooltipContent side="right" sideOffset={12} className="z-[60]">Add Text</TooltipContent>
         </Tooltip>
 
         {/* Shapes (split button with dropdown chevron) */}
@@ -114,7 +114,7 @@ export function Toolbar({
                 {activeShape === 'line' && <Minus />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">
               {activeShape === 'rect' ? 'Add Rectangle' : activeShape === 'circle' ? 'Add Circle' : 'Add Line'}
             </TooltipContent>
           </Tooltip>
@@ -141,13 +141,22 @@ export function Toolbar({
         {/* Upload */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button onClick={() => { setActiveToolbarButton('upload'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'upload' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Upload Image">
+            <Button onClick={() => { setActiveToolbarButton('upload'); onUploadClick(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'upload' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Upload Image">
               <Pencil />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Upload Image</TooltipContent>
+          <TooltipContent side="right" sideOffset={12} className="z-[60]">Upload Image</TooltipContent>
         </Tooltip>
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            setActiveToolbarButton('upload');
+            onFileChange(e);
+          }}
+        />
 
         {/* Expanded Tools Section */}
         <div className={`transition-all duration-200 ease-out ${isToolbarExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'} overflow-hidden flex flex-col gap-2.5 ${isToolbarExpanded ? 'pointer-events-auto' : 'pointer-events-none'}`}
@@ -157,14 +166,14 @@ export function Toolbar({
           {/* Divider */}
           <div className="w-3/4 h-px bg-black/30 mx-1" />
 
-          {/* Artboard Tool */}
+          {/* Image Tool (replaces Artboard) */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => { setActiveToolbarButton('artboard'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'artboard' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Artboard">
-                <Layout />
+              <Button onClick={() => { setActiveToolbarButton('upload'); onUploadClick(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'upload' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Add Image">
+                <ImageIcon />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Artboard</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">Add Image</TooltipContent>
           </Tooltip>
 
           {/* Pen Tool */}
@@ -184,7 +193,7 @@ export function Toolbar({
                 <Pipette />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Color Picker</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">Color Picker</TooltipContent>
           </Tooltip>
 
           {/* Brush Tool */}
@@ -194,7 +203,7 @@ export function Toolbar({
                 <Paintbrush />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Brush</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">Brush</TooltipContent>
           </Tooltip>
 
           {/* Move Tool */}
@@ -204,7 +213,7 @@ export function Toolbar({
                 <Move />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Move</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">Move</TooltipContent>
           </Tooltip>
 
           {/* Layers Tool */}
@@ -214,7 +223,7 @@ export function Toolbar({
                 <Layers />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Layers</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">Layers</TooltipContent>
           </Tooltip>
 
           {/* Grid Tool */}
@@ -224,7 +233,7 @@ export function Toolbar({
                 <Grid />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Grid</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">Grid</TooltipContent>
           </Tooltip>
 
           {/* Ruler Tool */}
@@ -234,7 +243,7 @@ export function Toolbar({
                 <Ruler />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Ruler</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">Ruler</TooltipContent>
           </Tooltip>
 
           {/* Eraser Tool */}
@@ -244,7 +253,7 @@ export function Toolbar({
                 <Eraser />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Eraser</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">Eraser</TooltipContent>
           </Tooltip>
 
           {/* Collapse Button (only visible when expanded) */}
@@ -264,7 +273,7 @@ export function Toolbar({
                 </div>
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Collapse Toolbar</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">Collapse Toolbar</TooltipContent>
           </Tooltip>
         </div>
 
@@ -286,7 +295,7 @@ export function Toolbar({
                 </div>
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Expand Toolbar</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">Expand Toolbar</TooltipContent>
           </Tooltip>
         )}
       </div>

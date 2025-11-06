@@ -5,15 +5,17 @@ import { cn } from "@/app/lib/utils";
 import { FabricObject, FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine } from "fabric";
 import { Properties } from "@/app/components/Properties";
 import { Shapes } from "@/app/components/Shapes";
+import Colors from "@/app/components/colors";
 
 interface InspectorSidebarProps {
   selectedObject: FabricObject | null;
   canvas: any;
   onClose: () => void;
   isClosing?: boolean;
+  onImageEdit?: (newImageUrl: string) => void;
 }
 
-export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = false }: InspectorSidebarProps) => {
+export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = false, onImageEdit }: InspectorSidebarProps) => {
   const [properties, setProperties] = useState({
     x: 0,
     y: 0,
@@ -35,7 +37,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     letterSpacingPx: 0,
   });
 
-  const [activeTab, setActiveTab] = useState<"tools" | "adjustments" | "properties">("properties");
+  const [activeTab, setActiveTab] = useState<"effects" | "transform" | "tools">("transform");
   const [lockAspectRatio, setLockAspectRatio] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(1);
   const [sidebarWidth, setSidebarWidth] = useState(250);
@@ -289,6 +291,57 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         }}
       />
       
+      {/* Colors section at top */}
+      <Colors selectedObject={selectedObject} canvas={canvas} initialColor={properties.fill} onChangeHex={(hex) => updateObject({ fill: hex })} />
+
+      {/* Tabs Header */}
+      <div className="flex items-center justify-between border-b border-[#E5E5E5] bg-white">
+        <div className="flex">
+          <button
+            onClick={() => setActiveTab("effects")}
+            className={cn(
+              "px-3 py-2 text-[11px] font-medium transition-colors",
+              activeTab === "effects"
+                ? "text-[#161616] border-b-2 border-[#161616]"
+                : "text-[#6E6E6E] hover:text-[#161616]"
+            )}
+          >
+            Effects
+          </button>
+          <button
+            onClick={() => setActiveTab("transform")}
+            className={cn(
+              "px-3 py-2 text-[11px] font-medium transition-colors",
+              activeTab === "transform"
+                ? "text-[#161616] border-b-2 border-[#161616]"
+                : "text-[#6E6E6E] hover:text-[#161616]"
+            )}
+          >
+            Transform
+          </button>
+          <button
+            onClick={() => setActiveTab("tools")}
+            className={cn(
+              "px-3 py-2 text-[11px] font-medium transition-colors",
+              activeTab === "tools"
+                ? "text-[#161616] border-b-2 border-[#161616]"
+                : "text-[#6E6E6E] hover:text-[#161616]"
+            )}
+          >
+            Tools
+          </button>
+        </div>
+        <div className="flex items-center gap-0.5 pr-2">
+          <button
+            onClick={handleDelete}
+            className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors"
+            title="Delete"
+          >
+            <Trash2 className="w-4 h-4 text-[#6E6E6E]" />
+          </button>
+        </div>
+      </div>
+
       {/* Content */}
       {isImage ? (
         <Properties 
@@ -298,6 +351,9 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
           updateObject={updateObject}
           cropRatio={cropRatio}
           handleCropRatioChange={handleCropRatioChange}
+          activeTab={activeTab}
+          onDelete={handleDelete}
+          onImageEdit={onImageEdit}
         />
       ) : (
         <Shapes
@@ -305,6 +361,8 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
           canvas={canvas}
           properties={properties}
           updateObject={updateObject}
+          activeTab={activeTab}
+          onDelete={handleDelete}
         />
       )}
 
