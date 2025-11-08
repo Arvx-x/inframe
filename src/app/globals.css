@@ -148,6 +148,20 @@
     @apply bg-background text-foreground antialiased transition-colors duration-300;
     font-family: 'Satoshi', sans-serif !important;
   }
+
+  /* Professional font rendering - Figma/Adobe grade quality */
+  canvas {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-smooth: always;
+  }
+  
+  /* Ensure crisp text rendering for textboxes */
+  .canvas-container {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
 
 /* 

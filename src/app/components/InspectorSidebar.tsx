@@ -5,6 +5,7 @@ import { cn } from "@/app/lib/utils";
 import { FabricObject, FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine } from "fabric";
 import { Properties } from "@/app/components/Properties";
 import { Shapes } from "@/app/components/Shapes";
+import { Text } from "@/app/components/Text";
 import Colors from "@/app/components/colors";
 
 interface InspectorSidebarProps {
@@ -29,7 +30,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     strokePosition: "inside",
     cornerRadius: 0,
     radius: 0,
-    fontSize: 16,
+    fontSize: 32,
     fontFamily: "Inter",
     fontWeight: "400",
     textAlign: "left",
@@ -91,7 +92,11 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         cornerRadius: (obj as any).rx || 0,
         radius: (obj as FabricCircle).radius || 0,
         fontSize: (obj as FabricTextbox).fontSize || 16,
-        fontFamily: (obj as FabricTextbox).fontFamily || "Inter",
+        fontFamily: (() => {
+          const fontFamily = (obj as FabricTextbox).fontFamily || "Inter";
+          // Normalize fontFamily to just "Inter" if it starts with "Inter"
+          return fontFamily.startsWith("Inter") ? "Inter" : fontFamily;
+        })(),
         fontWeight: (obj as FabricTextbox).fontWeight?.toString() || "400",
         textAlign: (obj as FabricTextbox).textAlign || "left",
         lineHeight: (obj as FabricTextbox).lineHeight || 1.2,
@@ -259,14 +264,15 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     canvas.renderAll();
   };
 
-  // Only show for images and shapes
+  // Only show for images, shapes, and text
   const isImage = selectedObject instanceof FabricImage;
   const isRect = selectedObject instanceof FabricRect;
   const isCircle = selectedObject instanceof FabricCircle;
   const isLine = selectedObject instanceof FabricLine;
   const isShape = isRect || isCircle || isLine;
+  const isText = selectedObject instanceof FabricTextbox;
   
-  if (!selectedObject || (!isImage && !isShape)) return null;
+  if (!selectedObject || (!isImage && !isShape && !isText)) return null;
 
   return (
     <div
@@ -354,6 +360,15 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
           activeTab={activeTab}
           onDelete={handleDelete}
           onImageEdit={onImageEdit}
+        />
+      ) : isText ? (
+        <Text
+          selectedObject={selectedObject}
+          canvas={canvas}
+          properties={properties}
+          updateObject={updateObject}
+          activeTab={activeTab}
+          onDelete={handleDelete}
         />
       ) : (
         <Shapes

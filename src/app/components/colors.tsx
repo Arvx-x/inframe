@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FabricObject, Image as FabricImage, filters } from "fabric";
+import { FabricObject, Image as FabricImage, Textbox as FabricTextbox, filters } from "fabric";
 import { Pipette } from "lucide-react";
 
 interface ColorsProps {
@@ -432,14 +432,14 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
     onChangeHex?.(hex);
 
     if (!selectedObject || !canvas) return;
-    // Only apply fill color to shapes, not images
+    // Only apply fill color to shapes and text, not images
     // Images should not have color fill applied to them - they keep their original appearance
     if (selectedObject instanceof FabricImage) {
       // Do not apply any color fill or filters to images
       // Images maintain their original appearance
       return;
     } else {
-      // Apply fill color to shapes only
+      // Apply fill color to shapes and text
       selectedObject.set({ fill: hex });
       canvas.renderAll();
     }

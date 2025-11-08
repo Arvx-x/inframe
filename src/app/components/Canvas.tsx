@@ -49,8 +49,11 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const [selectedObject, setSelectedObject] = useState<any>(null);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const isDrawingShapeRef = useRef(false);
+  const isDrawingTextRef = useRef(false);
   const startPointRef = useRef<{ x: number; y: number } | null>(null);
   const drawingShapeRef = useRef<FabricRect | FabricCircle | FabricLine | null>(null);
+  const drawingTextBoxRef = useRef<FabricRect | null>(null);
+  const drawingTextLabelRef = useRef<FabricTextbox | null>(null);
   const setHistoryAvailability = () => {
     if (onHistoryAvailableChange) {
       onHistoryAvailableChange((undoStackRef.current?.length || 0) > 0);
@@ -84,6 +87,48 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       const isMiddleButton = e.button === 1 || (e.buttons & 4) === 4;
       const isLeftButton = e.button === 0 || (e.buttons & 1) === 1;
       const useHandTool = activeToolRef.current === 'hand';
+      
+      // Handle text box drawing start
+      if (activeToolbarButtonRef.current === 'text' && isLeftButton) {
+        opt.e.preventDefault();
+        isDrawingTextRef.current = true;
+        const pointer = canvas.getPointer(e);
+        startPointRef.current = { x: pointer.x, y: pointer.y };
+        
+        // Create a visual rectangle to show text box area
+        const rect = new FabricRect({
+          left: pointer.x,
+          top: pointer.y,
+          width: 0,
+          height: 0,
+          fill: 'rgba(24, 160, 251, 0.1)',
+          stroke: '#18A0FB',
+          strokeWidth: 1,
+          strokeDashArray: [5, 5],
+          selectable: false,
+          evented: false,
+        });
+        canvas.add(rect);
+        drawingTextBoxRef.current = rect;
+        // Add live size label (W × H)
+        const sizeLabel = new FabricTextbox('0 × 0', {
+          left: pointer.x + 8,
+          top: pointer.y - 18,
+          fontSize: 10,
+          fill: '#ffffff',
+          backgroundColor: '#18A0FB',
+          padding: 2,
+          selectable: false,
+          evented: false,
+          fontFamily: 'Inter, Arial, sans-serif',
+          borderRadius: 3 as any, // TS guard; fabric supports background with rounded via custom, safe to ignore
+        } as any);
+        canvas.add(sizeLabel);
+        drawingTextLabelRef.current = sizeLabel;
+        canvas.selection = false;
+        canvas.renderAll();
+        return;
+      }
       
       // Handle shape drawing start
       if (activeToolbarButtonRef.current === 'shape' && isLeftButton) {
@@ -148,6 +193,38 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         canvas.setViewportTransform(vpt);
       }
       
+      // Handle text box drawing
+      if (isDrawingTextRef.current && startPointRef.current && drawingTextBoxRef.current) {
+        opt.e.preventDefault();
+        const pointer = canvas.getPointer(opt.e);
+        const startX = startPointRef.current.x;
+        const startY = startPointRef.current.y;
+        const currentX = pointer.x;
+        const currentY = pointer.y;
+        
+        const width = Math.abs(currentX - startX);
+        const height = Math.abs(currentY - startY);
+        const left = Math.min(startX, currentX);
+        const top = Math.min(startY, currentY);
+        
+        drawingTextBoxRef.current.set({
+          left,
+          top,
+          width,
+          height
+        });
+        // Update size label
+        if (drawingTextLabelRef.current) {
+          drawingTextLabelRef.current.set({
+            left: left + width + 6,
+            top: top + height + 6,
+            text: `${Math.round(width)} × ${Math.round(height)}`
+          });
+        }
+        
+        canvas.renderAll();
+      }
+      
       // Handle shape drawing
       if (isDrawingShapeRef.current && startPointRef.current && drawingShapeRef.current) {
         opt.e.preventDefault();
@@ -195,6 +272,94 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       isPanningRef.current = false;
       canvas.setCursor(activeToolRef.current === 'hand' ? 'grab' : 'default');
       canvas.selection = activeToolRef.current === 'pointer';
+      
+      // Handle text box drawing completion
+      if (isDrawingTextRef.current) {
+        isDrawingTextRef.current = false;
+        startPointRef.current = null;
+        
+        // Always reset cursor and tool state
+        canvas.selection = true;
+        canvas.defaultCursor = 'default';
+        canvas.setCursor('default');
+        setActiveToolbarButton('pointer');
+        setActiveTool('pointer');
+        activeToolbarButtonRef.current = 'pointer';
+        activeToolRef.current = 'pointer';
+        
+        if (drawingTextBoxRef.current) {
+          const width = drawingTextBoxRef.current.width || 0;
+          const height = drawingTextBoxRef.current.height || 0;
+          const left = drawingTextBoxRef.current.left || 0;
+          const top = drawingTextBoxRef.current.top || 0;
+          
+          // Remove the visual guide rectangle
+          canvas.remove(drawingTextBoxRef.current);
+          drawingTextBoxRef.current = null;
+          // Remove size label if present
+          if (drawingTextLabelRef.current) {
+            canvas.remove(drawingTextLabelRef.current);
+            drawingTextLabelRef.current = null;
+          }
+          
+          // Create area text if dragged enough; otherwise create point text with default width
+          const PLACEHOLDER = "Type something…";
+          const makeTextbox = (tw: number, tx: number, ty: number) => {
+            const textbox = new FabricTextbox(PLACEHOLDER, {
+              left: tx,
+              top: ty,
+              width: tw,
+              fontSize: 32,
+              fontFamily: 'Inter',
+              fontWeight: '400',
+              fill: '#9CA3AF',
+              editable: true,
+              padding: 6,
+            });
+            // Professional selection/controls styling
+            textbox.set({
+              borderColor: '#18A0FB',
+              cornerColor: '#18A0FB',
+              cornerStyle: 'circle' as any,
+              cornerSize: 6,
+              transparentCorners: false,
+              borderDashArray: [3, 3] as any,
+              editingBorderColor: '#18A0FB' as any,
+            } as any);
+            // Placeholder behavior
+            (textbox as any).isPlaceholder = true;
+            textbox.on('changed', () => {
+              if ((textbox as any).isPlaceholder && textbox.text !== PLACEHOLDER) {
+                textbox.set({ fill: '#111827' });
+                (textbox as any).isPlaceholder = false;
+                canvas.requestRenderAll();
+              }
+            });
+            textbox.on('editing:exited', () => {
+              const content = (textbox.text || '').trim();
+              if (!content) {
+                textbox.set({ text: PLACEHOLDER, fill: '#9CA3AF' });
+                (textbox as any).isPlaceholder = true;
+                canvas.requestRenderAll();
+              }
+            });
+            canvas.add(textbox);
+            canvas.setActiveObject(textbox);
+            textbox.enterEditing();
+            textbox.selectAll();
+            canvas.renderAll();
+          };
+
+          if (width > 30 && height > 20) {
+            // Area text
+            makeTextbox(width, left, top);
+          } else {
+            // Click to insert point text with default width
+            const defaultWidth = 320;
+            makeTextbox(defaultWidth, left, top);
+          }
+        }
+      }
       
       // Handle shape drawing completion
       if (isDrawingShapeRef.current) {
@@ -767,16 +932,12 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
 
   const handleAddText = () => {
     if (!fabricCanvas) return;
-    const textbox = new FabricTextbox("Text", {
-      fontSize: 32,
-      fill: '#111827',
-      editable: true,
-    });
-    const { left, top } = centerCoords(200, 40);
-    textbox.set({ left, top });
-    fabricCanvas.add(textbox);
-    fabricCanvas.setActiveObject(textbox);
-    fabricCanvas.renderAll();
+    // Set text tool mode for drag-to-create
+    setActiveToolbarButton('text');
+    activeToolbarButtonRef.current = 'text';
+    fabricCanvas.selection = false;
+    fabricCanvas.defaultCursor = 'text';
+    fabricCanvas.setCursor('text');
   };
 
   const handleAddRect = () => {

@@ -92,6 +92,8 @@ export function executeActions(
       const text = action.params.text || "Text";
       const options = {
         fontSize: action.params.fontSize || 32,
+        fontFamily: "Inter",
+        fontWeight: "400",
         fill: "#111827",
         editable: true,
         left: clamp(action.params.left ?? ((canvasWidth) / 2 - 100), 0, canvasWidth),

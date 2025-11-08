@@ -46,7 +46,7 @@ export function Toolbar({
   return (
     <TooltipProvider>
       <div
-        className={`absolute left-2 flex flex-col gap-2.5 bg-white/70 dark:bg-neutral-900/60 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md px-1.5 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-border/60 ring-1 ring-black/5 z-50 transition-all duration-200 ease-out overflow-hidden ${isToolbarExpanded ? 'pt-0 pb-1.5' : 'py-3'}`}
+        className={`absolute left-2 flex flex-col gap-2.5 bg-white px-1.5 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-border/60 ring-1 ring-black/5 z-50 transition-all duration-200 ease-out overflow-hidden ${isToolbarExpanded ? 'pt-0 pb-1.5' : 'py-3'}`}
         style={{
           top: isToolbarExpanded ? '0px' : 'calc((100vh - 76px) / 2 - 20px)',
           transform: isToolbarExpanded ? 'translateY(0)' : 'translateY(-50%)',
