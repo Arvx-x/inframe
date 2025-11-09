@@ -47,6 +47,7 @@ export function executeActions(
         const top = clamp(action.params.top, 0, Math.max(0, canvasHeight - height));
 
         obj.set({ left, top });
+        obj.setCoords?.();
 
         inverseActions.push({
           type: "move",
@@ -63,6 +64,7 @@ export function executeActions(
         const scaleX = clamp(action.params.scaleX, 0.05, 10);
         const scaleY = clamp(action.params.scaleY, 0.05, 10);
         obj.set({ scaleX, scaleY });
+        obj.setCoords?.();
         inverseActions.push({ type: "resize", objectIds: [id], params: { scaleX: prevScaleX, scaleY: prevScaleY } } as AgentAction);
       });
     } else if (action.type === "align") {
@@ -86,6 +88,7 @@ export function executeActions(
         if (action.params.vertical === "bottom") top = (canvasHeight) - objHeight - 20;
 
         obj.set({ left, top });
+        obj.setCoords?.();
         inverseActions.push({ type: "move", objectIds: [objects.indexOf(obj)].map(i => `obj_${i}`), params: { left: prevLeft, top: prevTop } } as AgentAction);
       });
     } else if (action.type === "add_text") {
@@ -109,6 +112,7 @@ export function executeActions(
       }
       if (textbox) {
         fabricCanvas.add(textbox);
+        textbox.setCoords?.();
         const newIndex = fabricCanvas.getObjects().length - 1;
         inverseActions.push({ type: "delete", objectIds: [`obj_${newIndex}`] } as AgentAction);
       }
@@ -127,14 +131,19 @@ export function executeActions(
     } else if (action.type === "group") {
       const spacing = clamp(action.params?.spacing ?? 20, 0, 400);
       const targets = (action.objectIds || []).map(getObjById).filter(Boolean);
+      if (targets.length === 0) continue;
       const prevPositions: Array<{ id: string; left: number; top: number }> = [];
       targets.forEach((obj: any) => {
         prevPositions.push({ id: `obj_${objects.indexOf(obj)}`, left: obj.left || 0, top: obj.top || 0 });
       });
-      let currentX = 50;
-      targets.forEach((obj: any) => {
-        obj.set({ left: currentX, top: 100 });
-        currentX += ((obj.width || 0) * (obj.scaleX || 1)) + spacing;
+      const sortedTargets = [...targets].sort((a: any, b: any) => (a.left || 0) - (b.left || 0));
+      let currentX = sortedTargets[0].left || 0;
+      const baseTop = sortedTargets[0].top || 0;
+      sortedTargets.forEach((obj: any) => {
+        const scaledWidth = typeof obj.getScaledWidth === 'function' ? obj.getScaledWidth() : (obj.width || 0) * (obj.scaleX || 1);
+        obj.set({ left: currentX, top: baseTop });
+        obj.setCoords?.();
+        currentX += scaledWidth + spacing;
       });
       prevPositions.forEach((p) => {
         inverseActions.push({ type: "move", objectIds: [p.id], params: { left: p.left, top: p.top } } as AgentAction);

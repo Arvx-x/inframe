@@ -581,7 +581,7 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
             className="w-7 h-7 rounded border border-slate-300 transition-all duration-200 hover:scale-110 cursor-pointer" 
             style={{ 
               backgroundColor: fillType === 'solid' ? hex : undefined,
-              background: fillType !== 'solid' 
+              backgroundImage: fillType !== 'solid' 
                 ? `linear-gradient(${gradientAngle}deg, ${gradientStops.map(s => `${s.color} ${s.offset * 100}%`).join(', ')})`
                 : undefined
             }}
@@ -665,7 +665,7 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
             }}
             className="w-full h-2 bg-slate-200 rounded appearance-none cursor-pointer opacity-slider"
             style={{
-              background: `linear-gradient(to right, ${hex}00 0%, ${hex} 100%)`
+              backgroundImage: `linear-gradient(to right, ${hex}00 0%, ${hex} 100%)`
             }}
           />
         </div>
@@ -753,7 +753,7 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
             <div
               className="absolute inset-0"
               style={{
-                background: `linear-gradient(to right, ${gradientStops
+              backgroundImage: `linear-gradient(to right, ${gradientStops
                   .sort((a, b) => a.offset - b.offset)
                   .map(s => `${s.color} ${s.offset * 100}%`)
                   .join(', ')})`

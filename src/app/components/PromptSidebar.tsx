@@ -1038,7 +1038,7 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
                   <span
                     className="block h-4 w-4 rounded-full border border-gray-300"
                     style={{
-                      background: 'conic-gradient(#ef4444, #f59e0b, #22c55e, #3b82f6, #8b5cf6, #f472b6, #ef4444)'
+                      backgroundImage: 'conic-gradient(#ef4444, #f59e0b, #22c55e, #3b82f6, #8b5cf6, #f472b6, #ef4444)'
                     }}
                   />
                 </Button>

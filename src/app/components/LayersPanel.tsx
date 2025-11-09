@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect, useMemo, useState } from "react";
 import { type Canvas as FabricCanvas, type Object as FabricObject, Group as FabricGroup, ActiveSelection as FabricActiveSelection } from "fabric";
 import { Eye, EyeOff, Lock, Unlock, ChevronUp, ChevronDown, X, Layers as LayersIcon, GripVertical, Sparkles } from "lucide-react";
@@ -15,6 +17,19 @@ type LayerNode = {
   depth: number;
 };
 
+// Stable keys for Fabric objects to avoid hydration/DOM diff issues.
+const fabricObjectKeyMap = new WeakMap<FabricObject, string>();
+let fabricKeySequence = 1;
+function getStableFabricKey(obj: FabricObject): string {
+  const builtin = (obj as any).__uid || (obj as any).id;
+  if (builtin) return String(builtin);
+  const existing = fabricObjectKeyMap.get(obj);
+  if (existing) return existing;
+  const next = `fabric-${fabricKeySequence++}`;
+  fabricObjectKeyMap.set(obj, next);
+  return next;
+}
+
 function getLabelForObject(obj: FabricObject): string {
   const base = (obj as any).name || obj.type || "Object";
   return base.charAt(0).toUpperCase() + base.slice(1);
@@ -24,6 +39,7 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
   const [revision, setRevision] = useState(0);
   const [draggedObj, setDraggedObj] = useState<FabricObject | null>(null);
   const [dragOverObj, setDragOverObj] = useState<FabricObject | null>(null);
+  const [dragOverPos, setDragOverPos] = useState<"above" | "below" | null>(null);
   const [activeTab, setActiveTab] = useState<"layers" | "inspo">("layers");
 
   useEffect(() => {
@@ -224,20 +240,59 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
     e.stopPropagation();
     setDraggedObj(obj);
     e.dataTransfer.effectAllowed = 'move';
+    
+    // Create a better drag image for smooth visual feedback - use the entire row
+    const gripElement = e.currentTarget as HTMLElement;
+    const rowElement = gripElement.parentElement;
+    if (rowElement) {
+      const clone = rowElement.cloneNode(true) as HTMLElement;
+      clone.style.position = 'absolute';
+      clone.style.top = '-9999px';
+      clone.style.left = '-9999px';
+      clone.style.opacity = '0.75';
+      clone.style.pointerEvents = 'none';
+      clone.style.width = rowElement.offsetWidth + 'px';
+      clone.style.backgroundColor = '#ffffff';
+      clone.style.border = '1px solid #E5E7EB';
+      clone.style.borderRadius = '6px';
+      clone.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)';
+      document.body.appendChild(clone);
+      e.dataTransfer.setDragImage(clone, 20, 20);
+      setTimeout(() => {
+        if (document.body.contains(clone)) {
+          document.body.removeChild(clone);
+        }
+      }, 0);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent, obj: FabricObject) => {
     e.preventDefault();
     e.stopPropagation();
     if (draggedObj && draggedObj !== obj) {
-      setDragOverObj(obj);
+      // Determine whether mouse is in upper or lower half of the row
+      const row = e.currentTarget as HTMLElement;
+      const rect = row.getBoundingClientRect();
+      const isAbove = e.clientY < rect.top + rect.height / 2;
+      const pos: "above" | "below" = isAbove ? "above" : "below";
+      if (dragOverObj !== obj || dragOverPos !== pos) {
+        setDragOverObj(obj);
+        setDragOverPos(pos);
+      }
       e.dataTransfer.dropEffect = 'move';
     }
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.stopPropagation();
-    setDragOverObj(null);
+    // Only clear if we're actually leaving the element (not entering a child)
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
+      setDragOverObj(null);
+      setDragOverPos(null);
+    }
   };
 
   const handleDrop = (e: React.DragEvent, targetObj: FabricObject) => {
@@ -246,6 +301,7 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
     if (!draggedObj || draggedObj === targetObj) {
       setDraggedObj(null);
       setDragOverObj(null);
+      setDragOverPos(null);
       return;
     }
 
@@ -256,17 +312,42 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
     if (draggedIdx === -1 || targetIdx === -1) {
       setDraggedObj(null);
       setDragOverObj(null);
+      setDragOverPos(null);
       return;
     }
 
-    // Move dragged object to target position
-    canvas.remove(draggedObj);
-    canvas.insertAt(draggedIdx < targetIdx ? targetIdx : targetIdx, draggedObj);
+    // Compute target index in Fabric's stacking order (array is bottom->top)
+    // 'above' in UI (higher visually) => higher z-index => index + 1
+    const position = dragOverPos || "above";
+    const desiredIndex = Math.max(
+      0,
+      Math.min(objects.length - 1, targetIdx + (position === "above" ? 1 : 0))
+    );
+
+    // Precise placement: splice the internal objects array to avoid off-by-one and overshoot
+    const list = ((canvas as any)._objects as FabricObject[]) || [];
+    const from = list.indexOf(draggedObj);
+    let to = desiredIndex;
+    if (from === -1 || to === -1) {
+      setDraggedObj(null);
+      setDragOverObj(null);
+      setDragOverPos(null);
+      return;
+    }
+    // Remove first
+    list.splice(from, 1);
+    // Adjust destination after removal if needed
+    if (from < to) to -= 1;
+    // Insert at destination
+    list.splice(to, 0, draggedObj);
     canvas.fire('object:modified', { target: draggedObj } as any);
     canvas.requestRenderAll();
 
+    // Clear drag state and trigger smooth re-render
     setDraggedObj(null);
     setDragOverObj(null);
+    setDragOverPos(null);
+    setRevision((n) => n + 1);
   };
 
   const handleDragEnd = () => {
@@ -280,20 +361,32 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
     const isActive = active === obj;
     const isDragging = draggedObj === obj;
     const isDragOver = dragOverObj === obj;
+    const hoverBorderClass =
+      isDragOver
+        ? dragOverPos === "above"
+          ? "border-t-2 border-t-[#18A0FB]"
+          : "border-b-2 border-b-[#18A0FB]"
+        : "";
     return (
-      <div key={(obj as any).__uid || `${obj.type}-${(obj as any).id || Math.random()}`} className="w-full">
+      <div key={getStableFabricKey(obj)} className="w-full">
         <div
-          draggable
-          onDragStart={(e) => handleDragStart(e, obj)}
           onDragOver={(e) => handleDragOver(e, obj)}
           onDragLeave={handleDragLeave}
           onDrop={(e) => handleDrop(e, obj)}
-          onDragEnd={handleDragEnd}
-          className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-move hover:bg-[#F3F4F6] ${isActive ? "bg-[#EEF2FF] border border-[#E0E7FF]" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-t-[#18A0FB]" : ""}`}
+          className={`flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#F3F4F6] transition-all duration-150 ${isActive ? "bg-[#EEF2FF] border border-[#E0E7FF]" : ""} ${isDragging ? "opacity-40 scale-95" : "opacity-100 scale-100"} ${isDragOver ? `bg-[#EFF6FF] ${hoverBorderClass}` : ""}`}
           style={{ paddingLeft: 8 + node.depth * 16 }}
           onClick={() => selectObject(obj)}
         >
-          <GripVertical className="w-4 h-4 text-[#9CA3AF] flex-shrink-0" />
+          <div
+            draggable
+            onDragStart={(e) => handleDragStart(e, obj)}
+            onDragEnd={handleDragEnd}
+            onClick={(e) => e.stopPropagation()}
+            className="cursor-grab active:cursor-grabbing flex items-center justify-center p-0.5 -ml-1 rounded hover:bg-[#E5E7EB] transition-colors"
+            title="Drag to reorder"
+          >
+            <GripVertical className="w-4 h-4 text-[#9CA3AF] hover:text-[#6B7280] flex-shrink-0 transition-colors" />
+          </div>
           <button className="p-1 rounded hover:bg-[#E5E7EB]" onClick={(e) => { e.stopPropagation(); toggleVisible(obj); }} aria-label="Toggle visibility">
             {obj.visible !== false ? <Eye className="w-4 h-4 text-[#6B7280]" /> : <EyeOff className="w-4 h-4 text-[#6B7280]" />}
           </button>

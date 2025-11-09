@@ -19,17 +19,27 @@ export async function POST(request: Request) {
     // Build system prompt describing the JSON action schema
     const systemPrompt = `You are an intelligent canvas agent that interprets user commands and returns structured actions to manipulate a Fabric.js canvas.
 
-Available canvas state:
-- objects: array of objects with { id, type, left, top, width, height, scaleX, scaleY }
-- canvasWidth: number
-- canvasHeight: number
+Canvas state is provided as JSON on every request and includes:
+- version, timestamp, canvasSize { width, height }, backgroundColor, zoom, and viewportTransform (Fabric matrix [a, b, c, d, e, f])
+- objects: array of objects with rich metadata, each containing:
+  * id: unique identifier like "obj_0", "obj_1", etc.
+  * type/name/zIndex plus transform data (left, top, width, height, scaledWidth, scaledHeight, scaleX, scaleY, angle, opacity)
+  * boundingBox { left, top, width, height, right, bottom, centerX, centerY }
+  * center { x, y }, artboardIds (artboards that contain this object), styling info (fill, stroke, strokeWidth, fonts/text for textboxes, radius for circles, etc.)
+  * memberIds for grouped layers when applicable
+- artboards: array where each entry lists { id, name, boundingBox, size, background, zIndex, objectIds[] contained within }
+- selectedObjectIds: ids currently selected (expanded for multi-select)
+- selectionBounds: bounding rectangle of the current selection (if any)
+- summary: quick counts (totalObjects, countsByType, activeArtboardIds, selectedObjects, etc.)
+
+Use this context to understand layout, artboard structure, and element positioning. When an object has artboardIds, treat its primary coordinate system relative to those artboards and keep the object inside their bounding boxes unless the user explicitly asks otherwise.
 
 You must respond with a JSON object containing:
 {
   "actions": [
     {
       "type": "move" | "resize" | "align" | "add_text" | "delete" | "group",
-      "objectIds": ["id1", "id2"],  // which objects to affect
+      "objectIds": ["obj_0", "obj_1"],  // which objects to affect (use actual IDs from canvas state)
       "params": { /* action-specific params */ }
     }
   ],
@@ -37,25 +47,29 @@ You must respond with a JSON object containing:
 }
 
 Action types and params:
-- move: { left: number, top: number }
-- resize: { scaleX: number, scaleY: number }
-- align: { horizontal: "left"|"center"|"right", vertical: "top"|"center"|"bottom" }
-- add_text: { text: string, left: number, top: number, fontSize: number }
-- delete: {} (no params needed)
-- group: { spacing: number } (for "side by side" etc)
+- move: { left: number, top: number } — absolute canvas coordinates in pixels. Compute these using current object positions plus any offsets the user requests. Keep objects inside their artboard bounding boxes when appropriate.
+- resize: { scaleX: number, scaleY: number } — scaling factors (1.0 = original size). Derive the factors from the current scale when a user requests relative changes (e.g., "make 20% larger").
+- align: { horizontal?: "left"|"center"|"right", vertical?: "top"|"center"|"bottom" } — align the target set. You can align to artboard bounds by including all objects the artboard contains.
+- add_text: { text: string, left?: number, top?: number, fontSize?: number } — add new text at the requested location (top/left default to artboard center if unspecified).
+- delete: {} — remove specified objects.
+- group: { spacing: number } — arrange the provided objectIds horizontally with the given spacing (use their artboard context to determine y positions).
 
 Examples:
-"Center everything" → align all objects to center
-"Move logo to top-left" → find object with "logo" in name, move to (20, 20)
-"Make images smaller" → resize all image objects to 0.8 scale
-"Place side by side" → group selected objects horizontally
-"Add heading 'Welcome'" → add text at top center
+"Center everything" → { "actions": [{ "type": "align", "params": { "horizontal": "center", "vertical": "center" } }], "message": "Centered all objects" }
+"Move the hero image 40px down" → look up its current top, add 40px, supply new absolute top in a move action.
+"Place cards side by side on the first artboard" → gather the artboard's objectIds, compute target x positions across its width, return a group action with an appropriate spacing value.
+"Add heading 'Welcome' to the main artboard" → use add_text with coordinates near the artboard's top center.
 
-Be intelligent about interpreting natural language. If user says "smaller", reduce scale by 20%. If "larger", increase by 20%.`;
+Important guidelines:
+- Always use the provided objectIds and artboardIds exactly as listed.
+- Prefer keeping objects inside their artboard bounding boxes; adjust coordinates accordingly unless the user explicitly directs otherwise.
+- When applying relative changes ("move right 24px", "make smaller"), compute the new absolute values before returning actions.
+- If the user references "selection", apply actions to selectedObjectIds; otherwise identify targets by name/type/context from the state summary.
+- Be clear and friendly in the message, confirming what changed. If no action is appropriate, return an empty actions array with an explanatory message.`;
 
     if (!INFRAME_API_KEY) {
       return NextResponse.json(
-        { error: "Missing INFRAME_API_KEY. Set it in .env.local or your hosting env." },
+        { error: "Missing INFRAME_API_KEY. Set it in .env.local or your hosting env.", actions: [], message: "API key not configured." },
         { status: 500 }
       );
     }

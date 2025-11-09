@@ -82,6 +82,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       width: canvasRef.current.parentElement?.clientWidth || window.innerWidth,
       height: canvasRef.current.parentElement?.clientHeight || window.innerHeight,
       backgroundColor: initialCanvasColor,
+      preserveObjectStacking: true, // Prevent automatic z-index changes on selection
     });
 
     // Enable panning with middle mouse drag (or left-drag when Hand tool active)
@@ -888,9 +889,16 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       fabricCanvas.renderAll();
 
       setSelectedImage(img);
+      setSelectedObject(img);
+      // Reset toolbar button to pointer after upload
+      setActiveToolbarButton('pointer');
+      activeToolbarButtonRef.current = 'pointer';
       toast.success("Image uploaded onto canvas");
     }).catch(() => {
       toast.error("Failed to upload image");
+      // Reset toolbar button even on error
+      setActiveToolbarButton('pointer');
+      activeToolbarButtonRef.current = 'pointer';
     }).finally(() => {
       URL.revokeObjectURL(url);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -1052,37 +1060,263 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   // Canvas command handler (calls local API route)
   const handleCanvasCommand = async (command: string): Promise<string> => {
     if (!fabricCanvas) {
+      toast.error("Canvas not ready");
       return "Canvas not ready";
     }
 
+    const toNumber = (value: unknown, fallback = 0) => {
+      const num = typeof value === 'number' ? value : Number(value ?? fallback);
+      return Number.isFinite(num) ? num : fallback;
+    };
+
+    const isCenterWithin = (childBox: any, parentBox: any) => {
+      if (!childBox || !parentBox) return false;
+      const cx = toNumber(childBox.centerX ?? childBox.left + childBox.width / 2);
+      const cy = toNumber(childBox.centerY ?? childBox.top + childBox.height / 2);
+      return (
+        cx >= toNumber(parentBox.left) &&
+        cx <= toNumber(parentBox.right) &&
+        cy >= toNumber(parentBox.top) &&
+        cy <= toNumber(parentBox.bottom)
+      );
+    };
+
     try {
-      // Get current canvas state
-      const objects = fabricCanvas.getObjects().map((obj, idx) => ({
-        id: `obj_${idx}`,
-        type: obj.type,
-        left: obj.left || 0,
-        top: obj.top || 0,
-        width: obj.width || 0,
-        height: obj.height || 0,
-        scaleX: obj.scaleX || 1,
-        scaleY: obj.scaleY || 1,
-      }));
+      const fabricObjects = fabricCanvas.getObjects();
+
+      const objects = fabricObjects.map((obj, idx) => {
+        const bounding = (obj as any).getBoundingRect?.(true, true) ?? {
+          left: toNumber(obj.left),
+          top: toNumber(obj.top),
+          width: toNumber(obj.width),
+          height: toNumber(obj.height),
+        };
+        const centerPoint = obj.getCenterPoint?.();
+        const scaledWidth = typeof (obj as any).getScaledWidth === 'function'
+          ? toNumber((obj as any).getScaledWidth(), bounding.width)
+          : toNumber(bounding.width);
+        const scaledHeight = typeof (obj as any).getScaledHeight === 'function'
+          ? toNumber((obj as any).getScaledHeight(), bounding.height)
+          : toNumber(bounding.height);
+
+        const base: any = {
+          id: `obj_${idx}`,
+          type: obj.type,
+          name: (obj as any).name || obj.type || `Object ${idx + 1}`,
+          typeLabel: (obj as any).name || obj.type,
+          zIndex: idx,
+          isArtboard: Boolean((obj as any).isArtboard),
+          left: toNumber(obj.left, bounding.left),
+          top: toNumber(obj.top, bounding.top),
+          width: toNumber(obj.width, bounding.width),
+          height: toNumber(obj.height, bounding.height),
+          scaledWidth,
+          scaledHeight,
+          scaleX: toNumber(obj.scaleX, 1),
+          scaleY: toNumber(obj.scaleY, 1),
+          angle: toNumber(obj.angle, 0),
+          opacity: toNumber(obj.opacity, 1),
+          flipX: Boolean((obj as any).flipX),
+          flipY: Boolean((obj as any).flipY),
+          selectable: Boolean(obj.selectable),
+          visible: Boolean(obj.visible),
+          lockMovementX: Boolean((obj as any).lockMovementX),
+          lockMovementY: Boolean((obj as any).lockMovementY),
+          boundingBox: {
+            left: toNumber(bounding.left),
+            top: toNumber(bounding.top),
+            width: toNumber(bounding.width),
+            height: toNumber(bounding.height),
+            right: toNumber(bounding.left) + toNumber(bounding.width),
+            bottom: toNumber(bounding.top) + toNumber(bounding.height),
+            centerX: toNumber(bounding.left) + toNumber(bounding.width) / 2,
+            centerY: toNumber(bounding.top) + toNumber(bounding.height) / 2,
+          },
+          center: {
+            x: toNumber(centerPoint?.x, toNumber(bounding.left) + toNumber(bounding.width) / 2),
+            y: toNumber(centerPoint?.y, toNumber(bounding.top) + toNumber(bounding.height) / 2),
+          },
+          artboardIds: [] as string[],
+        };
+
+        if ('fill' in obj) base.fill = (obj as any).fill;
+        if ('stroke' in obj) base.stroke = (obj as any).stroke;
+        if ('strokeWidth' in obj) base.strokeWidth = toNumber((obj as any).strokeWidth, 0);
+
+        if (obj instanceof FabricTextbox) {
+          base.text = obj.text ?? '';
+          base.fontSize = toNumber(obj.fontSize, 16);
+          base.fontFamily = obj.fontFamily ?? 'Inter';
+          base.fontWeight = obj.fontWeight ?? 'normal';
+          base.textAlign = obj.textAlign ?? 'left';
+          base.fill = obj.fill;
+          base.charSpacing = toNumber(obj.charSpacing, 0);
+          base.lineHeight = toNumber(obj.lineHeight, 1.16);
+        } else if (obj instanceof FabricImage) {
+          const getSrc = (obj as any).getSrc;
+          base.src = typeof getSrc === 'function' ? getSrc.call(obj) : (obj as any).src || null;
+          base.cropX = toNumber(obj.cropX, 0);
+          base.cropY = toNumber(obj.cropY, 0);
+          base.filterSummary = (obj.filters || []).map((filter: any) => filter?.type || filter?.constructor?.name || 'filter');
+        } else if (obj instanceof FabricRect) {
+          base.rx = toNumber((obj as any).rx, 0);
+          base.ry = toNumber((obj as any).ry, 0);
+        } else if (obj instanceof FabricCircle) {
+          base.radius = toNumber(obj.radius, scaledWidth / 2);
+        } else if (obj instanceof FabricLine) {
+          base.points = {
+            x1: toNumber((obj as any).x1, obj.left ?? 0),
+            y1: toNumber((obj as any).y1, obj.top ?? 0),
+            x2: toNumber((obj as any).x2, obj.left ?? 0),
+            y2: toNumber((obj as any).y2, obj.top ?? 0),
+          };
+        } else if (obj instanceof FabricGroup) {
+          base.memberIds = (obj as any)._objects?.map((child: any) => {
+            const index = fabricObjects.indexOf(child);
+            return index >= 0 ? `obj_${index}` : null;
+          }).filter(Boolean);
+        }
+
+        return base;
+      });
+
+      const objectMap: Record<string, any> = {};
+      objects.forEach((object) => {
+        objectMap[object.id] = object;
+      });
+
+      const artboards = objects
+        .filter((object) => object.isArtboard)
+        .map((artboard) => {
+          const containedObjectIds = objects
+            .filter((object) => object.id !== artboard.id && isCenterWithin(object.boundingBox, artboard.boundingBox))
+            .map((object) => object.id);
+
+          containedObjectIds.forEach((objectId) => {
+            const target = objectMap[objectId];
+            if (!target) return;
+            target.artboardIds = Array.from(new Set([...(target.artboardIds || []), artboard.id]));
+          });
+
+          const artboardIndex = parseInt(artboard.id.replace('obj_', ''), 10);
+          const artboardFabricObject = fabricObjects[artboardIndex];
+          const background = artboardFabricObject && 'fill' in artboardFabricObject ? (artboardFabricObject as any).fill : artboard.fill;
+
+          return {
+            id: artboard.id,
+            name: artboard.name,
+            boundingBox: artboard.boundingBox,
+            center: artboard.center,
+            size: { width: artboard.scaledWidth, height: artboard.scaledHeight },
+            background,
+            zIndex: artboard.zIndex,
+            objectIds: containedObjectIds,
+          };
+        });
+
+      const selectedObjects = fabricCanvas.getActiveObjects();
+      const selectedObjectSet = new Set<string>();
+      selectedObjects.forEach((current) => {
+        if (current instanceof FabricActiveSelection) {
+          current.getObjects().forEach((child) => {
+            const index = fabricObjects.indexOf(child);
+            if (index >= 0) {
+              selectedObjectSet.add(`obj_${index}`);
+            }
+          });
+        } else {
+          const index = fabricObjects.indexOf(current);
+          if (index >= 0) {
+            selectedObjectSet.add(`obj_${index}`);
+          }
+        }
+      });
+      const selectedObjectIds = Array.from(selectedObjectSet);
+
+      const activeSelection = fabricCanvas.getActiveObject();
+      let selectionBounds: any = null;
+      if (activeSelection) {
+        const rawBounds = (activeSelection as any).getBoundingRect?.(true, true);
+        const bounds = rawBounds ?? {
+          left: toNumber((activeSelection as any).left),
+          top: toNumber((activeSelection as any).top),
+          width: toNumber((activeSelection as any).width),
+          height: toNumber((activeSelection as any).height),
+        };
+        selectionBounds = {
+          left: toNumber(bounds.left),
+          top: toNumber(bounds.top),
+          width: toNumber(bounds.width),
+          height: toNumber(bounds.height),
+          right: toNumber(bounds.left) + toNumber(bounds.width),
+          bottom: toNumber(bounds.top) + toNumber(bounds.height),
+          centerX: toNumber(bounds.left) + toNumber(bounds.width) / 2,
+          centerY: toNumber(bounds.top) + toNumber(bounds.height) / 2,
+        };
+      }
+
+      const countsByType = objects.reduce<Record<string, number>>((acc, object) => {
+        acc[object.type] = (acc[object.type] ?? 0) + 1;
+        return acc;
+      }, {});
+
+      const activeArtboardIds = artboards
+        .filter((artboard) => selectedObjectIds.some((id) => id === artboard.id || artboard.objectIds.includes(id)))
+        .map((artboard) => artboard.id);
+
+      const summary = {
+        totalObjects: objects.length,
+        totalArtboards: artboards.length,
+        countsByType,
+        selectedObjectIds,
+        activeArtboardIds,
+        artboards: artboards.map((artboard) => ({
+          id: artboard.id,
+          name: artboard.name,
+          objectCount: artboard.objectIds.length,
+          width: artboard.size.width,
+          height: artboard.size.height,
+        })),
+        selectedObjects: selectedObjectIds.map((id) => ({
+          id,
+          name: objectMap[id]?.name,
+          type: objectMap[id]?.type,
+          artboardIds: objectMap[id]?.artboardIds,
+        })),
+      };
 
       const canvasState = {
+        version: 2,
+        timestamp: Date.now(),
+        canvasSize: { width: fabricCanvas.getWidth(), height: fabricCanvas.getHeight() },
+        zoom: fabricCanvas.getZoom(),
+        viewportTransform: Array.from(fabricCanvas.viewportTransform || []),
+        backgroundColor: fabricCanvas.backgroundColor,
         objects,
-        canvasWidth: fabricCanvas.width || 0,
-        canvasHeight: fabricCanvas.height || 0,
+        artboards,
+        objectOrder: objects.map((object) => object.id),
+        selectedObjectIds,
+        selectionBounds,
+        summary,
       };
+
+      console.log('[Canvas Command]', command, canvasState.summary);
 
       const res = await fetch('/api/canvas-command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command, canvasState })
       });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
 
-      // Execute actions using executor and push inverse for undo
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('[Canvas Command Error]', errorText);
+        throw new Error(errorText);
+      }
+
+      const data = await res.json();
+      console.log('[Canvas Command Response]', data);
+
       if (data?.actions && Array.isArray(data.actions) && data.actions.length > 0) {
         const { inverseActions } = executeActions(
           fabricCanvas,
@@ -1094,16 +1328,20 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         if (inverseActions.length > 0) {
           undoStackRef.current.push(inverseActions);
           if (undoStackRef.current.length > 50) undoStackRef.current.shift();
-          // Clear redo on new action
           redoStackRef.current = [];
           setHistoryAvailability();
         }
+        toast.success(data.message || "Command executed");
+      } else {
+        toast.info(data.message || "No actions performed");
       }
 
       return data?.message || "Done";
     } catch (error) {
       console.error('Canvas command error:', error);
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : "Failed to execute command";
+      toast.error(errorMessage);
+      return errorMessage;
     }
   };
 
@@ -1204,6 +1442,13 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     return () => window.removeEventListener('keydown', onKey);
   }, [fabricCanvas]);
 
+  // Expose canvas command handler via ref
+  useEffect(() => {
+    if (onCanvasCommandRef) {
+      onCanvasCommandRef.current = handleCanvasCommand;
+    }
+  }, [onCanvasCommandRef, fabricCanvas]);
+
   // Expose undo/redo handlers via history ref
   useEffect(() => {
     if (onCanvasHistoryRef) {
@@ -1245,6 +1490,16 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       <ContextMenuTrigger asChild>
         <div className="relative w-full h-screen overflow-hidden bg-[#F4F4F6]">
           <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
+          
+          {/* Hidden file input for image upload */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            className="hidden"
+            aria-label="Upload image"
+          />
           
           {/* Left Toolbar (Vertical layout) */}
           <Toolbar

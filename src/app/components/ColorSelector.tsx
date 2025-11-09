@@ -206,7 +206,7 @@ export default function ColorSelector({ canvasColor, onColorChange }: ColorSelec
               ref={hueSliderRef}
               className="w-full h-4 rounded-lg cursor-pointer border border-gray-200 shadow-sm"
               style={{
-                background: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)'
+                backgroundImage: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)'
               }}
               onMouseDown={handleHueSliderMouseDown}
             >
