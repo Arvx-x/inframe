@@ -1,15 +1,17 @@
 'use client';
 
 import { useEffect, useRef, useState } from "react";
-import { Canvas as FabricCanvas, Image as FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine, filters, Point, Object as FabricObject } from "fabric";
+import { Canvas as FabricCanvas, Image as FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine, filters, Point, Object as FabricObject, Group as FabricGroup, ActiveSelection as FabricActiveSelection } from "fabric";
 import { Button } from "@/app/components/ui/button";
-import { Download, RotateCcw, ImagePlus, Crop, Trash2, Save, Share } from "lucide-react";
+import { Download, RotateCcw, ImagePlus, Crop, Trash2, Save, Share, Layers as LayersIcon, Eye, EyeOff, Lock, Unlock, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown } from "lucide-react";
 import { toast } from "sonner";
 import { InspectorSidebar } from "@/app/components/InspectorSidebar";
 import { Toolbar } from "@/app/components/Toolbar";
 // use local Next.js API route for canvas commands
 import { executeActions } from "@/app/lib/agent/executor";
 import type { AgentAction } from "@/app/lib/agent/canvas-schema";
+import LayersPanel from "@/app/components/LayersPanel";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/app/components/ui/context-menu";
 
 interface CanvasProps {
   generatedImageUrl: string | null;
@@ -54,6 +56,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const drawingShapeRef = useRef<FabricRect | FabricCircle | FabricLine | null>(null);
   const drawingTextBoxRef = useRef<FabricRect | null>(null);
   const drawingTextLabelRef = useRef<FabricTextbox | null>(null);
+  const [isLayersOpen, setIsLayersOpen] = useState(false);
   const setHistoryAvailability = () => {
     if (onHistoryAvailableChange) {
       onHistoryAvailableChange((undoStackRef.current?.length || 0) > 0);
@@ -61,14 +64,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   };
   const undoStackRef = useRef<AgentAction[][]>([]);
   const redoStackRef = useRef<AgentAction[][]>([]);
-  
-  // Magnetic snapping helpers
-  const [guideLines, setGuideLines] = useState<Array<{ x?: number; y?: number; vertical?: boolean; snapX?: number; snapY?: number }>>([]);
-  const [viewportVersion, setViewportVersion] = useState(0); // Force re-render when viewport changes
-  const MAGNETIC_ZONE = 20; // pixels - distance where magnetic pull starts
-  const SNAP_THRESHOLD = 3; // pixels - where actual alignment happens (for visual guides)
-  const MAX_SNAP_PULL = 0.85; // maximum pull strength at closest proximity
-  const MIN_SNAP_PULL = 0.4; // minimum pull strength at edge of magnetic zone
 
 
   // Initialize canvas (browser-only)
@@ -143,7 +138,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
             top: pointer.y,
             width: 0,
             height: 0,
-            fill: 'rgba(0,0,0,0)',
+            fill: 'transparent',
             stroke: '#111827',
             strokeWidth: 2,
             rx: 8,
@@ -157,7 +152,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
             left: pointer.x,
             top: pointer.y,
             radius: 0,
-            fill: 'rgba(0,0,0,0)',
+            fill: 'transparent',
             stroke: '#111827',
             strokeWidth: 2,
             selectable: false
@@ -315,6 +310,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
               fill: '#9CA3AF',
               editable: true,
               padding: 6,
+              name: 'Text',
             });
             // Professional selection/controls styling
             textbox.set({
@@ -462,239 +458,6 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       setSelectedImage(null);
     });
 
-    canvas.on('object:moving', (e) => {
-      // Magnetic snapping
-      const obj = e.target as FabricObject;
-      if (!obj) return;
-      
-      const activeObj = obj;
-      const activeObjBounds = activeObj.getBoundingRect();
-      const activeObjCenter = {
-        x: activeObjBounds.left + activeObjBounds.width / 2,
-        y: activeObjBounds.top + activeObjBounds.height / 2
-      };
-      
-      const allObjects = canvas.getObjects();
-      const guideLines: Array<{ x?: number; y?: number; vertical?: boolean; snapX?: number; snapY?: number }> = [];
-      let bestSnapX: number | null = null;
-      let bestSnapY: number | null = null;
-      let bestSnapDistanceX = Infinity;
-      let bestSnapDistanceY = Infinity;
-      let bestXGuide: any = null;
-      let bestYGuide: any = null;
-      
-      // Helper function to calculate magnetic pull strength based on distance
-      const calculatePullStrength = (distance: number): number => {
-        if (distance > MAGNETIC_ZONE) return 0;
-        if (distance <= SNAP_THRESHOLD) return MAX_SNAP_PULL;
-        // Linear interpolation between MIN and MAX based on distance
-        const normalized = 1 - (distance - SNAP_THRESHOLD) / (MAGNETIC_ZONE - SNAP_THRESHOLD);
-        return MIN_SNAP_PULL + (MAX_SNAP_PULL - MIN_SNAP_PULL) * normalized;
-      };
-      
-      // Check against all other objects
-      for (const obj of allObjects) {
-        if (obj === activeObj || !obj.visible) continue;
-        
-        const objBounds = obj.getBoundingRect();
-        const objCenter = {
-          x: objBounds.left + objBounds.width / 2,
-          y: objBounds.top + objBounds.height / 2
-        };
-        
-        const objLeft = objBounds.left;
-        const objRight = objBounds.left + objBounds.width;
-        const objTop = objBounds.top;
-        const objBottom = objBounds.top + objBounds.height;
-        
-        const activeLeft = activeObjBounds.left;
-        const activeRight = activeObjBounds.left + activeObjBounds.width;
-        const activeTop = activeObjBounds.top;
-        const activeBottom = activeObjBounds.top + activeObjBounds.height;
-        
-        // Check for center alignment (vertical and horizontal)
-        const centerXDist = Math.abs(activeObjCenter.x - objCenter.x);
-        if (centerXDist < MAGNETIC_ZONE) {
-          const snapXValue = objCenter.x - activeObjBounds.width / 2;
-          if (centerXDist < bestSnapDistanceX || (centerXDist === bestSnapDistanceX && !bestXGuide)) {
-            bestSnapX = snapXValue;
-            bestSnapDistanceX = centerXDist;
-            bestXGuide = { x: objCenter.x, vertical: true, snapX: objCenter.x, snapY: activeObjCenter.y };
-          }
-          if (centerXDist < MAGNETIC_ZONE && !guideLines.some(g => g.x === objCenter.x && g.vertical)) {
-            guideLines.push({ x: objCenter.x, vertical: true, snapX: objCenter.x, snapY: activeObjCenter.y });
-          }
-        }
-        
-        const centerYDist = Math.abs(activeObjCenter.y - objCenter.y);
-        if (centerYDist < MAGNETIC_ZONE) {
-          const snapYValue = objCenter.y - activeObjBounds.height / 2;
-          if (centerYDist < bestSnapDistanceY || (centerYDist === bestSnapDistanceY && !bestYGuide)) {
-            bestSnapY = snapYValue;
-            bestSnapDistanceY = centerYDist;
-            bestYGuide = { y: objCenter.y, snapX: activeObjCenter.x, snapY: objCenter.y };
-          }
-          if (centerYDist < MAGNETIC_ZONE && !guideLines.some(g => g.y === objCenter.y)) {
-            guideLines.push({ y: objCenter.y, snapX: activeObjCenter.x, snapY: objCenter.y });
-          }
-        }
-        
-        // Check for edge alignment (left, right, top, bottom)
-        const leftDist = Math.abs(activeLeft - objLeft);
-        if (leftDist < MAGNETIC_ZONE) {
-          if (leftDist < bestSnapDistanceX || (leftDist === bestSnapDistanceX && !bestXGuide)) {
-            bestSnapX = objLeft;
-            bestSnapDistanceX = leftDist;
-            bestXGuide = { x: objLeft, vertical: true };
-          }
-          if (leftDist < MAGNETIC_ZONE && !guideLines.some(g => g.x === objLeft && g.vertical)) {
-            guideLines.push({ x: objLeft, vertical: true });
-          }
-        }
-        
-        const rightDist = Math.abs(activeRight - objRight);
-        if (rightDist < MAGNETIC_ZONE) {
-          const snapXValue = objRight - activeObjBounds.width;
-          if (rightDist < bestSnapDistanceX || (rightDist === bestSnapDistanceX && !bestXGuide)) {
-            bestSnapX = snapXValue;
-            bestSnapDistanceX = rightDist;
-            bestXGuide = { x: objRight, vertical: true };
-          }
-          if (rightDist < MAGNETIC_ZONE && !guideLines.some(g => g.x === objRight && g.vertical)) {
-            guideLines.push({ x: objRight, vertical: true });
-          }
-        }
-        
-        const topDist = Math.abs(activeTop - objTop);
-        if (topDist < MAGNETIC_ZONE) {
-          if (topDist < bestSnapDistanceY || (topDist === bestSnapDistanceY && !bestYGuide)) {
-            bestSnapY = objTop;
-            bestSnapDistanceY = topDist;
-            bestYGuide = { y: objTop };
-          }
-          if (topDist < MAGNETIC_ZONE && !guideLines.some(g => g.y === objTop)) {
-            guideLines.push({ y: objTop });
-          }
-        }
-        
-        const bottomDist = Math.abs(activeBottom - objBottom);
-        if (bottomDist < MAGNETIC_ZONE) {
-          const snapYValue = objBottom - activeObjBounds.height;
-          if (bottomDist < bestSnapDistanceY || (bottomDist === bestSnapDistanceY && !bestYGuide)) {
-            bestSnapY = snapYValue;
-            bestSnapDistanceY = bottomDist;
-            bestYGuide = { y: objBottom };
-          }
-          if (bottomDist < MAGNETIC_ZONE && !guideLines.some(g => g.y === objBottom)) {
-            guideLines.push({ y: objBottom });
-          }
-        }
-        
-        // Check for center alignment with edges
-        const centerToLeftDist = Math.abs(activeObjCenter.x - objLeft);
-        if (centerToLeftDist < MAGNETIC_ZONE) {
-          const snapXValue = objLeft - activeObjBounds.width / 2;
-          if (centerToLeftDist < bestSnapDistanceX || (centerToLeftDist === bestSnapDistanceX && !bestXGuide)) {
-            bestSnapX = snapXValue;
-            bestSnapDistanceX = centerToLeftDist;
-            bestXGuide = { x: objLeft, vertical: true };
-          }
-          if (centerToLeftDist < MAGNETIC_ZONE && !guideLines.some(g => g.x === objLeft && g.vertical)) {
-            guideLines.push({ x: objLeft, vertical: true });
-          }
-        }
-        
-        const centerToRightDist = Math.abs(activeObjCenter.x - objRight);
-        if (centerToRightDist < MAGNETIC_ZONE) {
-          const snapXValue = objRight - activeObjBounds.width / 2;
-          if (centerToRightDist < bestSnapDistanceX || (centerToRightDist === bestSnapDistanceX && !bestXGuide)) {
-            bestSnapX = snapXValue;
-            bestSnapDistanceX = centerToRightDist;
-            bestXGuide = { x: objRight, vertical: true };
-          }
-          if (centerToRightDist < MAGNETIC_ZONE && !guideLines.some(g => g.x === objRight && g.vertical)) {
-            guideLines.push({ x: objRight, vertical: true });
-          }
-        }
-        
-        const centerToTopDist = Math.abs(activeObjCenter.y - objTop);
-        if (centerToTopDist < MAGNETIC_ZONE) {
-          const snapYValue = objTop - activeObjBounds.height / 2;
-          if (centerToTopDist < bestSnapDistanceY || (centerToTopDist === bestSnapDistanceY && !bestYGuide)) {
-            bestSnapY = snapYValue;
-            bestSnapDistanceY = centerToTopDist;
-            bestYGuide = { y: objTop };
-          }
-          if (centerToTopDist < MAGNETIC_ZONE && !guideLines.some(g => g.y === objTop)) {
-            guideLines.push({ y: objTop });
-          }
-        }
-        
-        const centerToBottomDist = Math.abs(activeObjCenter.y - objBottom);
-        if (centerToBottomDist < MAGNETIC_ZONE) {
-          const snapYValue = objBottom - activeObjBounds.height / 2;
-          if (centerToBottomDist < bestSnapDistanceY || (centerToBottomDist === bestSnapDistanceY && !bestYGuide)) {
-            bestSnapY = snapYValue;
-            bestSnapDistanceY = centerToBottomDist;
-            bestYGuide = { y: objBottom };
-          }
-          if (centerToBottomDist < MAGNETIC_ZONE && !guideLines.some(g => g.y === objBottom)) {
-            guideLines.push({ y: objBottom });
-          }
-        }
-      }
-      
-      // Apply magnetic snapping with distance-based pull strength
-      if (bestSnapX !== null && bestSnapDistanceX <= MAGNETIC_ZONE) {
-        const currentX = activeObj.get('left') || 0;
-        const pullStrength = calculatePullStrength(bestSnapDistanceX);
-        const newX = currentX + (bestSnapX - currentX) * pullStrength;
-        activeObj.set({ left: newX });
-      }
-      if (bestSnapY !== null && bestSnapDistanceY <= MAGNETIC_ZONE) {
-        const currentY = activeObj.get('top') || 0;
-        const pullStrength = calculatePullStrength(bestSnapDistanceY);
-        const newY = currentY + (bestSnapY - currentY) * pullStrength;
-        activeObj.set({ top: newY });
-      }
-      
-      // Store guide lines for rendering
-      setGuideLines(guideLines);
-      
-      // Render guide lines (we'll implement custom rendering next)
-      canvas.renderAll();
-    });
-
-    // Clear guide lines when object movement ends
-    canvas.on('object:modified', () => {
-      setGuideLines([]);
-    });
-
-
-    // Track viewport changes for guide line rendering (on zoom/pan)
-    let lastVpt = canvas.viewportTransform;
-    let lastZoom = canvas.getZoom();
-    
-    const checkViewportChange = () => {
-      const currentVpt = canvas.viewportTransform;
-      const currentZoom = canvas.getZoom();
-      if (currentVpt && lastVpt) {
-        // Check for pan (translation) or zoom changes
-        const panChanged = Math.abs(currentVpt[4] - lastVpt[4]) > 0.1 || 
-                          Math.abs(currentVpt[5] - lastVpt[5]) > 0.1;
-        const zoomChanged = Math.abs(currentZoom - lastZoom) > 0.01;
-        
-        if (panChanged || zoomChanged) {
-          setViewportVersion(prev => prev + 1);
-          lastVpt = currentVpt;
-          lastZoom = currentZoom;
-        }
-      }
-    };
-    
-    canvas.on('mouse:up', checkViewportChange);
-    canvas.on('mouse:wheel', checkViewportChange);
-
 
     setFabricCanvas(canvas);
 
@@ -787,6 +550,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         left: (fabricCanvas.width! - img.getScaledWidth()) / 2,
         top: (fabricCanvas.height! - img.getScaledHeight()) / 2,
         selectable: true,
+        name: 'Image',
       });
 
       fabricCanvas.add(img);
@@ -945,11 +709,12 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     const rect = new FabricRect({
       width: 200,
       height: 120,
-      fill: 'rgba(0,0,0,0)',
+      fill: 'transparent',
       stroke: '#111827',
       strokeWidth: 2,
       rx: 8,
       ry: 8,
+      name: 'Rectangle',
     });
     const { left, top } = centerCoords(200, 120);
     rect.set({ left, top });
@@ -963,9 +728,10 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     const radius = 80;
     const circle = new FabricCircle({
       radius,
-      fill: 'rgba(0,0,0,0)',
+      fill: 'transparent',
       stroke: '#111827',
       strokeWidth: 2,
+      name: 'Circle',
     });
     const { left, top } = centerCoords(radius * 2, radius * 2);
     circle.set({ left, top });
@@ -983,6 +749,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       stroke: '#111827',
       strokeWidth: 2,
       selectable: true,
+      name: 'Line',
     });
     fabricCanvas.add(line);
     fabricCanvas.setActiveObject(line);
@@ -1013,6 +780,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         left: (fabricCanvas.width! - img.getScaledWidth()) / 2,
         top: (fabricCanvas.height! - img.getScaledHeight()) / 2,
         selectable: true,
+        name: 'Image',
       });
 
       fabricCanvas.add(img);
@@ -1241,97 +1009,210 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
 
   return (
     <>
-    <div className="relative w-full h-screen overflow-hidden bg-[#f5f5f5]">
-      <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
-      
-      {/* Guide Lines Overlay */}
-      {fabricCanvas && (() => {
-        const vpt = fabricCanvas.viewportTransform || [1, 0, 0, 1, 0, 0];
-        const zoom = Math.sqrt(vpt[0] * vpt[0] + vpt[1] * vpt[1]);
-        return (
-          <svg 
-            key={`guide-lines-${viewportVersion}`}
-            className="absolute inset-0 pointer-events-none" 
-            width={fabricCanvas.width} 
-            height={fabricCanvas.height}
-            style={{
-              transform: `matrix(${vpt.join(',')})`,
-              transformOrigin: '0 0'
-            }}
-          >
-            {guideLines.map((guide: { x?: number; y?: number; vertical?: boolean; snapX?: number; snapY?: number }, index: number) => (
-              guide.vertical && guide.x !== undefined ? (
-                <g key={`vertical-${index}`}>
-                  <line
-                    x1={guide.x}
-                    y1={0}
-                    x2={guide.x}
-                    y2={fabricCanvas.height}
-                    stroke="#FF6B35"
-                    strokeWidth={1 / zoom}
-                  />
-                  {/* Top marker */}
-                  <line x1={guide.x - 3 / zoom} y1={0} x2={guide.x + 3 / zoom} y2={0} stroke="#FF6B35" strokeWidth={1 / zoom} />
-                  <line x1={guide.x} y1={-3 / zoom} x2={guide.x} y2={3 / zoom} stroke="#FF6B35" strokeWidth={1 / zoom} />
-                  {/* Bottom marker */}
-                  <line x1={guide.x - 3 / zoom} y1={fabricCanvas.height} x2={guide.x + 3 / zoom} y2={fabricCanvas.height} stroke="#FF6B35" strokeWidth={1 / zoom} />
-                  <line x1={guide.x} y1={fabricCanvas.height - 3 / zoom} x2={guide.x} y2={fabricCanvas.height + 3 / zoom} stroke="#FF6B35" strokeWidth={1 / zoom} />
-                  {/* Cross marker at snap point */}
-                  {guide.snapY !== undefined && (
-                    <>
-                      <line x1={guide.x - 6 / zoom} y1={guide.snapY} x2={guide.x + 6 / zoom} y2={guide.snapY} stroke="#FF6B35" strokeWidth={1 / zoom} />
-                      <line x1={guide.x} y1={guide.snapY - 6 / zoom} x2={guide.x} y2={guide.snapY + 6 / zoom} stroke="#FF6B35" strokeWidth={1 / zoom} />
-                    </>
-                  )}
-                </g>
-              ) : !guide.vertical && guide.y !== undefined ? (
-                <g key={`horizontal-${index}`}>
-                  <line
-                    x1={-200}
-                    y1={guide.y}
-                    x2={fabricCanvas.width - 200}
-                    y2={guide.y}
-                    stroke="#FF6B35"
-                    strokeWidth={1 / zoom}
-                  />
-                  {/* Left marker */}
-                  <line x1={-200} y1={guide.y - 3 / zoom} x2={-200} y2={guide.y + 3 / zoom} stroke="#FF6B35" strokeWidth={1 / zoom} />
-                  <line x1={-200 - 3 / zoom} y1={guide.y} x2={-200 + 3 / zoom} y2={guide.y} stroke="#FF6B35" strokeWidth={1 / zoom} />
-                  {/* Right marker */}
-                  <line x1={fabricCanvas.width - 200} y1={guide.y - 3 / zoom} x2={fabricCanvas.width - 200} y2={guide.y + 3 / zoom} stroke="#FF6B35" strokeWidth={1 / zoom} />
-                  <line x1={fabricCanvas.width - 200 - 3 / zoom} y1={guide.y} x2={fabricCanvas.width - 200 + 3 / zoom} y2={guide.y} stroke="#FF6B35" strokeWidth={1 / zoom} />
-                  {/* Cross marker at snap point */}
-                  {guide.snapX !== undefined && (
-                    <>
-                      <line x1={guide.snapX} y1={guide.y - 6 / zoom} x2={guide.snapX} y2={guide.y + 6 / zoom} stroke="#FF6B35" strokeWidth={1 / zoom} />
-                      <line x1={guide.snapX - 6 / zoom} y1={guide.y} x2={guide.snapX + 6 / zoom} y2={guide.y} stroke="#FF6B35" strokeWidth={1 / zoom} />
-                    </>
-                  )}
-                </g>
-              ) : null
-            ))}
-          </svg>
-        );
-      })()}
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div className="relative w-full h-screen overflow-hidden bg-[#f5f5f5]">
+          <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
+          
+          {/* Left Toolbar (Vertical layout) */}
+          <Toolbar
+            activeTool={activeTool}
+            setActiveTool={setActiveTool}
+            activeToolbarButton={activeToolbarButton}
+            setActiveToolbarButton={setActiveToolbarButton}
+            activeShape={activeShape}
+            setActiveShape={setActiveShape}
+            isToolbarExpanded={isToolbarExpanded}
+            setIsToolbarExpanded={setIsToolbarExpanded}
+            onAddText={handleAddText}
+            fileInputRef={fileInputRef}
+            onFileChange={handleFileChange}
+            onUploadClick={handleUploadClick}
+            leftOffset={isLayersOpen ? 272 : 8}
+          />
 
-      {/* Left Toolbar (Vertical layout) */}
-      <Toolbar
-        activeTool={activeTool}
-        setActiveTool={setActiveTool}
-        activeToolbarButton={activeToolbarButton}
-        setActiveToolbarButton={setActiveToolbarButton}
-        activeShape={activeShape}
-        setActiveShape={setActiveShape}
-        isToolbarExpanded={isToolbarExpanded}
-        setIsToolbarExpanded={setIsToolbarExpanded}
-        onAddText={handleAddText}
-        fileInputRef={fileInputRef}
-        onFileChange={handleFileChange}
-        onUploadClick={handleUploadClick}
-      />
-      
-      {/* (Removed old Bottom Action Bar; consolidated into Bottom Toolbar above) */}
-    </div>
+          {/* Layers floating button */}
+          <div className="pointer-events-auto fixed bottom-4 left-2 z-[60]">
+            <button
+              type="button"
+              onClick={() => setIsLayersOpen((o) => !o)}
+              aria-label="Layers"
+              className="w-12 h-12 rounded-full bg-white text-[#111827] shadow-lg border border-[#E5E7EB] hover:bg-[#F9FAFB] flex items-center justify-center transition-colors"
+            >
+              <LayersIcon className="w-6 h-6" />
+            </button>
+          </div>
+
+          {/* Layers sidebar (always mounted for slide animation) */}
+          {fabricCanvas && (
+            <LayersPanel
+              canvas={fabricCanvas}
+              onRequestClose={() => setIsLayersOpen(false)}
+              open={isLayersOpen}
+            />
+          )}
+
+        </div>
+      </ContextMenuTrigger>
+
+      {/* Right-click context menu */}
+      <ContextMenuContent>
+        <ContextMenuItem
+          onSelect={(e) => {
+            if (!fabricCanvas) return;
+            const many = fabricCanvas.getActiveObjects();
+            if (many && many.length > 1) {
+              // Remove objects from canvas
+              many.forEach(obj => fabricCanvas.remove(obj));
+              
+              // Create group
+              const group = new FabricGroup(many, {
+                canvas: fabricCanvas
+              } as any);
+              
+              // Name the group
+              const existingGroups = fabricCanvas.getObjects().filter((obj: FabricObject) => 
+                obj instanceof FabricGroup && (obj as any).name?.startsWith('Group')
+              );
+              const groupNumber = existingGroups.length;
+              (group as any).name = `Group ${groupNumber + 1}`;
+              
+              // Add group to canvas
+              fabricCanvas.add(group);
+              fabricCanvas.setActiveObject(group);
+              fabricCanvas.requestRenderAll();
+              fabricCanvas.fire('object:modified', { target: group } as any);
+            }
+          }}
+        >
+          Group
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => {
+            if (!fabricCanvas) return;
+            const active = fabricCanvas.getActiveObject();
+            if (active && active instanceof FabricGroup) {
+              const group = active as FabricGroup;
+              const items = (group as any)._objects?.slice() as FabricObject[] || [];
+              
+              if (items.length === 0) return;
+              
+              // Get group's transform
+              const groupLeft = group.left || 0;
+              const groupTop = group.top || 0;
+              const groupScaleX = group.scaleX || 1;
+              const groupScaleY = group.scaleY || 1;
+              const groupAngle = group.angle || 0;
+              
+              // Destroy the group properly
+              (group as any)._restoreObjectsState?.();
+              fabricCanvas.remove(group);
+              
+              // Restore each item with proper transformations
+              items.forEach(item => {
+                // Get item's position relative to group
+                const itemLeft = (item.left || 0) * groupScaleX;
+                const itemTop = (item.top || 0) * groupScaleY;
+                
+                // Apply group rotation if any
+                if (groupAngle !== 0) {
+                  const rad = (groupAngle * Math.PI) / 180;
+                  const cos = Math.cos(rad);
+                  const sin = Math.sin(rad);
+                  const rotatedX = itemLeft * cos - itemTop * sin;
+                  const rotatedY = itemLeft * sin + itemTop * cos;
+                  
+                  item.set({
+                    left: groupLeft + rotatedX,
+                    top: groupTop + rotatedY,
+                    scaleX: (item.scaleX || 1) * groupScaleX,
+                    scaleY: (item.scaleY || 1) * groupScaleY,
+                    angle: (item.angle || 0) + groupAngle,
+                    group: undefined,
+                    visible: true,
+                    evented: true,
+                    selectable: true
+                  });
+                } else {
+                  item.set({
+                    left: groupLeft + itemLeft,
+                    top: groupTop + itemTop,
+                    scaleX: (item.scaleX || 1) * groupScaleX,
+                    scaleY: (item.scaleY || 1) * groupScaleY,
+                    group: undefined,
+                    visible: true,
+                    evented: true,
+                    selectable: true
+                  });
+                }
+                
+                // Clean up group references
+                (item as any).group = undefined;
+                (item as any).parent = undefined;
+                
+                item.setCoords();
+                fabricCanvas.add(item);
+              });
+              
+              fabricCanvas.discardActiveObject();
+              fabricCanvas.requestRenderAll();
+              fabricCanvas.fire('object:modified', { target: items[0] } as any);
+            }
+          }}
+        >
+          Ungroup
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          onSelect={() => {
+            if (!fabricCanvas) return;
+            const objs = fabricCanvas.getActiveObjects();
+            if (!objs || objs.length === 0) return;
+            objs.forEach((o) => (fabricCanvas as any).bringObjectForward(o));
+            fabricCanvas.fire('object:modified', { target: objs[0] } as any);
+            fabricCanvas.requestRenderAll();
+          }}
+        >
+          Bring Forward
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => {
+            if (!fabricCanvas) return;
+            const objs = fabricCanvas.getActiveObjects();
+            if (!objs || objs.length === 0) return;
+            objs.forEach((o) => (fabricCanvas as any).sendObjectBackwards(o));
+            fabricCanvas.fire('object:modified', { target: objs[0] } as any);
+            fabricCanvas.requestRenderAll();
+          }}
+        >
+          Send Backward
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => {
+            if (!fabricCanvas) return;
+            const objs = fabricCanvas.getActiveObjects();
+            if (!objs || objs.length === 0) return;
+            objs.forEach((o) => (fabricCanvas as any).bringObjectToFront(o));
+            fabricCanvas.fire('object:modified', { target: objs[0] } as any);
+            fabricCanvas.requestRenderAll();
+          }}
+        >
+          Bring to Front
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => {
+            if (!fabricCanvas) return;
+            const objs = fabricCanvas.getActiveObjects();
+            if (!objs || objs.length === 0) return;
+            objs.forEach((o) => (fabricCanvas as any).sendObjectToBack(o));
+            fabricCanvas.fire('object:modified', { target: objs[0] } as any);
+            fabricCanvas.requestRenderAll();
+          }}
+        >
+          Send to Back
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
     {/* Inspector Sidebar (shows when any object is selected) */}
     {selectedObject && (
       <InspectorSidebar

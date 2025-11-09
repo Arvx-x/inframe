@@ -8,6 +8,50 @@ import { Shapes } from "@/app/components/Shapes";
 import { Text } from "@/app/components/Text";
 import Colors from "@/app/components/colors";
 
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const toHexComponent = (value: number) => clamp(Math.round(value), 0, 255).toString(16).padStart(2, "0").toUpperCase();
+const rgbToHex = (r: number, g: number, b: number) => `#${toHexComponent(r)}${toHexComponent(g)}${toHexComponent(b)}`;
+
+const normalizeColorString = (input: unknown): string => {
+  if (!input) return "transparent";
+  const raw = input.toString().trim();
+  if (!raw) return "transparent";
+  if (raw.toLowerCase() === "transparent") return "transparent";
+
+  if (raw.startsWith("#")) {
+    let hex = raw.slice(1);
+    if (hex.length === 3) {
+      hex = hex.split("").map((c) => c + c).join("");
+    }
+    if (hex.length === 4) {
+      const rgbPart = hex.slice(0, 3).split("").map((c) => c + c).join("");
+      const alpha = parseInt(hex[3] + hex[3], 16);
+      if (alpha === 0) return "transparent";
+      hex = rgbPart;
+    }
+    if (hex.length === 8) {
+      const alpha = parseInt(hex.slice(6, 8), 16);
+      if (alpha === 0) return "transparent";
+      hex = hex.slice(0, 6);
+    }
+    if (hex.length >= 6) {
+      return `#${hex.slice(0, 6).toUpperCase()}`;
+    }
+  }
+
+  const rgbaMatch = raw.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/i);
+  if (rgbaMatch) {
+    const r = parseInt(rgbaMatch[1], 10);
+    const g = parseInt(rgbaMatch[2], 10);
+    const b = parseInt(rgbaMatch[3], 10);
+    const alpha = rgbaMatch[4] !== undefined ? parseFloat(rgbaMatch[4]) : 1;
+    if (alpha <= 0) return "transparent";
+    return rgbToHex(r, g, b);
+  }
+
+  return raw;
+};
+
 interface InspectorSidebarProps {
   selectedObject: FabricObject | null;
   canvas: any;
@@ -24,7 +68,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     height: 0,
     rotation: 0,
     opacity: 100,
-    fill: "#000000",
+    fill: "transparent",
     stroke: "#000000",
     strokeWidth: 0,
     strokePosition: "inside",
@@ -85,8 +129,8 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         height: Math.round(height),
         rotation: Math.round(obj.angle || 0),
         opacity: Math.round((obj.opacity || 1) * 100),
-        fill: obj.fill?.toString() || "#000000",
-        stroke: obj.stroke?.toString() || "#000000",
+        fill: normalizeColorString(obj.fill),
+        stroke: normalizeColorString(obj.stroke),
         strokeWidth: obj.strokeWidth || 0,
         strokePosition: (obj as any).strokePosition || "inside",
         cornerRadius: (obj as any).rx || 0,

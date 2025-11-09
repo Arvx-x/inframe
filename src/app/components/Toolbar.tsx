@@ -27,6 +27,7 @@ interface ToolbarProps {
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onUploadClick: () => void;
+  leftOffset?: number;
 }
 
 export function Toolbar({
@@ -42,16 +43,18 @@ export function Toolbar({
   fileInputRef,
   onFileChange,
   onUploadClick,
+  leftOffset = 8,
 }: ToolbarProps) {
   return (
     <TooltipProvider>
       <div
-        className={`absolute left-2 flex flex-col gap-2.5 bg-white px-1.5 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-border/60 ring-1 ring-black/5 z-50 transition-all duration-200 ease-out overflow-hidden ${isToolbarExpanded ? 'pt-0 pb-1.5' : 'py-3'}`}
+        className={`absolute flex flex-col gap-2.5 bg-white px-1.5 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-border/60 ring-1 ring-black/5 z-50 transition-all duration-200 ease-out overflow-hidden ${isToolbarExpanded ? 'pt-0 pb-1.5' : 'py-3'}`}
         style={{
+          left: `${leftOffset}px`,
           top: isToolbarExpanded ? '0px' : 'calc((100vh - 76px) / 2 - 20px)',
           transform: isToolbarExpanded ? 'translateY(0)' : 'translateY(-50%)',
           maxHeight: isToolbarExpanded ? 'calc(100vh - 6px)' : 'none',
-          transition: 'top 200ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms cubic-bezier(0.4, 0, 0.2, 1), max-height 200ms cubic-bezier(0.4, 0, 0.2, 1)'
+          transition: 'left 200ms cubic-bezier(0.4, 0, 0.2, 1), top 200ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms cubic-bezier(0.4, 0, 0.2, 1), max-height 200ms cubic-bezier(0.4, 0, 0.2, 1)'
         }}
       >
         {/* Pointer/Hand tool (split button with dropdown chevron) */}

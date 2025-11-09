@@ -38,8 +38,8 @@ function rgbToHex(r: number, g: number, b: number) {
 }
 
 function hexToRgb(hex: string) {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!m) return { r: 255, g: 255, b: 255 };
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || "");
+  if (!m) return null;
   return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
 }
 
@@ -70,13 +70,14 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
   const containerRef = useRef<HTMLDivElement | null>(null);
   const isDraggingRef = useRef<boolean>(false);
   const dragModeRef = useRef<'ring' | 'triangle' | null>(null);
+  const shouldApplyRef = useRef<boolean>(false);
 
-  const init = hexToRgb(initialColor);
-  const initHsv = rgbToHsv(init.r, init.g, init.b);
-  const [hue, setHue] = useState<number>(initHsv.h);
-  const [sat, setSat] = useState<number>(initHsv.s);
-  const [val, setVal] = useState<number>(initHsv.v);
-  const hueRef = useRef<number>(initHsv.h);
+  const parsed = hexToRgb(initialColor);
+  const initialHsv = parsed ? rgbToHsv(parsed.r, parsed.g, parsed.b) : { h: 200, s: 0.8, v: 0.8 };
+  const [hue, setHue] = useState<number>(initialHsv.h);
+  const [sat, setSat] = useState<number>(initialHsv.s);
+  const [val, setVal] = useState<number>(initialHsv.v);
+  const hueRef = useRef<number>(initialHsv.h);
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -345,6 +346,8 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
     const onDown = (e: MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      // Enable applying color due to user interaction
+      shouldApplyRef.current = true;
       const coords = getCoordinates(e.clientX, e.clientY);
       coords.radius = Math.sqrt(coords.x * coords.x + coords.y * coords.y);
       
@@ -425,11 +428,13 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
     };
   }, []);
 
-  // Apply color live to selection
+  // Apply color live to selection (only after user interaction)
   useEffect(() => {
     const { r, g, b } = hsvToRgb(hue, sat, val);
     const hex = rgbToHex(r, g, b);
-    onChangeHex?.(hex);
+    if (shouldApplyRef.current) {
+      onChangeHex?.(hex);
+    }
 
     if (!selectedObject || !canvas) return;
     // Only apply fill color to shapes and text, not images
@@ -439,11 +444,18 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
       // Images maintain their original appearance
       return;
     } else {
-      // Apply fill color to shapes and text
-      selectedObject.set({ fill: hex });
-      canvas.renderAll();
+      if (shouldApplyRef.current) {
+        // Apply fill color to shapes and text
+        selectedObject.set({ fill: hex });
+        canvas.renderAll();
+      }
     }
   }, [hue, sat, val, selectedObject, canvas]);
+
+  // Reset apply flag when selection changes
+  useEffect(() => {
+    shouldApplyRef.current = false;
+  }, [selectedObject]);
 
   const { r, g, b } = hsvToRgb(hue, sat, val);
   const hex = rgbToHex(r, g, b);
@@ -483,10 +495,12 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
             onChange={(e) => {
               const v = `#${e.target.value.replace(/[^0-9A-Fa-f]/g,'').slice(0,6)}`;
               const rgb = hexToRgb(v);
+              if (!rgb) return;
               const { h, s, v: vv } = rgbToHsv(rgb.r, rgb.g, rgb.b);
               setHue(h);
               setSat(s);
               setVal(vv);
+              shouldApplyRef.current = true;
             }}
             className="h-5 w-20 text-[10px] font-mono border border-[#E5E5E5] rounded px-1 bg-white text-[#161616]"
           />
