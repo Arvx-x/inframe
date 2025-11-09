@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { type Canvas as FabricCanvas, type Object as FabricObject, Group as FabricGroup, ActiveSelection as FabricActiveSelection } from "fabric";
-import { Eye, EyeOff, Lock, Unlock, ChevronUp, ChevronDown, X, Layers as LayersIcon, GripVertical } from "lucide-react";
+import { Eye, EyeOff, Lock, Unlock, ChevronUp, ChevronDown, X, Layers as LayersIcon, GripVertical, Sparkles } from "lucide-react";
+import { cn } from "@/app/lib/utils";
 
 interface LayersPanelProps {
   canvas: FabricCanvas;
@@ -23,6 +24,7 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
   const [revision, setRevision] = useState(0);
   const [draggedObj, setDraggedObj] = useState<FabricObject | null>(null);
   const [dragOverObj, setDragOverObj] = useState<FabricObject | null>(null);
+  const [activeTab, setActiveTab] = useState<"layers" | "inspo">("layers");
 
   useEffect(() => {
     const rerender = () => setRevision((n) => n + 1);
@@ -319,38 +321,115 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
 
   const translateClass = open ? "translate-x-0" : "-translate-x-full pointer-events-none";
 
+  // Sample inspiration images - in a real app, these would come from an API or database
+  const inspirationImages = [
+    { id: 1, url: "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=200&h=200&fit=crop", title: "Modern Design" },
+    { id: 2, url: "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=200&h=200&fit=crop", title: "Creative Layout" },
+    { id: 3, url: "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=200&h=200&fit=crop", title: "Minimalist Style" },
+    { id: 4, url: "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=200&h=200&fit=crop", title: "Bold Colors" },
+    { id: 5, url: "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=200&h=200&fit=crop", title: "Typography Focus" },
+    { id: 6, url: "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=200&h=200&fit=crop", title: "Clean Design" },
+  ];
+
   return (
     <div className={`fixed top-12 left-0 bottom-0 z-[80] w-[256px] border-r border-[#E5E7EB] bg-white shadow-lg flex flex-col transform transition-transform duration-300 ${translateClass}`}>
-      <div className="h-10 px-3 flex items-center justify-between border-b border-[#E5E7EB]">
-        <div className="flex items-center gap-2">
-          <LayersIcon className="w-4 h-4 text-[#6B7280]" />
-          <span className="text-xs font-medium text-[#111827]">Layers</span>
+      <div className="border-b border-[#E5E7EB]">
+        <div className="h-10 px-3 flex items-center justify-between">
+          <div className="flex items-center gap-0 h-full">
+            <button
+              onClick={() => setActiveTab("layers")}
+              className={cn(
+                "px-3 h-full text-xs font-semibold transition-colors flex items-center",
+                activeTab === "layers"
+                  ? "text-[#161616]"
+                  : "text-[#9CA3AF] hover:text-[#161616]"
+              )}
+            >
+              Layers
+            </button>
+            <button
+              onClick={() => setActiveTab("inspo")}
+              className={cn(
+                "px-3 h-full text-xs font-semibold transition-colors flex items-center",
+                activeTab === "inspo"
+                  ? "text-[#161616]"
+                  : "text-[#9CA3AF] hover:text-[#161616]"
+              )}
+            >
+              Inspo
+            </button>
+          </div>
+          <button className="p-1 rounded hover:bg-[#F3F4F6]" onClick={onRequestClose} aria-label="Close layers">
+            <X className="w-4 h-4 text-[#6B7280]" />
+          </button>
         </div>
-        <button className="p-1 rounded hover:bg-[#F3F4F6]" onClick={onRequestClose} aria-label="Close layers">
-          <X className="w-4 h-4 text-[#6B7280]" />
-        </button>
       </div>
-      <div className="px-2 py-2 flex items-center gap-2 border-b border-[#E5E7EB]">
-        <button
-          className={`h-7 px-2 text-xs rounded border ${canGroup ? "bg-[#111827] text-white border-[#111827]" : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB] cursor-not-allowed"}`}
-          disabled={!canGroup}
-          onClick={handleGroup}
-        >
-          Group
-        </button>
-        <button
-          className={`h-7 px-2 text-xs rounded border ${canUngroup ? "bg-white text-[#111827] border-[#E5E7EB] hover:bg-[#F9FAFB]" : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB] cursor-not-allowed"}`}
-          disabled={!canUngroup}
-          onClick={handleUngroup}
-        >
-          Ungroup
-        </button>
-      </div>
-      <div className="flex-1 overflow-auto p-2 space-y-1">
-        {layers.length === 0 ? (
-          <div className="text-xs text-[#6B7280] px-2 py-6 text-center">No layers</div>
-        ) : (
-          layers.map((node) => renderNode(node))
+
+      {/* Tab Content */}
+      <div className="flex-1 overflow-auto overflow-x-hidden">
+        {activeTab === "layers" && (
+          <>
+            <div className="px-2 py-2 flex items-center gap-2 border-b border-[#E5E7EB]">
+              <button
+                className={`h-7 px-2 text-xs rounded border ${canGroup ? "bg-[#111827] text-white border-[#111827]" : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB] cursor-not-allowed"}`}
+                disabled={!canGroup}
+                onClick={handleGroup}
+              >
+                Group
+              </button>
+              <button
+                className={`h-7 px-2 text-xs rounded border ${canUngroup ? "bg-white text-[#111827] border-[#E5E7EB] hover:bg-[#F9FAFB]" : "bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB] cursor-not-allowed"}`}
+                disabled={!canUngroup}
+                onClick={handleUngroup}
+              >
+                Ungroup
+              </button>
+            </div>
+            <div className="p-2 space-y-1">
+              {layers.length === 0 ? (
+                <div className="text-xs text-[#6B7280] px-2 py-6 text-center">No layers</div>
+              ) : (
+                layers.map((node) => renderNode(node))
+              )}
+            </div>
+          </>
+        )}
+
+        {activeTab === "inspo" && (
+          <div className="p-3">
+            <div className="mb-3 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#6B7280]" />
+              <span className="text-xs font-medium text-[#111827]">Inspiration</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {inspirationImages.map((img) => (
+                <div
+                  key={img.id}
+                  className="group relative aspect-square rounded border border-[#E5E7EB] overflow-hidden hover:border-blue-500 transition-colors cursor-pointer"
+                >
+                  <img
+                    src={img.url}
+                    alt={img.title}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback if image fails to load
+                      (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23F3F4F6' width='200' height='200'/%3E%3Ctext fill='%239CA3AF' font-family='sans-serif' font-size='14' x='50%25' y='50%25' text-anchor='middle' dy='.3em'%3EImage%3C/text%3E%3C/svg%3E";
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                  <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-[10px] text-white truncate block">{img.title}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 text-center">
+              <p className="text-xs text-[#6B7280] mb-2">Browse design inspiration</p>
+              <button className="h-7 px-3 text-xs rounded border border-[#E5E7EB] bg-white text-[#111827] hover:bg-[#F9FAFB] transition-colors">
+                Load More
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

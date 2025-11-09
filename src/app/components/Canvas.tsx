@@ -12,6 +12,9 @@ import { executeActions } from "@/app/lib/agent/executor";
 import type { AgentAction } from "@/app/lib/agent/canvas-schema";
 import LayersPanel from "@/app/components/LayersPanel";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/app/components/ui/context-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/app/components/ui/radio-group";
+import { Label } from "@/app/components/ui/label";
 
 interface CanvasProps {
   generatedImageUrl: string | null;
@@ -24,7 +27,7 @@ interface CanvasProps {
   initialCanvasColor?: string;
 }
 
-export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasColorRef, initialCanvasColor = "#f5f5f5" }: CanvasProps) {
+export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasColorRef, initialCanvasColor = "#F4F4F6" }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [selectedImage, setSelectedImage] = useState<FabricImage | null>(null);
@@ -42,18 +45,23 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const [activeTool, setActiveTool] = useState<"pointer" | "hand">("pointer");
   const activeToolRef = useRef<"pointer" | "hand">("pointer");
   const activeToolbarButtonRef = useRef<'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut'>('pointer');
-  const [activeShape, setActiveShape] = useState<"rect" | "circle" | "line">("rect");
-  const activeShapeRef = useRef<"rect" | "circle" | "line">("rect");
+  const [activeShape, setActiveShape] = useState<"rect" | "circle" | "line">("circle");
+  const activeShapeRef = useRef<"rect" | "circle" | "line">("circle");
   const [activeToolbarButton, setActiveToolbarButton] = useState<
     'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut'
   >('pointer');
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
   const [selectedObject, setSelectedObject] = useState<any>(null);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'png' | 'jpg'>('png');
+  const [exportType, setExportType] = useState<'canvas' | 'artboard'>('canvas');
   const isDrawingShapeRef = useRef(false);
   const isDrawingTextRef = useRef(false);
+  const isDrawingArtboardRef = useRef(false);
   const startPointRef = useRef<{ x: number; y: number } | null>(null);
   const drawingShapeRef = useRef<FabricRect | FabricCircle | FabricLine | null>(null);
+  const drawingArtboardRef = useRef<FabricRect | null>(null);
   const drawingTextBoxRef = useRef<FabricRect | null>(null);
   const drawingTextLabelRef = useRef<FabricTextbox | null>(null);
   const [isLayersOpen, setIsLayersOpen] = useState(false);
@@ -120,6 +128,35 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         } as any);
         canvas.add(sizeLabel);
         drawingTextLabelRef.current = sizeLabel;
+        canvas.selection = false;
+        canvas.renderAll();
+        return;
+      }
+      
+      // Handle artboard drawing start
+      if (activeToolbarButtonRef.current === 'artboard' && isLeftButton) {
+        opt.e.preventDefault();
+        isDrawingArtboardRef.current = true;
+        const pointer = canvas.getPointer(e);
+        startPointRef.current = { x: pointer.x, y: pointer.y };
+        
+        const artboard = new FabricRect({
+          left: pointer.x,
+          top: pointer.y,
+          width: 0,
+          height: 0,
+          fill: '#ffffff',
+          stroke: '#E5E5E5',
+          strokeWidth: 1,
+          rx: 0,
+          ry: 0,
+          selectable: false,
+          name: 'Artboard',
+        });
+        // Mark as artboard for identification
+        (artboard as any).isArtboard = true;
+        drawingArtboardRef.current = artboard;
+        canvas.add(artboard);
         canvas.selection = false;
         canvas.renderAll();
         return;
@@ -216,6 +253,30 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
             text: `${Math.round(width)} × ${Math.round(height)}`
           });
         }
+        
+        canvas.renderAll();
+      }
+      
+      // Handle artboard drawing
+      if (isDrawingArtboardRef.current && startPointRef.current && drawingArtboardRef.current) {
+        opt.e.preventDefault();
+        const pointer = canvas.getPointer(opt.e);
+        const startX = startPointRef.current.x;
+        const startY = startPointRef.current.y;
+        const currentX = pointer.x;
+        const currentY = pointer.y;
+        
+        const width = Math.abs(currentX - startX);
+        const height = Math.abs(currentY - startY);
+        const left = Math.min(startX, currentX);
+        const top = Math.min(startY, currentY);
+        
+        drawingArtboardRef.current.set({
+          left,
+          top,
+          width,
+          height
+        });
         
         canvas.renderAll();
       }
@@ -355,6 +416,34 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
             makeTextbox(defaultWidth, left, top);
           }
         }
+      }
+      
+      // Handle artboard drawing completion
+      if (isDrawingArtboardRef.current) {
+        isDrawingArtboardRef.current = false;
+        startPointRef.current = null;
+        if (drawingArtboardRef.current) {
+          // Check if artboard has minimum size before finalizing
+          const hasMinimumSize = (drawingArtboardRef.current.width || 0) > 10 && (drawingArtboardRef.current.height || 0) > 10;
+          
+          if (hasMinimumSize) {
+            drawingArtboardRef.current.set({ 
+              selectable: true,
+              evented: true,
+            });
+            canvas.setActiveObject(drawingArtboardRef.current);
+            canvas.selection = true;
+            canvas.renderAll();
+          } else {
+            // Remove artboard if too small
+            canvas.remove(drawingArtboardRef.current);
+            canvas.renderAll();
+          }
+        }
+        drawingArtboardRef.current = null;
+        // Reset to pointer tool after drawing
+        setActiveToolbarButton('pointer');
+        activeToolbarButtonRef.current = 'pointer';
       }
       
       // Handle shape drawing completion
@@ -504,7 +593,8 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     const isShapeTool = activeToolbarButton === 'shape';
     
     // Set cursor based on active tool
-    if (isShapeTool) {
+    const isArtboardTool = activeToolbarButton === 'artboard';
+    if (isShapeTool || isArtboardTool) {
       fabricCanvas.defaultCursor = 'crosshair';
       fabricCanvas.hoverCursor = 'crosshair';
     } else {
@@ -512,8 +602,8 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       fabricCanvas.hoverCursor = isPointer ? 'move' : 'grab';
     }
     
-    fabricCanvas.selection = isPointer && !isShapeTool;
-    fabricCanvas.skipTargetFind = !isPointer || isShapeTool;
+    fabricCanvas.selection = isPointer && !isShapeTool && !isArtboardTool;
+    fabricCanvas.skipTargetFind = !isPointer || isShapeTool || isArtboardTool;
     
     if (!isPointer) {
       fabricCanvas.discardActiveObject();
@@ -704,6 +794,16 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     fabricCanvas.setCursor('text');
   };
 
+  const handleAddArtboard = () => {
+    if (!fabricCanvas) return;
+    // Set artboard tool mode for drag-to-create
+    setActiveToolbarButton('artboard');
+    activeToolbarButtonRef.current = 'artboard';
+    fabricCanvas.selection = false;
+    fabricCanvas.defaultCursor = 'crosshair';
+    fabricCanvas.setCursor('crosshair');
+  };
+
   const handleAddRect = () => {
     if (!fabricCanvas) return;
     const rect = new FabricRect({
@@ -797,32 +897,108 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     });
   };
 
-  const handleDownload = () => {
+  const handleExport = (format: 'png' | 'jpg', exportType: 'canvas' | 'artboard') => {
     if (!fabricCanvas) return;
 
-    // Ensure exported image has a white background even though the editor shows a grid
-    const originalBg = fabricCanvas.backgroundColor as string | undefined;
-    (fabricCanvas as any).backgroundColor = '#ffffff';
-    fabricCanvas.renderAll();
-    fabricCanvas.renderAll();
+    let dataURL: string;
+    let filename: string;
+    const timestamp = Date.now();
+    const multiplier = 4; // Ultra high quality export (4x resolution)
 
-    const dataURL = fabricCanvas.toDataURL({
-      format: 'png',
-      quality: 1,
-      multiplier: 1,
-    });
+    if (exportType === 'artboard') {
+      // Export artboard with all objects on it
+      const artboards = getArtboards();
+      if (artboards.length === 0) {
+        toast.error("No artboard found on canvas");
+        return;
+      }
 
-    const link = document.createElement('a');
-    link.download = `frame-creation-${Date.now()}.png`;
-    link.href = dataURL;
-    link.click();
-    
-    // Restore original background (transparent for grid visibility)
-    (fabricCanvas as any).backgroundColor = (originalBg as string | undefined) || 'transparent';
-    fabricCanvas.renderAll();
-    fabricCanvas.renderAll();
-    
-    toast.success("Canvas downloaded!");
+      // Export the first artboard (or the selected one if it's an artboard)
+      const selectedIsArtboard = selectedObject && (
+        (selectedObject instanceof FabricRect && (selectedObject as any).isArtboard) ||
+        selectedObject instanceof FabricImage
+      );
+      const artboard = selectedIsArtboard ? selectedObject : artboards[0];
+      
+      // Get artboard bounding box
+      const artboardBounds = artboard.getBoundingRect();
+      
+      // Use Fabric's built-in cropping to export just the artboard region
+      // This includes everything rendered within that region
+      try {
+        // Store original background
+        const originalBg = fabricCanvas.backgroundColor as string | undefined;
+        
+        // Temporarily set white background if needed
+        if (!originalBg || originalBg === 'transparent') {
+          fabricCanvas.backgroundColor = '#ffffff';
+          fabricCanvas.renderAll();
+        }
+        
+        // Export the cropped region with ultra high quality
+        dataURL = fabricCanvas.toDataURL({
+          format: format === 'jpg' ? 'jpeg' : 'png',
+          quality: 1, // Maximum quality for both PNG and JPG
+          multiplier: multiplier, // 4x resolution
+          left: artboardBounds.left,
+          top: artboardBounds.top,
+          width: artboardBounds.width,
+          height: artboardBounds.height,
+        });
+        
+        filename = `artboard-export-${timestamp}.${format === 'jpg' ? 'jpg' : 'png'}`;
+        
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = dataURL;
+        link.click();
+        
+        // Restore original background
+        fabricCanvas.backgroundColor = originalBg || 'transparent';
+        fabricCanvas.renderAll();
+        
+        toast.success("Artboard exported!");
+      } catch (error) {
+        console.error("Error during artboard export:", error);
+        toast.error("Failed to export artboard. Please try again.");
+      }
+      return;
+    } else {
+      // Export entire canvas
+      const originalBg = fabricCanvas.backgroundColor as string | undefined;
+      (fabricCanvas as any).backgroundColor = '#ffffff';
+      fabricCanvas.renderAll();
+      fabricCanvas.renderAll();
+
+      dataURL = fabricCanvas.toDataURL({
+        format: format === 'jpg' ? 'jpeg' : 'png',
+        quality: 1, // Maximum quality for both PNG and JPG
+        multiplier: multiplier, // 4x resolution
+      });
+
+      filename = `canvas-export-${timestamp}.${format === 'jpg' ? 'jpg' : 'png'}`;
+      
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = dataURL;
+      link.click();
+      
+      // Restore original background
+      (fabricCanvas as any).backgroundColor = (originalBg as string | undefined) || 'transparent';
+      fabricCanvas.renderAll();
+      fabricCanvas.renderAll();
+      
+      toast.success("Canvas exported!");
+    }
+  };
+
+  const handleExportClick = () => {
+    setIsExportDialogOpen(true);
+  };
+
+  const handleExportConfirm = () => {
+    handleExport(exportFormat, exportType);
+    setIsExportDialogOpen(false);
   };
 
   const handleEditComplete = (newImageUrl: string) => {
@@ -969,12 +1145,53 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     }
   };
 
-  // Hotkeys for undo/redo
+  // Hotkeys for undo/redo and delete
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const isZ = e.key.toLowerCase() === 'z';
       const isY = e.key.toLowerCase() === 'y';
+      const isDelete = e.key === 'Delete' || e.key === 'Backspace';
       const meta = e.metaKey || e.ctrlKey;
+      
+      // Handle Delete/Backspace key
+      if (isDelete && !meta && !e.shiftKey && !e.altKey) {
+        // Don't delete if user is typing in an input field
+        const target = e.target as HTMLElement;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+          return;
+        }
+        
+        if (fabricCanvas) {
+          // Get active object (could be a single object or a group/selection)
+          const activeObject = fabricCanvas.getActiveObject();
+          
+          if (activeObject) {
+            e.preventDefault();
+            
+            // Handle ActiveSelection (multiple objects selected)
+            if (activeObject instanceof FabricActiveSelection) {
+              const objects = activeObject.getObjects();
+              objects.forEach((obj: FabricObject) => {
+                fabricCanvas.remove(obj);
+              });
+            } else {
+              // Handle single object
+              fabricCanvas.remove(activeObject);
+            }
+            
+            // Clear selection
+            fabricCanvas.discardActiveObject();
+            fabricCanvas.renderAll();
+            
+            // Update state
+            setSelectedObject(null);
+            setSelectedImage(null);
+          }
+        }
+        return;
+      }
+      
+      // Handle undo/redo
       if (meta && isZ && !e.shiftKey) {
         e.preventDefault();
         handleUndo();
@@ -994,6 +1211,21 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     }
   }, [onCanvasHistoryRef, fabricCanvas]);
 
+  // Expose export handler via export ref
+  useEffect(() => {
+    if (onCanvasExportRef) {
+      onCanvasExportRef.current = handleExportClick;
+    }
+  }, [onCanvasExportRef]);
+
+  // Get artboard objects (FabricRect objects marked as artboards)
+  const getArtboards = () => {
+    if (!fabricCanvas) return [];
+    return fabricCanvas.getObjects().filter((obj: FabricObject) => 
+      (obj instanceof FabricRect && (obj as any).isArtboard) || obj instanceof FabricImage
+    ) as (FabricRect | FabricImage)[];
+  };
+
   const handleCanvasColorChange = (color: string) => {
     if (!fabricCanvas) return;
     fabricCanvas.backgroundColor = color;
@@ -1011,7 +1243,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     <>
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <div className="relative w-full h-screen overflow-hidden bg-[#f5f5f5]">
+        <div className="relative w-full h-screen overflow-hidden bg-[#F4F4F6]">
           <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
           
           {/* Left Toolbar (Vertical layout) */}
@@ -1234,6 +1466,69 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         onImageEdit={handleEditComplete}
       />
     )}
+
+    {/* Export Dialog */}
+    <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Export</DialogTitle>
+          <DialogDescription>
+            Choose export format and what to export
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-6 py-4">
+          {/* Format Selection */}
+          <div className="grid gap-3">
+            <Label className="text-sm font-medium">Format</Label>
+            <RadioGroup value={exportFormat} onValueChange={(value) => setExportFormat(value as 'png' | 'jpg')}>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="png" id="png" />
+                <Label htmlFor="png" className="font-normal cursor-pointer">PNG (High Quality)</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="jpg" id="jpg" />
+                <Label htmlFor="jpg" className="font-normal cursor-pointer">JPG/JPEG (Compressed)</Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          {/* Export Type Selection */}
+          <div className="grid gap-3">
+            <Label className="text-sm font-medium">Export</Label>
+            <RadioGroup value={exportType} onValueChange={(value) => setExportType(value as 'canvas' | 'artboard')}>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="canvas" id="canvas" />
+                <Label htmlFor="canvas" className="font-normal cursor-pointer">Entire Canvas</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem 
+                  value="artboard" 
+                  id="artboard" 
+                  disabled={getArtboards().length === 0}
+                />
+                <Label 
+                  htmlFor="artboard" 
+                  className={`font-normal cursor-pointer ${getArtboards().length === 0 ? 'opacity-50' : ''}`}
+                >
+                  Artboard {getArtboards().length === 0 && '(No artboard found)'}
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsExportDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleExportConfirm}
+            className="bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 text-white"
+          >
+            Export
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }

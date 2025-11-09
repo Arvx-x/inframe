@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { FabricObject, Image as FabricImage, Textbox as FabricTextbox, filters } from "fabric";
-import { Pipette } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { FabricObject, Image as FabricImage, Textbox as FabricTextbox, filters, Gradient } from "fabric";
+import { Pipette, Palette, Plus, Trash2, MoveHorizontal, ChevronDown, Droplet, Square, Sparkles, Sliders } from "lucide-react";
 
 interface ColorsProps {
   selectedObject: FabricObject | null;
@@ -63,8 +63,8 @@ function rgbToHsv(r: number, g: number, b: number) {
 
 // Colors component renders: hue wheel ring and inner SV triangle with live preview
 export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB", onChangeHex }: ColorsProps) {
-  const size = 140; // overall size
-  const ringWidth = 12; // hue ring
+  const size = 130; // overall size (slightly larger for better visibility)
+  const ringWidth = 11; // hue ring
   const wheelCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const svCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -78,6 +78,25 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
   const [sat, setSat] = useState<number>(initialHsv.s);
   const [val, setVal] = useState<number>(initialHsv.v);
   const hueRef = useRef<number>(initialHsv.h);
+
+  // Fill type state
+  const [fillType, setFillType] = useState<'solid' | 'linear' | 'radial' | 'angular'>('solid');
+  
+  // Gradient state
+  const [gradientStops, setGradientStops] = useState<Array<{ offset: number; color: string }>>([
+    { offset: 0, color: '#FF6B6B' },
+    { offset: 1, color: '#4ECDC4' }
+  ]);
+  const [selectedStop, setSelectedStop] = useState<number>(0);
+  const [gradientAngle, setGradientAngle] = useState<number>(0);
+
+  // Color adjustments state
+  const [adjustments, setAdjustments] = useState({
+    brightness: 0,
+    contrast: 0,
+    saturation: 0,
+    temperature: 0,
+  });
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -428,6 +447,54 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
     };
   }, []);
 
+  // Apply gradient to object
+  const applyGradient = useCallback(() => {
+    if (!selectedObject || !canvas || selectedObject instanceof FabricImage) return;
+    
+    const width = selectedObject.width || 100;
+    const height = selectedObject.height || 100;
+    
+    let gradient;
+    
+    if (fillType === 'linear') {
+      const angleRad = (gradientAngle * Math.PI) / 180;
+      const x1 = width / 2 + Math.cos(angleRad) * width / 2;
+      const y1 = height / 2 + Math.sin(angleRad) * height / 2;
+      const x2 = width / 2 - Math.cos(angleRad) * width / 2;
+      const y2 = height / 2 - Math.sin(angleRad) * height / 2;
+      
+      gradient = new Gradient({
+        type: 'linear',
+        coords: { x1, y1, x2, y2 },
+        colorStops: gradientStops.map(stop => ({
+          offset: stop.offset,
+          color: stop.color
+        }))
+      });
+    } else if (fillType === 'radial') {
+      gradient = new Gradient({
+        type: 'radial',
+        coords: { 
+          x1: width / 2, 
+          y1: height / 2, 
+          x2: width / 2, 
+          y2: height / 2, 
+          r1: 0, 
+          r2: Math.max(width, height) / 2 
+        },
+        colorStops: gradientStops.map(stop => ({
+          offset: stop.offset,
+          color: stop.color
+        }))
+      });
+    }
+    
+    if (gradient) {
+      selectedObject.set({ fill: gradient });
+      canvas.renderAll();
+    }
+  }, [selectedObject, canvas, fillType, gradientAngle, gradientStops]);
+
   // Apply color live to selection (only after user interaction)
   useEffect(() => {
     const { r, g, b } = hsvToRgb(hue, sat, val);
@@ -444,13 +511,20 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
       // Images maintain their original appearance
       return;
     } else {
-      if (shouldApplyRef.current) {
-        // Apply fill color to shapes and text
+      if (shouldApplyRef.current && fillType === 'solid') {
+        // Apply fill color to shapes and text only for solid fill
         selectedObject.set({ fill: hex });
         canvas.renderAll();
       }
     }
-  }, [hue, sat, val, selectedObject, canvas]);
+  }, [hue, sat, val, selectedObject, canvas, fillType]);
+
+  // Apply gradient when gradient settings change
+  useEffect(() => {
+    if (fillType !== 'solid' && shouldApplyRef.current) {
+      applyGradient();
+    }
+  }, [fillType, gradientStops, gradientAngle, applyGradient]);
 
   // Reset apply flag when selection changes
   useEffect(() => {
@@ -463,55 +537,121 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
   const l = val - (val * sat) / 2;
   const sHsl = l === 0 || l === 1 ? 0 : (val - l) / Math.min(l, 1 - l);
 
+  // Generate AI-inspired color suggestions
+  const generateColorSuggestions = () => {
+    const suggestions = [];
+    // Complementary color
+    const compHue = (hue + 180) % 360;
+    const comp = hsvToRgb(compHue, sat, val);
+    suggestions.push({ color: rgbToHex(comp.r, comp.g, comp.b), label: "Complementary" });
+    
+    // Analogous colors
+    const analog1 = hsvToRgb((hue + 30) % 360, sat, val);
+    suggestions.push({ color: rgbToHex(analog1.r, analog1.g, analog1.b), label: "Analogous" });
+    
+    const analog2 = hsvToRgb((hue - 30 + 360) % 360, sat, val);
+    suggestions.push({ color: rgbToHex(analog2.r, analog2.g, analog2.b), label: "Analogous" });
+    
+    // Triadic colors
+    const triad1 = hsvToRgb((hue + 120) % 360, sat, val);
+    suggestions.push({ color: rgbToHex(triad1.r, triad1.g, triad1.b), label: "Triadic" });
+    
+    const triad2 = hsvToRgb((hue + 240) % 360, sat, val);
+    suggestions.push({ color: rgbToHex(triad2.r, triad2.g, triad2.b), label: "Triadic" });
+    
+    // Lighter and darker variations
+    const lighter = hsvToRgb(hue, Math.max(0, sat - 0.2), Math.min(1, val + 0.2));
+    suggestions.push({ color: rgbToHex(lighter.r, lighter.g, lighter.b), label: "Lighter" });
+    
+    const darker = hsvToRgb(hue, Math.min(1, sat + 0.1), Math.max(0, val - 0.2));
+    suggestions.push({ color: rgbToHex(darker.r, darker.g, darker.b), label: "Darker" });
+    
+    return suggestions;
+  };
+
+  const colorSuggestions = generateColorSuggestions();
+
   return (
-    <div className="px-3 pt-1.5 pb-1 border-b border-[#E5E5E5] bg-white">
-      {/* Header row mimicking inspector style */}
-      <div className="flex items-center justify-between mb-1.5">
-        <button className="w-5 h-5 flex items-center justify-center border border-[#CFCFCF] rounded hover:bg-[#F0F0F0] transition-colors">
-          <Pipette className="w-3.5 h-3.5 text-[#6E6E6E]" />
-        </button>
-        <div className="w-5 h-5 rounded border border-[#CFCFCF]" style={{ backgroundColor: hex }} />
-      </div>
-
-      <div ref={containerRef} className="relative mx-auto" style={{ width: size, height: size }}>
-        <canvas ref={wheelCanvasRef} className="absolute inset-0" style={{ pointerEvents: "none" }} />
-        <canvas ref={svCanvasRef} className="absolute inset-0" style={{ pointerEvents: "none" }} />
-      </div>
-
-      {/* HSL and Hex row - side by side */}
-      <div className="flex items-start justify-between" style={{ marginTop: '6px' }}>
-        {/* H S L readouts - left side */}
-        <div className="grid grid-cols-1 gap-0 text-[10px] text-[#161616] leading-tight" style={{ marginTop: '-16px' }}>
-          <div>H: {Math.round(hue)}</div>
-          <div>S: {Math.round(sHsl * 100)}</div>
-          <div>L: {Math.round(l * 100)}</div>
-        </div>
-
-        {/* Hex input - right side */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-[#6E6E6E]">#:</span>
-          <input
-            value={hex.replace('#','').toUpperCase()}
-            onChange={(e) => {
-              const v = `#${e.target.value.replace(/[^0-9A-Fa-f]/g,'').slice(0,6)}`;
-              const rgb = hexToRgb(v);
-              if (!rgb) return;
-              const { h, s, v: vv } = rgbToHsv(rgb.r, rgb.g, rgb.b);
-              setHue(h);
-              setSat(s);
-              setVal(vv);
-              shouldApplyRef.current = true;
+    <div className="px-3 py-2.5 bg-white">
+      {/* Header with compact color preview and picker button */}
+      <div className="flex items-center justify-between mb-2.5">
+        {/* Small current color preview - left side */}
+        <div className="flex items-center gap-2">
+          <div 
+            className="w-7 h-7 rounded border border-slate-300 transition-all duration-200 hover:scale-110 cursor-pointer" 
+            style={{ 
+              backgroundColor: fillType === 'solid' ? hex : undefined,
+              background: fillType !== 'solid' 
+                ? `linear-gradient(${gradientAngle}deg, ${gradientStops.map(s => `${s.color} ${s.offset * 100}%`).join(', ')})`
+                : undefined
             }}
-            className="h-5 w-20 text-[10px] font-mono border border-[#E5E5E5] rounded px-1 bg-white text-[#161616]"
+            title={fillType === 'solid' ? `Current: ${hex.toUpperCase()}` : 'Gradient'}
           />
+          <div>
+            <div className="text-[11px] font-mono font-semibold text-slate-800">
+              {fillType === 'solid' ? hex.toUpperCase() : `${fillType} gradient`}
+            </div>
+            {fillType === 'solid' && (
+              <div className="text-[10px] text-slate-400">
+                {Math.round(hue)}° {Math.round(sHsl * 100)}% {Math.round(l * 100)}%
+              </div>
+            )}
+          </div>
         </div>
+        
+        {/* Eyedropper button - right side */}
+        <button className="p-2 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50 transition-colors">
+          <Pipette className="w-4 h-4 text-slate-600" />
+        </button>
       </div>
 
-      {/* Opacity slider */}
-      <div style={{ marginTop: '6px' }}>
-        <div className="text-[10px] text-[#161616] mb-0.5">Opacity</div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3.5 h-3.5 rounded-full border border-[#CFCFCF] bg-white" />
+      {/* Color wheel, Hex input & Opacity - combined card */}
+      <div className="mb-2.5 p-2.5 bg-[#F4F4F6] rounded-lg border border-[#E5E5E5] space-y-2.5">
+        {/* Header */}
+        <div className="flex items-center gap-2 mb-2">
+          <Droplet className="w-3.5 h-3.5 text-blue-500" />
+          <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Color Picker</span>
+        </div>
+        
+        {/* Color wheel */}
+        <div className="flex justify-center">
+          <div ref={containerRef} className="relative" style={{ width: size, height: size }}>
+            <canvas ref={wheelCanvasRef} className="absolute inset-0" style={{ pointerEvents: "none" }} />
+            <canvas ref={svCanvasRef} className="absolute inset-0" style={{ pointerEvents: "none" }} />
+          </div>
+        </div>
+
+        {/* Hex input */}
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700 mb-1.5">Hex Code</label>
+          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-white rounded border border-slate-300 hover:border-slate-400 transition-colors focus-within:border-blue-500">
+            <span className="text-[11px] font-mono text-slate-500">#</span>
+            <input
+              value={hex.replace('#','').toUpperCase()}
+              onChange={(e) => {
+                const v = `#${e.target.value.replace(/[^0-9A-Fa-f]/g,'').slice(0,6)}`;
+                const rgb = hexToRgb(v);
+                if (!rgb) return;
+                const { h, s, v: vv } = rgbToHsv(rgb.r, rgb.g, rgb.b);
+                setHue(h);
+                setSat(s);
+                setVal(vv);
+                shouldApplyRef.current = true;
+              }}
+              className="flex-1 text-[11px] font-mono font-semibold text-slate-800 outline-none bg-transparent"
+              placeholder="FFFFFF"
+            />
+          </div>
+        </div>
+
+        {/* Opacity slider */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[11px] font-medium text-slate-700">Opacity</label>
+            <span className="text-[11px] font-mono font-medium text-slate-600">
+              {selectedObject?.opacity ? Math.round(selectedObject.opacity * 100) : 100}%
+            </span>
+          </div>
           <input
             type="range"
             min={0}
@@ -523,18 +663,327 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
               selectedObject.set({ opacity: pct / 100 });
               canvas.renderAll();
             }}
-            className="flex-1 h-1.5 bg-[linear-gradient(45deg,#ccc_25%,transparent_25%,transparent_50%,#ccc_50%,#ccc_75%,transparent_75%,transparent)] bg-[length:8px_8px] rounded appearance-none"
+            className="w-full h-2 bg-slate-200 rounded appearance-none cursor-pointer opacity-slider"
+            style={{
+              background: `linear-gradient(to right, ${hex}00 0%, ${hex} 100%)`
+            }}
           />
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-[#161616]">
-              {selectedObject?.opacity ? Math.round(selectedObject.opacity * 100) : 100} %
-            </span>
-            <svg className="w-3 h-3 text-[#6E6E6E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
         </div>
       </div>
+
+      {/* AI-generated color suggestions - card */}
+      <div className="mb-2.5 p-2.5 bg-[#F4F4F6] rounded-lg border border-[#E5E5E5]">
+        <div className="flex items-center gap-2 mb-2">
+          <Palette className="w-3.5 h-3.5 text-blue-500" />
+          <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Project Colors</span>
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {colorSuggestions.map((suggestion, idx) => (
+            <button
+              key={idx}
+              onClick={() => {
+                const rgb = hexToRgb(suggestion.color);
+                if (!rgb) return;
+                const { h, s, v: vv } = rgbToHsv(rgb.r, rgb.g, rgb.b);
+                setHue(h);
+                setSat(s);
+                setVal(vv);
+                shouldApplyRef.current = true;
+              }}
+              className="aspect-square rounded border border-slate-300 hover:border-slate-400 transition-all hover:scale-105"
+              style={{ backgroundColor: suggestion.color }}
+              title={suggestion.label}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Fill Type Selector - card */}
+      <div className="mb-2.5 p-2.5 bg-[#F4F4F6] rounded-lg border border-[#E5E5E5]">
+        <div className="flex items-center gap-2 mb-2">
+          <Square className="w-3.5 h-3.5 text-blue-500" />
+          <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Fill Type</span>
+        </div>
+        <div className="grid grid-cols-4 gap-1.5">
+          {(['solid', 'linear', 'radial', 'angular'] as const).map((type) => (
+            <button
+              key={type}
+              onClick={() => {
+                setFillType(type);
+                if (type !== 'solid') {
+                  applyGradient();
+                }
+              }}
+              className={`px-2 py-1.5 text-[10px] font-medium rounded border transition-colors ${
+                fillType === type
+                  ? 'bg-blue-500 text-white border-blue-600'
+                  : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+              }`}
+            >
+              {type.charAt(0).toUpperCase() + type.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Gradient Controls - shown only for gradient fill types */}
+      {fillType !== 'solid' && (
+        <div className="mb-2.5 p-2.5 bg-[#F4F4F6] rounded-lg border border-[#E5E5E5]">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+              <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Gradient Stops</span>
+            </div>
+            <button
+              onClick={() => {
+                const newOffset = gradientStops.length > 0 
+                  ? (gradientStops[gradientStops.length - 1].offset + 0.5) / 1.5 
+                  : 0.5;
+                setGradientStops([...gradientStops, { offset: Math.min(newOffset, 1), color: hex }]);
+              }}
+              className="p-1.5 border border-slate-300 rounded hover:bg-slate-50 transition-colors"
+              title="Add stop"
+            >
+              <Plus className="w-3.5 h-3.5 text-slate-600" />
+            </button>
+          </div>
+
+          {/* Visual gradient preview bar */}
+          <div className="mb-2.5 relative h-7 rounded border border-slate-300 overflow-hidden">
+            <div
+              className="absolute inset-0"
+              style={{
+                background: `linear-gradient(to right, ${gradientStops
+                  .sort((a, b) => a.offset - b.offset)
+                  .map(s => `${s.color} ${s.offset * 100}%`)
+                  .join(', ')})`
+              }}
+            />
+            {/* Gradient stop indicators */}
+            {gradientStops.map((stop, idx) => (
+              <div
+                key={idx}
+                className={`absolute top-0 w-2 h-full cursor-pointer ${
+                  selectedStop === idx ? 'bg-blue-500' : 'bg-white'
+                } border-x border-slate-400 opacity-80 hover:opacity-100`}
+                style={{ left: `calc(${stop.offset * 100}% - 4px)` }}
+                onClick={() => setSelectedStop(idx)}
+              />
+            ))}
+          </div>
+          
+          {/* Gradient angle slider for linear */}
+          {fillType === 'linear' && (
+            <div className="mb-2.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[10px] font-medium text-slate-700">Angle</label>
+                <span className="text-[10px] font-mono text-slate-600">{Math.round(gradientAngle)}°</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={360}
+                value={gradientAngle}
+                onChange={(e) => {
+                  setGradientAngle(Number(e.target.value));
+                  applyGradient();
+                }}
+                className="w-full h-2 bg-slate-200 rounded appearance-none cursor-pointer"
+              />
+            </div>
+          )}
+
+          {/* Gradient stops list */}
+          <div className="space-y-2">
+            {gradientStops.map((stop, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <div
+                  className={`w-6 h-6 rounded border-2 cursor-pointer ${
+                    selectedStop === idx ? 'border-blue-500' : 'border-slate-300'
+                  }`}
+                  style={{ backgroundColor: stop.color }}
+                  onClick={() => setSelectedStop(idx)}
+                />
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={stop.offset * 100}
+                  onChange={(e) => {
+                    const newStops = [...gradientStops];
+                    newStops[idx].offset = Number(e.target.value) / 100;
+                    setGradientStops(newStops);
+                    applyGradient();
+                  }}
+                  className="flex-1 h-1.5 bg-slate-200 rounded appearance-none cursor-pointer"
+                />
+                <span className="text-[10px] font-mono text-slate-600 w-9">{Math.round(stop.offset * 100)}%</span>
+                {gradientStops.length > 2 && (
+                  <button
+                    onClick={() => {
+                      setGradientStops(gradientStops.filter((_, i) => i !== idx));
+                      if (selectedStop >= gradientStops.length - 1) {
+                        setSelectedStop(Math.max(0, gradientStops.length - 2));
+                      }
+                    }}
+                    className="p-1 hover:bg-red-50 rounded transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Color picker for selected gradient stop */}
+          <div className="mt-2.5">
+            <label className="block text-[10px] font-medium text-slate-700 mb-1.5">Stop Color</label>
+            <input
+              type="color"
+              value={gradientStops[selectedStop]?.color || '#000000'}
+              onChange={(e) => {
+                const newStops = [...gradientStops];
+                newStops[selectedStop].color = e.target.value;
+                setGradientStops(newStops);
+                applyGradient();
+              }}
+              className="w-full h-7 rounded border border-slate-300 cursor-pointer"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Color Adjustments Section */}
+      <div className="mb-2.5 p-2.5 bg-[#F4F4F6] rounded-lg border border-[#E5E5E5]">
+        <div className="flex items-center gap-2 mb-2">
+          <Sliders className="w-3.5 h-3.5 text-blue-500" />
+          <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Color Adjustments</span>
+        </div>
+        
+        {/* Brightness */}
+        <div className="mb-2">
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[10px] font-medium text-slate-700">Brightness</label>
+            <span className="text-[10px] font-mono text-slate-600">{adjustments.brightness}</span>
+          </div>
+          <input
+            type="range"
+            min={-100}
+            max={100}
+            value={adjustments.brightness}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              setAdjustments({ ...adjustments, brightness: value });
+              // Apply brightness by adjusting HSV value
+              const newVal = clamp(val + value / 200, 0, 1);
+              setVal(newVal);
+              shouldApplyRef.current = true;
+            }}
+            className="w-full h-2 bg-slate-200 rounded appearance-none cursor-pointer"
+          />
+        </div>
+
+        {/* Contrast */}
+        <div className="mb-2">
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[10px] font-medium text-slate-700">Contrast</label>
+            <span className="text-[10px] font-mono text-slate-600">{adjustments.contrast}</span>
+          </div>
+          <input
+            type="range"
+            min={-100}
+            max={100}
+            value={adjustments.contrast}
+            onChange={(e) => setAdjustments({ ...adjustments, contrast: Number(e.target.value) })}
+            className="w-full h-2 bg-slate-200 rounded appearance-none cursor-pointer"
+          />
+        </div>
+
+        {/* Saturation */}
+        <div className="mb-2">
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[10px] font-medium text-slate-700">Saturation</label>
+            <span className="text-[10px] font-mono text-slate-600">{adjustments.saturation}</span>
+          </div>
+          <input
+            type="range"
+            min={-100}
+            max={100}
+            value={adjustments.saturation}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              setAdjustments({ ...adjustments, saturation: value });
+              // Apply saturation adjustment
+              const newSat = clamp(sat + value / 100, 0, 1);
+              setSat(newSat);
+              shouldApplyRef.current = true;
+            }}
+            className="w-full h-2 bg-slate-200 rounded appearance-none cursor-pointer"
+          />
+        </div>
+
+        {/* Temperature */}
+        <div className="mb-2">
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[10px] font-medium text-slate-700">Temperature</label>
+            <span className="text-[10px] font-mono text-slate-600">{adjustments.temperature}</span>
+          </div>
+          <input
+            type="range"
+            min={-100}
+            max={100}
+            value={adjustments.temperature}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              setAdjustments({ ...adjustments, temperature: value });
+              // Apply temperature by adjusting hue (warmer = more red, cooler = more blue)
+              const newHue = (hue + value / 5 + 360) % 360;
+              setHue(newHue);
+              shouldApplyRef.current = true;
+            }}
+            className="w-full h-2 bg-slate-200 rounded appearance-none cursor-pointer"
+          />
+        </div>
+
+        {/* Reset adjustments button */}
+        <button
+          onClick={() => {
+            setAdjustments({ brightness: 0, contrast: 0, saturation: 0, temperature: 0 });
+          }}
+          className="w-full mt-1.5 px-2 py-1.5 text-[10px] font-medium text-slate-700 bg-slate-50 border border-slate-300 rounded hover:bg-slate-100 transition-colors"
+        >
+          Reset Adjustments
+        </button>
+      </div>
+
+      <style jsx>{`
+        .opacity-slider::-webkit-slider-thumb {
+          appearance: none;
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          background: white;
+          cursor: pointer;
+          border: 2px solid ${hex};
+          box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        }
+        .opacity-slider::-webkit-slider-thumb:hover {
+          border-width: 2.5px;
+        }
+        .opacity-slider::-moz-range-thumb {
+          appearance: none;
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          background: white;
+          cursor: pointer;
+          border: 2px solid ${hex};
+          box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        }
+        .opacity-slider::-moz-range-thumb:hover {
+          border-width: 2.5px;
+        }
+      `}</style>
     </div>
   );
 }

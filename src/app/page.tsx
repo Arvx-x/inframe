@@ -18,7 +18,7 @@ export default function Page() {
   const canvasColorRef = useRef<((color: string) => void) | null>(null);
   const [historyAvailable, setHistoryAvailable] = useState(false);
   const [projectName, setProjectName] = useState("Untitled Project");
-  const [canvasColor, setCanvasColor] = useState("#f5f5f5");
+  const [canvasColor, setCanvasColor] = useState("#F4F4F6");
 
   const handleImageGenerated = (imageUrl: string) => {
     setGeneratedImageUrl(imageUrl);

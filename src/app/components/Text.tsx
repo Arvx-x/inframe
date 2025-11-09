@@ -3,7 +3,7 @@ import {
   Type, AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Bold, Italic, Underline, RotateCw, Eye, EyeOff, Plus, 
   X, Layers, Sparkles, Trash2, ChevronDown, FlipHorizontal, FlipVertical,
-  Grid3x3, ArrowUp, ArrowDown, MoreVertical
+  Grid3x3, ArrowUp, ArrowDown, MoreVertical, Move, Box, Minus
 } from "lucide-react";
 import { Input } from "@/app/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
@@ -33,7 +33,7 @@ interface TextProps {
   canvas: any;
   properties: TextData;
   updateObject: (updates: Partial<TextData>) => void;
-  activeTab: "effects" | "transform" | "tools";
+  activeTab: "tools" | "transform" | "color";
   onDelete?: () => void;
 }
 
@@ -379,24 +379,27 @@ export const Text = ({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#F7F7F7] [scrollbar-width:thin] [scrollbar-color:#D1D1D1_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[#D1D1D1] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
-      <div className="px-3 py-3 space-y-1">
+    <div className="flex-1 overflow-y-auto bg-white [scrollbar-width:thin] [scrollbar-color:#D1D1D1_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[#D1D1D1] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
+      <div className="px-3 py-3 space-y-2.5">
         {/* Transform Tab Content */}
         {activeTab === "transform" && (
           <>
         {/* Typography Section */}
-        <div className="bg-white border border-[#E5E5E5] rounded-md px-3 py-2.5 space-y-2.5">
+        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg px-3 py-2.5 space-y-2.5">
           {/* Header with icon */}
           <div className="flex items-center justify-between">
-            <div className="text-[11px] font-medium text-[#161616] tracking-wide leading-tight">Typography</div>
-            <button className="w-5 h-5 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors">
-              <Grid3x3 className="w-3.5 h-3.5 text-[#6E6E6E]" />
+            <div className="flex items-center gap-2">
+              <Type className="w-3.5 h-3.5 text-blue-500" />
+              <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Typography</span>
+            </div>
+            <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
+              <Grid3x3 className="w-4.5 h-4.5 text-[#6E6E6E]" />
             </button>
           </div>
           
           {/* Font Family Dropdown - Large, full width */}
           <Select value={properties.fontFamily || "Inter"} onValueChange={handleFontChange}>
-            <SelectTrigger className="h-7 text-[11px] border border-[#E5E5E5] bg-[#F5F5F5] hover:border-[#D1D1D1] focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded text-[#161616]">
+            <SelectTrigger className="h-8 text-[12px] border border-[#E5E5E5] bg-white hover:border-[#D1D1D1] focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded text-[#161616]">
               <SelectValue placeholder="Inter" />
             </SelectTrigger>
             <SelectContent className="max-h-[300px]">
@@ -408,7 +411,7 @@ export const Text = ({
                 >
                   <div className="flex items-center justify-between w-full">
                     <span>{font.name}</span>
-                    <span className="text-[9px] text-[#9E9E9E] ml-2">{font.category}</span>
+                    <span className="text-[10px] text-[#9E9E9E] ml-2">{font.category}</span>
                   </div>
                 </SelectItem>
               ))}
@@ -416,10 +419,10 @@ export const Text = ({
           </Select>
 
           {/* Font Weight and Size - Side by side */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {/* Font Weight - Left */}
             <Select value={properties.fontWeight} onValueChange={handleFontWeightChange}>
-              <SelectTrigger className="h-6 flex-[1] text-[10px] border border-[#E5E5E5] bg-[#F5F5F5] hover:border-[#D1D1D1] focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded text-[#161616]">
+              <SelectTrigger className="h-7 flex-[1] text-[12px] border border-[#E5E5E5] bg-white hover:border-[#D1D1D1] focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded text-[#161616]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -432,26 +435,26 @@ export const Text = ({
             </Select>
             
             {/* Font Size - Right */}
-            <div className="flex-[1.3] flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-[#F5F5F5] h-6">
+            <div className="flex-[1.3] flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white h-7">
               <Input
                 type="number"
                 value={Math.round(properties.fontSize)}
                 onChange={(e) => handleFontSizeChange(Number(e.target.value))}
-                className="h-6 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616] flex-1"
-                style={{ fontSize: '12px' }}
+                className="h-7 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616] flex-1"
+                style={{ fontSize: '13px' }}
                 min={1}
                 max={500}
               />
-              <ChevronDown className="w-3 h-3 text-[#6E6E6E] mr-1.5 flex-shrink-0" />
+              <ChevronDown className="w-3.5 h-3.5 text-[#6E6E6E] mr-2 flex-shrink-0" />
             </div>
           </div>
 
           {/* Line Height and Letter Spacing - Side by side */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {/* Line Height - Left */}
             <div className="flex-1">
-              <span className="text-[10px] text-[#6E6E6E] mb-1 block">Line height</span>
-              <div className="group flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-[#F5F5F5] h-6 relative">
+              <span className="text-[11px] text-[#6E6E6E] mb-1 block">Line height</span>
+              <div className="group flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white h-7 relative">
                 <svg className="w-3.5 h-3.5 text-[#6E6E6E] ml-1.5 flex-shrink-0" viewBox="0 0 16 16" fill="none">
                   <line x1="2" y1="4" x2="14" y2="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   <text x="8" y="10" textAnchor="middle" fontSize="8" fill="currentColor">A</text>
@@ -470,8 +473,8 @@ export const Text = ({
                     }
                   }}
                   onFocus={(e) => e.target.select()}
-                  className="h-6 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616] cursor-text flex-1"
-                  style={{ fontSize: '12px' }}
+                  className="h-7 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616] cursor-text flex-1"
+                  style={{ fontSize: '13px' }}
                 />
                 {/* Arrow controls - visible on hover */}
                 <div className="absolute right-1 flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
@@ -505,8 +508,8 @@ export const Text = ({
             
             {/* Letter Spacing - Right */}
             <div className="flex-1">
-              <span className="text-[10px] text-[#6E6E6E] mb-1 block">Letter spacing</span>
-              <div className="group flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-[#F5F5F5] h-6 relative">
+              <span className="text-[11px] text-[#6E6E6E] mb-1 block">Letter spacing</span>
+              <div className="group flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white h-7 relative">
                 <svg className="w-3.5 h-3.5 text-[#6E6E6E] ml-1.5 flex-shrink-0" viewBox="0 0 16 16" fill="none">
                   <line x1="2" y1="2" x2="2" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   <text x="8" y="10" textAnchor="middle" fontSize="8" fill="currentColor">A</text>
@@ -521,8 +524,8 @@ export const Text = ({
                     if (!isNaN(num)) handleLetterSpacingChange(Math.max(-10, Math.min(50, num)));
                   }}
                   onFocus={(e) => e.target.select()}
-                  className="h-6 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616] cursor-text flex-1"
-                  style={{ fontSize: '12px' }}
+                  className="h-7 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616] cursor-text flex-1"
+                  style={{ fontSize: '13px' }}
                 />
                 {/* Arrow controls - visible on hover */}
                 <div className="absolute right-1 flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
@@ -557,42 +560,42 @@ export const Text = ({
 
           {/* Alignment - Two gray boxes with smaller buttons */}
           <div className="space-y-1">
-            <span className="text-[10px] text-[#6E6E6E]">Alignment</span>
+            <span className="text-[11px] text-[#6E6E6E]">Alignment</span>
             <div className="flex items-center gap-2">
               {/* Horizontal Alignment Box */}
               <div className="bg-[#F5F5F5] border border-[#E5E5E5] rounded px-1.5 py-1 flex items-center gap-0.5">
                 <button
                   onClick={() => handleAlign('left')}
-                  className={`h-5 w-5 flex items-center justify-center rounded transition-colors ${
+                  className={`h-6 w-6 flex items-center justify-center rounded transition-colors ${
                     properties.textAlign === 'left' 
                       ? 'bg-[#18A0FB] text-white' 
                       : 'hover:bg-[#E0E0E0]'
                   }`}
                   title="Left align"
                 >
-                  <AlignLeft className="w-3 h-3" />
+                  <AlignLeft className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => handleAlign('center')}
-                  className={`h-5 w-5 flex items-center justify-center rounded transition-colors ${
+                  className={`h-6 w-6 flex items-center justify-center rounded transition-colors ${
                     properties.textAlign === 'center' 
                       ? 'bg-[#18A0FB] text-white' 
                       : 'hover:bg-[#E0E0E0]'
                   }`}
                   title="Center align"
                 >
-                  <AlignCenter className="w-3 h-3" />
+                  <AlignCenter className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => handleAlign('right')}
-                  className={`h-5 w-5 flex items-center justify-center rounded transition-colors ${
+                  className={`h-6 w-6 flex items-center justify-center rounded transition-colors ${
                     properties.textAlign === 'right' 
                       ? 'bg-[#18A0FB] text-white' 
                       : 'hover:bg-[#E0E0E0]'
                   }`}
                   title="Right align"
                 >
-                  <AlignRight className="w-3 h-3" />
+                  <AlignRight className="w-3.5 h-3.5" />
                 </button>
               </div>
               
@@ -600,14 +603,14 @@ export const Text = ({
               <div className="bg-[#F5F5F5] border border-[#E5E5E5] rounded px-1.5 py-1 flex items-center gap-0.5">
                 <button
                   onClick={() => handleVerticalAlign('top')}
-                  className={`h-5 w-5 flex items-center justify-center rounded transition-colors ${
+                  className={`h-6 w-6 flex items-center justify-center rounded transition-colors ${
                     verticalAlign === 'top' 
                       ? 'bg-[#18A0FB] text-white' 
                       : 'hover:bg-[#E0E0E0]'
                   }`}
                   title="Top align"
                 >
-                  <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
                     {/* Horizontal line at top */}
                     <line x1="2" y1="3" x2="14" y2="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                     {/* Vertical line */}
@@ -618,14 +621,14 @@ export const Text = ({
                 </button>
                 <button
                   onClick={() => handleVerticalAlign('middle')}
-                  className={`h-5 w-5 flex items-center justify-center rounded transition-colors ${
+                  className={`h-6 w-6 flex items-center justify-center rounded transition-colors ${
                     verticalAlign === 'middle' 
                       ? 'bg-[#18A0FB] text-white' 
                       : 'hover:bg-[#E0E0E0]'
                   }`}
                   title="Middle align"
                 >
-                  <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
                     {/* Horizontal line in center */}
                     <line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                     {/* Vertical line */}
@@ -637,14 +640,14 @@ export const Text = ({
                 </button>
                 <button
                   onClick={() => handleVerticalAlign('bottom')}
-                  className={`h-5 w-5 flex items-center justify-center rounded transition-colors ${
+                  className={`h-6 w-6 flex items-center justify-center rounded transition-colors ${
                     verticalAlign === 'bottom' 
                       ? 'bg-[#18A0FB] text-white' 
                       : 'hover:bg-[#E0E0E0]'
                   }`}
                   title="Bottom align"
                 >
-                  <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
                     {/* Horizontal line at bottom */}
                     <line x1="2" y1="13" x2="14" y2="13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                     {/* Vertical line */}
@@ -659,129 +662,139 @@ export const Text = ({
         </div>
 
         {/* Position Section */}
-        <div className="bg-white border border-[#E5E5E5] rounded-md px-3 py-2.5 space-y-2.5">
-          <div className="text-[11px] font-medium text-[#161616] tracking-wide leading-tight">Position</div>
+        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg px-3 py-2.5 space-y-2.5">
+          <div className="flex items-center gap-2">
+            <Move className="w-3.5 h-3.5 text-blue-500" />
+            <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Position</span>
+          </div>
           
           {/* Alignment icons - 6 greyed out icons in 2 rows */}
-          <div className="grid grid-cols-3 gap-1 mb-2">
+          <div className="grid grid-cols-3 gap-1.5 mb-2">
             {/* Align Left */}
-            <button className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
-              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
+            <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
+              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
                 <path d="M2 4H10M2 8H10M2 12H10" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             </button>
             {/* Align Center Horizontal */}
-            <button className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
-              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
+            <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
+              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
                 <path d="M3 4H13M3 8H13M3 12H13" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             </button>
             {/* Align Right */}
-            <button className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
-              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
+            <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
+              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
                 <path d="M6 4H14M6 8H14M6 12H14" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             </button>
             {/* Align Top */}
-            <button className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
-              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
+            <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
+              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
                 <path d="M4 2V10M8 2V10M12 2V10" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             </button>
             {/* Align Center Vertical */}
-            <button className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
-              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
+            <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
+              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
                 <path d="M4 3V13M8 3V13M12 3V13" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             </button>
             {/* Align Bottom */}
-            <button className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
-              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
+            <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
+              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
                 <path d="M4 6V14M8 6V14M12 6V14" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             </button>
           </div>
 
           {/* X and Y Position */}
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-[#F5F5F5]">
-              <span className="text-[10px] text-[#6E6E6E] px-1.5 py-1 font-medium">X</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
+              <span className="text-[11px] text-[#6E6E6E] px-2 py-1 font-medium">X</span>
               <Input
                 type="number"
                 value={Math.round(properties.x)}
                 onChange={(e) => updateObject({ x: Number(e.target.value) })}
-                className="h-6 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
-                style={{ fontSize: '12px' }}
+                className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
+                style={{ fontSize: '13px' }}
               />
             </div>
-            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-[#F5F5F5]">
-              <span className="text-[10px] text-[#6E6E6E] px-1.5 py-1 font-medium">Y</span>
+            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
+              <span className="text-[11px] text-[#6E6E6E] px-2 py-1 font-medium">Y</span>
               <Input
                 type="number"
                 value={Math.round(properties.y)}
                 onChange={(e) => updateObject({ y: Number(e.target.value) })}
-                className="h-6 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
-                style={{ fontSize: '12px' }}
+                className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
+                style={{ fontSize: '13px' }}
               />
             </div>
           </div>
 
           {/* Rotation with flip icons */}
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-[#F5F5F5]">
-              <RotateCw className="w-2.5 h-2.5 text-[#6E6E6E] ml-1.5" />
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
+              <RotateCw className="w-3 h-3 text-[#6E6E6E] ml-2" />
               <Input
                 type="number"
                 value={Math.round(properties.rotation)}
                 onChange={(e) => updateObject({ rotation: Number(e.target.value) })}
-                className="h-6 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
+                className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
                 placeholder="0"
-                style={{ fontSize: '12px' }}
+                style={{ fontSize: '13px' }}
               />
-              <span className="text-[10px] text-[#6E6E6E] pr-1.5">°</span>
+              <span className="text-[11px] text-[#6E6E6E] pr-2">°</span>
             </div>
-            <button className="w-7 h-7 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
-              <FlipHorizontal className="w-4 h-4 text-[#6E6E6E]" />
+            <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
+              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
+                <path d="M8 2L2 8L8 14M14 2L8 8L14 14" stroke="currentColor" className="text-[#6E6E6E]" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </button>
-            <button className="w-7 h-7 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
-              <FlipVertical className="w-4 h-4 text-[#6E6E6E]" />
+            <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
+              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
+                <path d="M2 8L8 2L14 8M2 8L8 14L14 8" stroke="currentColor" className="text-[#6E6E6E]" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </button>
           </div>
         </div>
 
         {/* Stroke/Outline Section */}
-        <div className="bg-white border border-[#E5E5E5] rounded-md px-3 py-2.5 space-y-2.5">
+        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg px-3 py-2.5 space-y-2.5">
           <div className="flex items-center justify-between">
-            <div className="text-[11px] font-medium text-[#161616] tracking-wide leading-tight">Outline</div>
+            <div className="flex items-center gap-2">
+              <Box className="w-3.5 h-3.5 text-blue-500" />
+              <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Outline</span>
+            </div>
             <button 
-              className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors"
+              className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors"
               onClick={() => setStrokeVisible(!strokeVisible)}
             >
-              {strokeVisible ? <Eye className="w-4 h-4 text-[#6E6E6E]" /> : <EyeOff className="w-4 h-4 text-[#6E6E6E]" />}
+              {strokeVisible ? <Eye className="w-4.5 h-4.5 text-[#6E6E6E]" /> : <EyeOff className="w-4.5 h-4.5 text-[#6E6E6E]" />}
             </button>
           </div>
           
           {/* Stroke Width */}
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-[#F5F5F5]">
-              <span className="text-[10px] text-[#6E6E6E] px-1.5 py-1 font-medium">W</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
+              <Minus className="w-4 h-4 text-[#6E6E6E] ml-2" />
               <Input
                 type="number"
                 value={properties.strokeWidth}
                 onChange={(e) => updateObject({ strokeWidth: Number(e.target.value) })}
-                className="h-6 w-14 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
+                className="h-7 w-14 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
                 min={0}
                 max={50}
-                style={{ fontSize: '12px' }}
+                style={{ fontSize: '13px' }}
               />
             </div>
           </div>
 
           {/* Stroke Color */}
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-[#F5F5F5] flex-1">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white flex-1">
               <div 
-                className="h-5 w-5 rounded border border-[#D1D1D1] cursor-pointer flex-shrink-0 ml-1"
+                className="h-6 w-6 rounded border border-[#D1D1D1] cursor-pointer flex-shrink-0 ml-1"
                 style={{ backgroundColor: properties.stroke }}
                 onClick={() => {
                   const input = document.createElement('input');
@@ -802,25 +815,29 @@ export const Text = ({
                   value = value.replace('#', '');
                   updateObject({ stroke: value ? `#${value.toUpperCase()}` : '#000000' });
                 }}
-                className="h-6 text-[10px] bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 flex-1 text-[#161616]"
+                className="h-7 text-[11px] bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 flex-1 text-[#161616]"
                 placeholder="#000000"
               />
+              <span className="text-[11px] text-[#6E6E6E] pr-2">100%</span>
             </div>
-            <button className="w-7 h-7 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
-              <X className="w-4 h-4 text-[#6E6E6E]" />
+            <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
+              <X className="w-4.5 h-4.5 text-[#6E6E6E]" />
             </button>
           </div>
         </div>
           </>
         )}
 
-        {/* Effects Tab Content */}
-        {activeTab === "effects" && (
+        {/* Tools Tab Content */}
+        {activeTab === "tools" && (
           <>
           {/* Shadow Effects */}
-          <div className="bg-white border border-[#E5E5E5] rounded-md px-3 py-2.5 space-y-2.5">
+          <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg px-3 py-2.5 space-y-2.5">
             <div className="flex items-center justify-between">
-              <div className="text-[11px] font-medium text-[#161616] tracking-wide leading-tight">Shadow</div>
+              <div className="flex items-center gap-2">
+                <Layers className="w-3.5 h-3.5 text-blue-500" />
+                <span className="text-[11px] font-medium text-[#161616] tracking-wide leading-tight">Shadow</span>
+              </div>
               <div className="flex items-center gap-0.5">
                 <button 
                   onClick={() => setShadowEnabled(!shadowEnabled)}
@@ -919,7 +936,7 @@ export const Text = ({
 
                 {/* Shadow Color */}
                 <div className="flex items-center gap-1.5">
-                  <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-[#F5F5F5] flex-1">
+                  <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white flex-1">
                     <div 
                       className="h-5 w-5 rounded border border-[#D1D1D1] cursor-pointer flex-shrink-0 ml-1"
                       style={{ backgroundColor: shadowColor }}
@@ -958,9 +975,9 @@ export const Text = ({
         {activeTab === "tools" && (
           <>
           {/* Text Transform */}
-          <div className="bg-white border border-[#E5E5E5] rounded-md px-3 py-2.5 space-y-2.5">
+          <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg px-3 py-2.5 space-y-2.5">
             <div className="text-[11px] font-medium text-[#161616] tracking-wide leading-tight">Transform</div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <button className="flex-1 h-7 text-[10px] border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
                 UPPERCASE
               </button>

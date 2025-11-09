@@ -82,7 +82,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     letterSpacingPx: 0,
   });
 
-  const [activeTab, setActiveTab] = useState<"effects" | "transform" | "tools">("transform");
+  const [activeTab, setActiveTab] = useState<"tools" | "transform" | "color">("tools");
   const [lockAspectRatio, setLockAspectRatio] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(1);
   const [sidebarWidth, setSidebarWidth] = useState(250);
@@ -322,7 +322,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     <div
       ref={sidebarRef}
       className={cn(
-        "fixed top-12 right-0 bg-[#F7F7F7] border-l border-[#E5E5E5] z-50 flex flex-col transition-all duration-300 ease-in-out shadow-lg",
+        "fixed top-12 right-0 bg-white border-l border-[#E5E5E5] z-50 flex flex-col transition-all duration-300 ease-in-out shadow-lg",
         isResizing && "transition-none"
       )}
       style={{ 
@@ -341,89 +341,108 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         }}
       />
       
-      {/* Colors section at top */}
-      <Colors selectedObject={selectedObject} canvas={canvas} initialColor={properties.fill} onChangeHex={(hex) => updateObject({ fill: hex })} />
-
-      {/* Tabs Header */}
-      <div className="flex items-center justify-between border-b border-[#E5E5E5] bg-white">
+      {/* Tabs Header at the very top */}
+      <div className="flex items-center justify-between border-b border-[#E5E5E5] bg-white shrink-0">
         <div className="flex">
           <button
-            onClick={() => setActiveTab("effects")}
+            onClick={() => setActiveTab("tools")}
             className={cn(
-              "px-3 py-2 text-[11px] font-medium transition-colors",
-              activeTab === "effects"
-                ? "text-[#161616] border-b-2 border-[#161616]"
-                : "text-[#6E6E6E] hover:text-[#161616]"
+              "px-4 py-2.5 text-xs font-semibold transition-colors",
+              activeTab === "tools"
+                ? "text-[#161616] border-b-2 border-blue-500 bg-slate-50"
+                : "text-[#6E6E6E] hover:text-[#161616] hover:bg-slate-50"
             )}
           >
-            Effects
+            Tools
           </button>
           <button
             onClick={() => setActiveTab("transform")}
             className={cn(
-              "px-3 py-2 text-[11px] font-medium transition-colors",
+              "px-4 py-2.5 text-xs font-semibold transition-colors",
               activeTab === "transform"
-                ? "text-[#161616] border-b-2 border-[#161616]"
-                : "text-[#6E6E6E] hover:text-[#161616]"
+                ? "text-[#161616] border-b-2 border-blue-500 bg-slate-50"
+                : "text-[#6E6E6E] hover:text-[#161616] hover:bg-slate-50"
             )}
           >
             Transform
           </button>
           <button
-            onClick={() => setActiveTab("tools")}
+            onClick={() => setActiveTab("color")}
             className={cn(
-              "px-3 py-2 text-[11px] font-medium transition-colors",
-              activeTab === "tools"
-                ? "text-[#161616] border-b-2 border-[#161616]"
-                : "text-[#6E6E6E] hover:text-[#161616]"
+              "px-4 py-2.5 text-xs font-semibold transition-colors",
+              activeTab === "color"
+                ? "text-[#161616] border-b-2 border-blue-500 bg-slate-50"
+                : "text-[#6E6E6E] hover:text-[#161616] hover:bg-slate-50"
             )}
           >
-            Tools
+            Color
           </button>
         </div>
         <div className="flex items-center gap-0.5 pr-2">
           <button
             onClick={handleDelete}
-            className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors"
+            className="w-7 h-7 flex items-center justify-center hover:bg-red-50 rounded transition-colors group"
             title="Delete"
           >
-            <Trash2 className="w-4 h-4 text-[#6E6E6E]" />
+            <Trash2 className="w-4 h-4 text-[#6E6E6E] group-hover:text-red-600" />
           </button>
         </div>
       </div>
 
-      {/* Content */}
-      {isImage ? (
-        <Properties 
-          selectedObject={selectedObject}
-          canvas={canvas}
-          properties={properties}
-          updateObject={updateObject}
-          cropRatio={cropRatio}
-          handleCropRatioChange={handleCropRatioChange}
-          activeTab={activeTab}
-          onDelete={handleDelete}
-          onImageEdit={onImageEdit}
-        />
-      ) : isText ? (
-        <Text
-          selectedObject={selectedObject}
-          canvas={canvas}
-          properties={properties}
-          updateObject={updateObject}
-          activeTab={activeTab}
-          onDelete={handleDelete}
-        />
-      ) : (
-        <Shapes
-          selectedObject={selectedObject}
-          canvas={canvas}
-          properties={properties}
-          updateObject={updateObject}
-          activeTab={activeTab}
-          onDelete={handleDelete}
-        />
-      )}
+      {/* Scrollable Content Area */}
+      <div className={cn(
+        "flex-1 overflow-y-auto overflow-x-hidden",
+        activeTab === "color" 
+          ? "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          : ""
+      )}>
+        {/* Color Tab - Shows Colors Component */}
+        {activeTab === "color" && (
+          <Colors 
+            selectedObject={selectedObject} 
+            canvas={canvas} 
+            initialColor={properties.fill} 
+            onChangeHex={(hex) => updateObject({ fill: hex })} 
+          />
+        )}
+
+        {/* Tools/Transform Tabs - Show component content */}
+        {activeTab !== "color" && (
+          <>
+            {isImage ? (
+              <Properties 
+                selectedObject={selectedObject}
+                canvas={canvas}
+                properties={properties}
+                updateObject={updateObject}
+                cropRatio={cropRatio}
+                handleCropRatioChange={handleCropRatioChange}
+                activeTab={activeTab}
+                onDelete={handleDelete}
+                onImageEdit={onImageEdit}
+              />
+            ) : isText ? (
+              <Text
+                selectedObject={selectedObject}
+                canvas={canvas}
+                properties={properties}
+                updateObject={updateObject}
+                activeTab={activeTab}
+                onDelete={handleDelete}
+              />
+            ) : (
+              <Shapes
+                selectedObject={selectedObject}
+                canvas={canvas}
+                properties={properties}
+                updateObject={updateObject}
+                activeTab={activeTab}
+                onDelete={handleDelete}
+              />
+            )}
+          </>
+        )}
+      </div>
 
     </div>
   );

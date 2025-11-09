@@ -6,7 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { 
   Type, Square, Circle as CircleIcon, Minus, Pencil, Plus, 
-  MousePointer, Hand, ChevronDown, PenTool, Layout, Pipette, 
+  MousePointer, Hand, ChevronDown, PenTool, Frame, Pipette, 
   Paintbrush, Move, Layers, Grid, Ruler, Eraser, Image as ImageIcon 
 } from "lucide-react";
 
@@ -48,13 +48,12 @@ export function Toolbar({
   return (
     <TooltipProvider>
       <div
-        className={`absolute flex flex-col gap-2.5 bg-white px-1.5 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-border/60 ring-1 ring-black/5 z-50 transition-all duration-200 ease-out overflow-hidden ${isToolbarExpanded ? 'pt-0 pb-1.5' : 'py-3'}`}
+        className="absolute flex flex-col gap-2.5 bg-white px-1.5 py-3 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-border/60 ring-1 ring-black/5 z-50 transition-all duration-200 ease-out"
         style={{
           left: `${leftOffset}px`,
-          top: isToolbarExpanded ? '0px' : 'calc((100vh - 76px) / 2 - 20px)',
-          transform: isToolbarExpanded ? 'translateY(0)' : 'translateY(-50%)',
-          maxHeight: isToolbarExpanded ? 'calc(100vh - 6px)' : 'none',
-          transition: 'left 200ms cubic-bezier(0.4, 0, 0.2, 1), top 200ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms cubic-bezier(0.4, 0, 0.2, 1), max-height 200ms cubic-bezier(0.4, 0, 0.2, 1)'
+          top: 'calc((100vh - 76px) / 2 - 20px)',
+          transform: 'translateY(-50%)',
+          transition: 'left 200ms cubic-bezier(0.4, 0, 0.2, 1), top 200ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms cubic-bezier(0.4, 0, 0.2, 1)'
         }}
       >
         {/* Pointer/Hand tool (split button with dropdown chevron) */}
@@ -63,7 +62,7 @@ export function Toolbar({
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
-                className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'pointer' || activeToolbarButton === 'hand' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`}
+                className={`h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'pointer' || activeToolbarButton === 'hand' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`}
                 aria-label="Current Tool"
                 onClick={() => {
                   const next = activeTool === 'hand' ? 'pointer' : 'hand';
@@ -100,7 +99,7 @@ export function Toolbar({
         {/* Text */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button onClick={() => { setActiveToolbarButton('text'); onAddText(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'text' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Add Text">
+            <Button onClick={() => { setActiveToolbarButton('text'); onAddText(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'text' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Add Text">
               <Type />
             </Button>
           </TooltipTrigger>
@@ -111,7 +110,7 @@ export function Toolbar({
         <div className="relative inline-flex items-center">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => { setActiveToolbarButton('shape'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'shape' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Add Shape">
+              <Button onClick={() => { setActiveToolbarButton('shape'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'shape' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Add Shape">
                 {activeShape === 'rect' && <Square />}
                 {activeShape === 'circle' && <CircleIcon />}
                 {activeShape === 'line' && <Minus />}
@@ -141,35 +140,23 @@ export function Toolbar({
           </DropdownMenu>
         </div>
 
-        {/* Upload */}
+        {/* Artboard */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button onClick={() => { setActiveToolbarButton('upload'); onUploadClick(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'upload' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Upload Image">
-              <Pencil />
+            <Button onClick={() => { setActiveToolbarButton('artboard'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'artboard' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Artboard">
+              <Frame />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={12} className="z-[60]">Upload Image</TooltipContent>
+          <TooltipContent side="right" sideOffset={12} className="z-[60]">Artboard</TooltipContent>
         </Tooltip>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            setActiveToolbarButton('upload');
-            onFileChange(e);
-          }}
-        />
 
-        {/* Expanded Tools Section */}
-        <div className={`transition-all duration-200 ease-out ${isToolbarExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'} overflow-hidden flex flex-col gap-2.5 ${isToolbarExpanded ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        {/* Expanded Tools Section - COMMENTED OUT */}
+        {/* <div className={`transition-all duration-200 ease-out ${isToolbarExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'} overflow-hidden flex flex-col gap-2.5 ${isToolbarExpanded ? 'pointer-events-auto' : 'pointer-events-none'}`}
           style={{
             transition: 'max-height 200ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms cubic-bezier(0.4, 0, 0.2, 1)'
           }}>
-          {/* Divider */}
           <div className="w-3/4 h-px bg-black/30 mx-1" />
 
-          {/* Image Tool (replaces Artboard) */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => { setActiveToolbarButton('upload'); onUploadClick(); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'upload' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Add Image">
@@ -179,7 +166,6 @@ export function Toolbar({
             <TooltipContent side="right" sideOffset={12} className="z-[60]">Add Image</TooltipContent>
           </Tooltip>
 
-          {/* Pen Tool */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => { setActiveToolbarButton('pen'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'pen' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Pen Tool">
@@ -189,7 +175,6 @@ export function Toolbar({
             <TooltipContent side="right">Pen Tool</TooltipContent>
           </Tooltip>
 
-          {/* Color Picker Tool */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => { setActiveToolbarButton('colorPicker'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'colorPicker' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Color Picker">
@@ -199,7 +184,6 @@ export function Toolbar({
             <TooltipContent side="right" sideOffset={12} className="z-[60]">Color Picker</TooltipContent>
           </Tooltip>
 
-          {/* Brush Tool */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => { setActiveToolbarButton('brush'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'brush' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Brush">
@@ -209,7 +193,6 @@ export function Toolbar({
             <TooltipContent side="right" sideOffset={12} className="z-[60]">Brush</TooltipContent>
           </Tooltip>
 
-          {/* Move Tool */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => { setActiveToolbarButton('move'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'move' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Move">
@@ -219,7 +202,6 @@ export function Toolbar({
             <TooltipContent side="right" sideOffset={12} className="z-[60]">Move</TooltipContent>
           </Tooltip>
 
-          {/* Layers Tool */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => { setActiveToolbarButton('layers'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'layers' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Layers">
@@ -229,7 +211,6 @@ export function Toolbar({
             <TooltipContent side="right" sideOffset={12} className="z-[60]">Layers</TooltipContent>
           </Tooltip>
 
-          {/* Grid Tool */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => { setActiveToolbarButton('grid'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'grid' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Grid">
@@ -239,7 +220,6 @@ export function Toolbar({
             <TooltipContent side="right" sideOffset={12} className="z-[60]">Grid</TooltipContent>
           </Tooltip>
 
-          {/* Ruler Tool */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => { setActiveToolbarButton('ruler'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'ruler' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Ruler">
@@ -249,7 +229,6 @@ export function Toolbar({
             <TooltipContent side="right" sideOffset={12} className="z-[60]">Ruler</TooltipContent>
           </Tooltip>
 
-          {/* Eraser Tool */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => { setActiveToolbarButton('eraser'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'eraser' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Eraser">
@@ -259,7 +238,6 @@ export function Toolbar({
             <TooltipContent side="right" sideOffset={12} className="z-[60]">Eraser</TooltipContent>
           </Tooltip>
 
-          {/* Collapse Button (only visible when expanded) */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button 
@@ -278,29 +256,27 @@ export function Toolbar({
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={12} className="z-[60]">Collapse Toolbar</TooltipContent>
           </Tooltip>
-        </div>
+        </div> */}
 
-        {/* Reference / Expand Button */}
-        {!isToolbarExpanded && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button 
-                onClick={() => { 
-                  setIsToolbarExpanded(true);
-                  setActiveToolbarButton('reference');
-                }} 
-                variant="ghost" 
-                className="h-9 w-9 p-0 rounded-lg text-foreground/80 hover:text-foreground hover:bg-foreground/5" 
-                aria-label="Expand"
-              >
-                <div className="relative w-[32px] h-[32px] bg-gray-700 rounded-lg flex items-center justify-center">
-                  <Plus className="w-6 h-6 text-white" />
-                </div>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={12} className="z-[60]">Expand Toolbar</TooltipContent>
-          </Tooltip>
-        )}
+        {/* Upload Image Button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              onClick={() => { 
+                setActiveToolbarButton('upload');
+                onUploadClick();
+              }} 
+              variant="ghost" 
+              className="h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none text-foreground/80 hover:text-foreground hover:bg-foreground/5" 
+              aria-label="Upload Image"
+            >
+              <div className="relative w-[32px] h-[32px] bg-gray-700 rounded-lg flex items-center justify-center">
+                <Plus className="w-6 h-6 text-white" />
+              </div>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={12} className="z-[60]">Upload Image</TooltipContent>
+        </Tooltip>
       </div>
     </TooltipProvider>
   );
