@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { Mountain, Square, RotateCw, Maximize, Droplet, Minus, Layers, Palette, Lock, ChevronDown, ChevronUp, Eye, EyeOff, Plus, HelpCircle, Grid3x3, X, Link, Sun, Zap, Wand2, Trash2, Sparkles, Loader2, Move, Type, Box, Sliders, Crop } from "lucide-react";
+import type { ReactNode } from "react";
+import { Mountain, Square, RotateCw, Maximize, Droplet, Minus, Layers, Palette, Lock, ChevronDown, ChevronUp, Eye, EyeOff, Plus, HelpCircle, Grid3x3, X, Link, Sun, Zap, Wand2, Trash2, Sparkles, Loader2, Move, Type, Box, Sliders, Crop, Brain, Shuffle, Paintbrush, Globe } from "lucide-react";
 import { Input } from "@/app/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { Textarea } from "@/app/components/ui/textarea";
 import { Button } from "@/app/components/ui/button";
 import { FabricObject, FabricImage, filters } from "fabric";
 import { toast } from "sonner";
+import { EditSpace } from "@/app/components/EditSpace";
 
 interface PropertiesData {
   x: number;
@@ -38,6 +40,47 @@ interface PropertiesProps {
   onDelete?: () => void;
   onImageEdit?: (newImageUrl: string) => void;
 }
+
+interface AdjustmentSliderProps {
+  label: string;
+  icon?: ReactNode;
+  valueLabel: string;
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  max: number;
+  step: number;
+}
+
+const AdjustmentSlider = ({
+  label,
+  icon,
+  valueLabel,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+}: AdjustmentSliderProps) => (
+  <div className="space-y-1.5">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-1.5">
+        {icon}
+        <span className="text-[11px] text-[#161616]">{label}</span>
+      </div>
+      <span className="text-[11px] text-[#6E6E6E] font-mono">{valueLabel}</span>
+    </div>
+    <input
+      type="range"
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="w-full h-2 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
+    />
+  </div>
+);
 
 // Edit Image Section Component (inline)
 const EditImageSection = ({ imageElement, onEditComplete }: { imageElement: HTMLImageElement | null; onEditComplete: (newImageUrl: string) => void }) => {
@@ -102,29 +145,29 @@ const EditImageSection = ({ imageElement, onEditComplete }: { imageElement: HTML
   };
 
   return (
-    <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg mb-2.5">
+    <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
       {/* Header with dropdown button */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-[#F5F5F5] transition-colors rounded-lg"
+        className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
       >
         <div className="flex items-center gap-2">
-          <Wand2 className="w-3.5 h-3.5 text-blue-500" />
-          <span className="text-[11px] font-medium text-[#161616] tracking-wide leading-tight">Smart Edit</span>
+          <Wand2 className="w-4 h-4 text-blue-500" />
+          <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Smart Edit</span>
         </div>
         {isExpanded ? (
-          <ChevronUp className="w-3.5 h-3.5 text-[#6E6E6E]" />
+          <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
         ) : (
-          <ChevronDown className="w-3.5 h-3.5 text-[#6E6E6E]" />
+          <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
         )}
       </button>
 
       {/* Collapsible content */}
       {isExpanded && (
-        <div className="px-3 pb-2.5 space-y-2.5 border-t border-[#E5E5E5] pt-2.5">
+        <div className="px-3 pb-3 space-y-2.5 border-t border-[#E5E5E5] pt-3">
           {/* Image Preview */}
           {imageElement && (
-            <div className="rounded-lg border border-[#E5E5E5] overflow-hidden bg-[#F5F5F5] mb-2.5">
+            <div className="rounded-xl border border-[#E5E5E5] overflow-hidden bg-[#F5F5F5] mb-2.5">
               <img
                 src={imageElement.src}
                 alt="Selected image"
@@ -135,13 +178,13 @@ const EditImageSection = ({ imageElement, onEditComplete }: { imageElement: HTML
 
           {/* Text Input */}
           <div>
-            <p className="text-[10px] text-[#6E6E6E] mb-1.5">Describe your edit</p>
+            <p className="text-[11px] text-[#6E6E6E] mb-1.5">Describe your edit</p>
             <Textarea
               value={editPrompt}
               onChange={(e) => setEditPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="e.g., Make the background warmer..."
-              className="min-h-[60px] resize-none text-[10px] border border-[#E5E5E5] bg-white"
+              className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white"
               disabled={isEditing}
             />
           </div>
@@ -150,7 +193,7 @@ const EditImageSection = ({ imageElement, onEditComplete }: { imageElement: HTML
           <Button
             onClick={() => handleEdit()}
             disabled={isEditing || !editPrompt.trim()}
-            className="w-full h-7 text-[10px] rounded-lg gap-1.5"
+            className="w-full h-8 text-[11px] rounded-lg gap-1.5"
             size="sm"
           >
             {isEditing ? (
@@ -199,6 +242,45 @@ export const Properties = ({
   const [pixelate, setPixelate] = useState(0);
   const [sepia, setSepia] = useState(0);
   const [vintage, setVintage] = useState(0);
+  const [activeTool, setActiveTool] = useState<"crop" | "quickFx" | "adjustments" | "creativeDirector" | "promptRemixer" | "styleTransfer" | "sceneReimagine" | "smartEdit" | "upscale" | null>(null);
+  // Prompt states for AI tools in toolbar dropdowns
+  const [creativePrompt, setCreativePrompt] = useState("");
+  const [remixPrompt, setRemixPrompt] = useState("");
+  const [stylePrompt, setStylePrompt] = useState("");
+  const [reimaginePrompt, setReimaginePrompt] = useState("");
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [smartEditPrompt, setSmartEditPrompt] = useState("");
+
+  const runAiEditFromToolbar = async (prompt: string) => {
+    if (!onImageEdit) return;
+    if (!selectedObject || !(selectedObject instanceof FabricImage)) return;
+    const imgElement = (selectedObject as FabricImage).getElement() as HTMLImageElement;
+    if (!imgElement) return;
+    setIsAiProcessing(true);
+    try {
+      const canvasEl = document.createElement('canvas');
+      canvasEl.width = imgElement.naturalWidth;
+      canvasEl.height = imgElement.naturalHeight;
+      const ctx = canvasEl.getContext('2d');
+      if (!ctx) throw new Error("Could not get canvas context");
+      ctx.drawImage(imgElement, 0, 0);
+      const currentImageUrl = canvasEl.toDataURL('image/png');
+      const res = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, currentImageUrl, isEdit: true })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      if (data?.imageUrl) {
+        onImageEdit(data.imageUrl);
+      }
+    } catch (e) {
+      // ignore
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
 
   // Initialize effects from object
   useEffect(() => {
@@ -296,13 +378,422 @@ export const Properties = ({
   }, [brightness, contrast, saturation, highlights, shadows, exposure, vibrance, blur, noise, pixelate, sepia, vintage, isImage]);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-white [scrollbar-width:thin] [scrollbar-color:#D1D1D1_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[#D1D1D1] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
-      <div className="px-3 py-3 space-y-2.5">
-        {/* Transform Tab Content */}
-        {activeTab === "transform" && (
-          <>
+    <div className="flex-1 min-h-0 flex flex-col bg-white">
+      {activeTab === "tools" ? (
+        <>
+          {/* Fixed EditSpace at Top */}
+          <EditSpace
+            tool={activeTool}
+            isImage={isImage}
+            cropRatio={cropRatio}
+            handleCropRatioChange={handleCropRatioChange}
+            adjustments={{
+              brightness,
+              contrast,
+              saturation,
+              highlights,
+              shadows,
+              exposure,
+              vibrance,
+              blur,
+              noise,
+              pixelate,
+              sepia,
+              vintage,
+              opacity,
+              setBrightness,
+              setContrast,
+              setSaturation,
+              setHighlights,
+              setShadows,
+              setExposure,
+              setVibrance,
+              setBlur,
+              setNoise,
+              setPixelate,
+              setSepia,
+              setVintage,
+              setOpacity,
+            }}
+            selectedObject={selectedObject}
+            canvas={canvas}
+            onImageEdit={onImageEdit}
+          />
+          {/* Scrollable Tools Section Below */}
+          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar-track]:hidden [&::-webkit-scrollbar-thumb]:hidden">
+            <div className="space-y-2.5">
+              {/* Crop Section */}
+            <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                <button
+                onClick={() => setActiveTool(activeTool==='crop'? null : 'crop')}
+                className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                >
+                  <div className="flex items-center gap-2">
+                  <Crop className="w-4 h-4 text-[#3B82F6]" />
+                    <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Crop</span>
+                  </div>
+                  {activeTool === 'crop' ? (
+                    <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
+                  )}
+                </button>
+              <div
+                className={`overflow-hidden transition-all ${activeTool === 'crop' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+              >
+                <div className="pt-2 px-3 pb-3 space-y-2">
+                  <div className="text-[11px] text-[#6E6E6E]">Aspect ratio</div>
+                  <div className="flex items-center gap-1.5">
+                    <Select value={cropRatio} onValueChange={handleCropRatioChange}>
+                      <SelectTrigger className="h-7 flex-1 text-[11px] border border-[#E5E5E5] bg-white hover:border-[#D1D1D1] focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded text-[#161616]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Default</SelectItem>
+                        <SelectItem value="1:1">1:1 (Square)</SelectItem>
+                        <SelectItem value="16:9">16:9 (Widescreen)</SelectItem>
+                        <SelectItem value="4:3">4:3 (Standard)</SelectItem>
+                        <SelectItem value="3:2">3:2 (Photo)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="text-[10px] text-[#9E9E9E]">Use the crop handles in the workspace to refine the selection.</div>
+                </div>
+              </div>
+              </div>
+
+              {/* Quick FX Section */}
+              {isImage && (
+              <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                  <button
+                  onClick={() => setActiveTool(activeTool==='quickFx'? null : 'quickFx')}
+                  className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                  >
+                    <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#3B82F6]" />
+                      <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Quick FX</span>
+                    </div>
+                    {activeTool === 'quickFx' ? (
+                      <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
+                    )}
+                  </button>
+                <div
+                  className={`overflow-hidden transition-all ${activeTool === 'quickFx' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                  style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                >
+                  <div className="pt-2 px-3 pb-3 space-y-2">
+                    <div className="text-[11px] text-[#6E6E6E]">Choose a look</div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <Button variant="outline" size="sm" className="h-8 text-[11px] px-2"
+                        onClick={() => { setBrightness(0); setContrast(0); setSaturation(0); setHighlights(0); setShadows(0); setExposure(0); setVibrance(0); setBlur(0); setNoise(0); setPixelate(0); setSepia(0); setVintage(0); setOpacity(100); }}>
+                        Original
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-8 text-[11px] px-2"
+                        onClick={() => { setBrightness(0.1); setContrast(0.05); setSaturation(0.15); setVibrance(25); setHighlights(10); setShadows(-5); setExposure(10); setBlur(0); setNoise(0); setPixelate(0); setSepia(0); setVintage(0); }}>
+                        Warm Glow
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-8 text-[11px] px-2"
+                        onClick={() => { setBrightness(-0.05); setContrast(0.15); setSaturation(-0.1); setVibrance(-15); setHighlights(-10); setShadows(20); setExposure(-5); setBlur(0); setNoise(100); setPixelate(0); setSepia(20); setVintage(40); }}>
+                        Vintage Fade
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-8 text-[11px] px-2"
+                        onClick={() => { setBrightness(0); setContrast(0.25); setSaturation(0.05); setVibrance(10); setHighlights(5); setShadows(30); setExposure(5); setBlur(0); setNoise(0); setPixelate(0); setSepia(0); setVintage(0); }}>
+                        Dramatic
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                </div>
+              )}
+
+              {/* Adjustments Section */}
+              {isImage && (
+              <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                  <button
+                  onClick={() => setActiveTool(activeTool==='adjustments'? null : 'adjustments')}
+                  className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                  >
+                    <div className="flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-[#3B82F6]" />
+                      <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Adjustments</span>
+                    </div>
+                    {activeTool === 'adjustments' ? (
+                      <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
+                    )}
+                  </button>
+                <div
+                  className={`overflow-hidden transition-all ${activeTool === 'adjustments' ? 'max-h-[700px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                  style={{ transition: 'max-height 280ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 280ms cubic-bezier(0.4,0,0.2,1)' }}
+                >
+                  <div className="pt-2 px-3 pb-3 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <p className="text-[11px] text-[#6E6E6E]">Fine-tune the image.</p>
+                      <button
+                        className="h-7 px-2 text-[11px] border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors"
+                        onClick={() => { setBrightness(0); setContrast(0); setSaturation(0); setHighlights(0); setShadows(0); setExposure(0); setVibrance(0); setOpacity(100); }}>
+                        Reset
+                      </button>
+                    </div>
+                    <div className="space-y-2.5">
+                      <AdjustmentSlider label="Brightness" icon={<Sun className="w-3 h-3 text-[#6E6E6E]" />} valueLabel={`${Math.round(brightness * 100)}%`} min={-1} max={1} step={0.01} value={brightness} onChange={setBrightness} />
+                      <AdjustmentSlider label="Contrast" icon={<Zap className="w-3 h-3 text-[#6E6E6E]" />} valueLabel={`${Math.round(contrast * 100)}%`} min={-1} max={1} step={0.01} value={contrast} onChange={setContrast} />
+                      <AdjustmentSlider label="Saturation" icon={<Droplet className="w-3 h-3 text-[#6E6E6E]" />} valueLabel={`${Math.round(saturation * 100)}%`} min={-1} max={1} step={0.01} value={saturation} onChange={setSaturation} />
+                      <AdjustmentSlider label="Highlights" valueLabel={`${Math.round(highlights)}`} min={-100} max={100} step={1} value={highlights} onChange={setHighlights} />
+                      <AdjustmentSlider label="Shadows" valueLabel={`${Math.round(shadows)}`} min={-100} max={100} step={1} value={shadows} onChange={setShadows} />
+                      <AdjustmentSlider label="Exposure" valueLabel={`${Math.round(exposure)}`} min={-100} max={100} step={1} value={exposure} onChange={setExposure} />
+                      <AdjustmentSlider label="Vibrance" valueLabel={`${Math.round(vibrance)}`} min={-100} max={100} step={1} value={vibrance} onChange={setVibrance} />
+                      <AdjustmentSlider label="Opacity" icon={<Eye className="w-3 h-3 text-[#6E6E6E]" />} valueLabel={`${Math.round(opacity)}%`} min={0} max={100} step={1} value={opacity} onChange={setOpacity} />
+                    </div>
+                  </div>
+                </div>
+                </div>
+              )}
+
+              {/* AI-Powered Tools */}
+              {isImage && (
+                <>
+                  {/* Creative Director */}
+                <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                    <button
+                    onClick={() => setActiveTool(activeTool==='creativeDirector'? null : 'creativeDirector')}
+                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                    >
+                      <div className="flex items-center gap-2">
+                      <Brain className="w-4 h-4 text-[#3B82F6]" />
+                        <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Creative Director</span>
+                      </div>
+                      {activeTool === 'creativeDirector' ? (
+                        <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
+                      )}
+                    </button>
+                  <div
+                    className={`overflow-hidden transition-all ${activeTool === 'creativeDirector' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                    style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                  >
+                    <div className="pt-2 px-3 pb-3 space-y-2">
+                      <div className="text-[11px] text-[#6E6E6E]">Describe the direction to apply.</div>
+                      <Textarea value={creativePrompt} onChange={(e)=>setCreativePrompt(e.target.value)} placeholder="e.g., cinematic mood, dramatic lighting" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
+                      <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !creativePrompt.trim()} onClick={()=>runAiEditFromToolbar(creativePrompt)}>
+                        {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Processing...</>) : (<><Brain className="w-3 h-3" />Apply Direction</>)}
+                      </Button>
+                    </div>
+                  </div>
+                  </div>
+
+                  {/* Prompt Remixer */}
+                <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                    <button
+                    onClick={() => setActiveTool(activeTool==='promptRemixer'? null : 'promptRemixer')}
+                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                    >
+                      <div className="flex items-center gap-2">
+                      <Shuffle className="w-4 h-4 text-[#3B82F6]" />
+                        <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Prompt Remixer</span>
+                      </div>
+                      {activeTool === 'promptRemixer' ? (
+                        <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
+                      )}
+                    </button>
+                  <div
+                    className={`overflow-hidden transition-all ${activeTool === 'promptRemixer' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                    style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                  >
+                    <div className="pt-2 px-3 pb-3 space-y-2">
+                      <div className="text-[11px] text-[#6E6E6E]">Describe how to remix the image.</div>
+                      <Textarea value={remixPrompt} onChange={(e)=>setRemixPrompt(e.target.value)} placeholder="e.g., watercolor look, vintage film" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
+                      <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !remixPrompt.trim()} onClick={()=>runAiEditFromToolbar(remixPrompt)}>
+                        {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Remixing...</>) : (<><Shuffle className="w-3 h-3" />Remix Image</>)}
+                      </Button>
+                    </div>
+                  </div>
+                  </div>
+
+                  {/* Style Transfer */}
+                <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                    <button
+                    onClick={() => setActiveTool(activeTool==='styleTransfer'? null : 'styleTransfer')}
+                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                    >
+                      <div className="flex items-center gap-2">
+                      <Paintbrush className="w-4 h-4 text-[#3B82F6]" />
+                        <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Style Transfer</span>
+                      </div>
+                      {activeTool === 'styleTransfer' ? (
+                        <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
+                      )}
+                    </button>
+                  <div
+                    className={`overflow-hidden transition-all ${activeTool === 'styleTransfer' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                    style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                  >
+                    <div className="pt-2 px-3 pb-3 space-y-2">
+                      <div className="text-[11px] text-[#6E6E6E]">Describe the artistic style to apply.</div>
+                      <Textarea value={stylePrompt} onChange={(e)=>setStylePrompt(e.target.value)} placeholder="e.g., Van Gogh’s Starry Night" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
+                      <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !stylePrompt.trim()} onClick={()=>runAiEditFromToolbar(stylePrompt)}>
+                        {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Applying...</>) : (<><Paintbrush className="w-3 h-3" />Apply Style</>)}
+                      </Button>
+                    </div>
+                  </div>
+                  </div>
+
+                  {/* Scene Reimagine */}
+                <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                    <button
+                    onClick={() => setActiveTool(activeTool==='sceneReimagine'? null : 'sceneReimagine')}
+                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                    >
+                      <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-[#3B82F6]" />
+                        <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Scene Reimagine</span>
+                      </div>
+                      {activeTool === 'sceneReimagine' ? (
+                        <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
+                      )}
+                    </button>
+                  <div
+                    className={`overflow-hidden transition-all ${activeTool === 'sceneReimagine' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                    style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                  >
+                    <div className="pt-2 px-3 pb-3 space-y-2">
+                      <div className="text-[11px] text-[#6E6E6E]">Describe how to reimagine the scene.</div>
+                      <Textarea value={reimaginePrompt} onChange={(e)=>setReimaginePrompt(e.target.value)} placeholder="e.g., golden hour, winter snow" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
+                      <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !reimaginePrompt.trim()} onClick={()=>runAiEditFromToolbar(reimaginePrompt)}>
+                        {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Reimagining...</>) : (<><Globe className="w-3 h-3" />Reimagine Scene</>)}
+                      </Button>
+                    </div>
+                  </div>
+                  </div>
+                </>
+              )}
+
+              {/* Smart Edit (optional) */}
+              {isImage && onImageEdit && (
+              <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                  <button
+                    onClick={() => setActiveTool(activeTool==='smartEdit'? null : 'smartEdit')}
+                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                  >
+                    <div className="flex items-center gap-2">
+                    <Wand2 className="w-4 h-4 text-[#3B82F6]" />
+                      <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Smart Edit</span>
+                    </div>
+                    {activeTool === 'smartEdit' ? (
+                      <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
+                    )}
+                  </button>
+                <div
+                  className={`overflow-hidden transition-all ${activeTool === 'smartEdit' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                  style={{ transition: 'max-height 240ms cubic-bezier(0.4,0,0.2,1), opacity 180ms cubic-bezier(0.4,0,0.2,1), transform 240ms cubic-bezier(0.4,0,0.2,1)' }}
+                >
+                  <div className="pt-2 px-3 pb-3 space-y-2">
+                    {isImage && selectedObject && (
+                      <div className="rounded-xl border border-[#E5E5E5] overflow-hidden bg-[#F5F5F5]">
+                        <img
+                          src={(selectedObject as any).getElement?.()?.src || ""}
+                          alt="Selected image"
+                          className="w-full h-24 object-contain"
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-[11px] text-[#6E6E6E] mb-1.5">Describe your edit</p>
+                      <Textarea
+                        value={smartEditPrompt}
+                        onChange={(e) => setSmartEditPrompt(e.target.value)}
+                        placeholder="e.g., Make the background warmer..."
+                        className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white"
+                        disabled={isAiProcessing}
+                      />
+                    </div>
+                    <Button
+                      onClick={() => runAiEditFromToolbar(smartEditPrompt)}
+                      disabled={isAiProcessing || !smartEditPrompt.trim()}
+                      className="w-full h-8 text-[11px] rounded-lg gap-1.5"
+                      size="sm"
+                    >
+                      {isAiProcessing ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Applying...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3 h-3" />
+                          Apply Edit
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                </div>
+              )}
+
+              {/* Upscale Section */}
+              {isImage && (
+                <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                  <button
+                    onClick={() => setActiveTool(activeTool==='upscale'? null : 'upscale')}
+                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Mountain className="w-4 h-4 text-[#3B82F6]" />
+                      <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Upscale</span>
+                    </div>
+                    {activeTool === 'upscale' ? (
+                      <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
+                    )}
+                  </button>
+                <div
+                  className={`overflow-hidden transition-all ${activeTool === 'upscale' ? 'max-h-[400px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                  style={{ transition: 'max-height 240ms cubic-bezier(0.4,0,0.2,1), opacity 180ms cubic-bezier(0.4,0,0.2,1), transform 240ms cubic-bezier(0.4,0,0.2,1)' }}
+                >
+                  <div className="pt-2 px-3 pb-3 space-y-2">
+                    <p className="text-[11px] text-[#6E6E6E]">Upscale image quality and sharpen details.</p>
+                    <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm">
+                      <Sparkles className="w-3 h-3" />
+                      Upscale Image
+                    </Button>
+                    <div className="space-y-2">
+                      <Button variant="outline" size="sm" className="w-full h-8 text-[11px]">
+                        Sharpen Image
+                      </Button>
+                      <Button variant="outline" size="sm" className="w-full h-8 text-[11px]">
+                        Reduce Noise
+                      </Button>
+                      <Button variant="outline" size="sm" className="w-full h-8 text-[11px]">
+                        2× Super-Resolution
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Transform Tab Content */
+        <div className="flex-1 overflow-y-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar-track]:hidden [&::-webkit-scrollbar-thumb]:hidden">
+          <div className="space-y-2.5">
         {/* Position Section */}
-        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg px-3 py-2.5 space-y-2.5">
+        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl px-3 py-2.5 space-y-2.5">
           <div className="flex items-center gap-2">
             <Move className="w-3.5 h-3.5 text-blue-500" />
             <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Position</span>
@@ -400,7 +891,7 @@ export const Properties = ({
         </div>
 
         {/* Layout Section */}
-        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg px-3 py-2.5 space-y-2.5">
+        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl px-3 py-2.5 space-y-2.5">
           <div className="flex items-center gap-2">
             <Maximize className="w-3.5 h-3.5 text-blue-500" />
             <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Layout</span>
@@ -430,7 +921,7 @@ export const Properties = ({
         </div>
 
         {/* Border Section */}
-        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg px-3 py-2.5 space-y-2.5">
+        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl px-3 py-2.5 space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Box className="w-3.5 h-3.5 text-blue-500" />
@@ -527,342 +1018,9 @@ export const Properties = ({
             </button>
           </div>
         </div>
-          </>
-        )}
-
-        {/* Tools Tab Content */}
-        {activeTab === "tools" && isImage && (
-          <>
-          {/* Basic Adjustments */}
-          <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg px-3 py-2.5 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="text-[11px] font-medium text-[#161616] tracking-wide leading-tight">Basic Adjustments</div>
-              <button 
-                onClick={() => {
-                  setBrightness(0); setContrast(0); setSaturation(0); setOpacity(100);
-                  applyEffects();
-                }}
-                className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors"
-              >
-                <X className="w-3.5 h-3.5 text-[#6E6E6E]" />
-              </button>
-            </div>
-            
-            {/* Brightness */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Sun className="w-3 h-3 text-[#6E6E6E]" />
-                  <span className="text-[10px] text-[#161616]">Brightness</span>
-                </div>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(brightness * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min={-1}
-                max={1}
-                step={0.01}
-                value={brightness}
-                onChange={(e) => setBrightness(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-
-            {/* Contrast */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Zap className="w-3 h-3 text-[#6E6E6E]" />
-                  <span className="text-[10px] text-[#161616]">Contrast</span>
-                </div>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(contrast * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min={-1}
-                max={1}
-                step={0.01}
-                value={contrast}
-                onChange={(e) => setContrast(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-
-            {/* Saturation */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Droplet className="w-3 h-3 text-[#6E6E6E]" />
-                  <span className="text-[10px] text-[#161616]">Saturation</span>
-                </div>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(saturation * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min={-1}
-                max={1}
-                step={0.01}
-                value={saturation}
-                onChange={(e) => setSaturation(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-
-            {/* Opacity */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Eye className="w-3 h-3 text-[#6E6E6E]" />
-                  <span className="text-[10px] text-[#161616]">Opacity</span>
-                </div>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(opacity)}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={opacity}
-                onChange={(e) => setOpacity(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-          </div>
-
-          {/* Light & Color */}
-          <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg px-3 py-2.5 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="text-[11px] font-medium text-[#161616] tracking-wide leading-tight">Light & Color</div>
-              <button 
-                onClick={() => {
-                  setHighlights(0); setShadows(0); setExposure(0); setVibrance(0);
-                  applyEffects();
-                }}
-                className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors"
-              >
-                <X className="w-3.5 h-3.5 text-[#6E6E6E]" />
-              </button>
-            </div>
-            
-            {/* Highlights */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-[#161616]">Highlights</span>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(highlights)}</span>
-              </div>
-              <input
-                type="range"
-                min={-100}
-                max={100}
-                step={1}
-                value={highlights}
-                onChange={(e) => setHighlights(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-
-            {/* Shadows */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-[#161616]">Shadows</span>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(shadows)}</span>
-              </div>
-              <input
-                type="range"
-                min={-100}
-                max={100}
-                step={1}
-                value={shadows}
-                onChange={(e) => setShadows(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-
-            {/* Exposure */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-[#161616]">Exposure</span>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(exposure)}</span>
-              </div>
-              <input
-                type="range"
-                min={-100}
-                max={100}
-                step={1}
-                value={exposure}
-                onChange={(e) => setExposure(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-
-            {/* Vibrance */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Wand2 className="w-3 h-3 text-[#6E6E6E]" />
-                  <span className="text-[10px] text-[#161616]">Vibrance</span>
-                </div>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(vibrance)}</span>
-              </div>
-              <input
-                type="range"
-                min={-100}
-                max={100}
-                step={1}
-                value={vibrance}
-                onChange={(e) => setVibrance(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-          </div>
-
-          {/* Effects */}
-          <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg px-3 py-2.5 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="text-[11px] font-medium text-[#161616] tracking-wide leading-tight">Effects</div>
-              <button 
-                onClick={() => {
-                  setBlur(0); setNoise(0); setPixelate(0); setSepia(0); setVintage(0);
-                  applyEffects();
-                }}
-                className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors"
-              >
-                <X className="w-3.5 h-3.5 text-[#6E6E6E]" />
-              </button>
-            </div>
-            
-            {/* Blur */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Layers className="w-3 h-3 text-[#6E6E6E]" />
-                  <span className="text-[10px] text-[#161616]">Blur</span>
-                </div>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(blur)}</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={blur}
-                onChange={(e) => setBlur(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-
-            {/* Noise */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-[#161616]">Noise</span>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(noise)}</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={1000}
-                step={10}
-                value={noise}
-                onChange={(e) => setNoise(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-
-            {/* Pixelate */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-[#161616]">Pixelate</span>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(pixelate)}</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={20}
-                step={1}
-                value={pixelate}
-                onChange={(e) => setPixelate(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-
-            {/* Sepia */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-[#161616]">Sepia</span>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(sepia)}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={sepia}
-                onChange={(e) => setSepia(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-
-            {/* Vintage */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-[#161616]">Vintage</span>
-                <span className="text-[10px] text-[#6E6E6E] font-mono">{Math.round(vintage)}</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={vintage}
-                onChange={(e) => setVintage(Number(e.target.value))}
-                className="w-full h-1.5 bg-[#E5E5E5] rounded-lg appearance-none cursor-pointer accent-[#18A0FB]"
-              />
-            </div>
-          </div>
-          </>
-        )}
-
-        {/* Tools Tab Content */}
-        {activeTab === "tools" && (
-          <>
-        {/* Edit Image Section */}
-        {isImage && onImageEdit && (() => {
-          const imgElement = (selectedObject as FabricImage)?.getElement();
-          return imgElement ? (
-            <EditImageSection 
-              imageElement={imgElement as HTMLImageElement}
-              onEditComplete={onImageEdit}
-            />
-          ) : null;
-        })()}
-        
-        {/* Crop Section */}
-        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-lg px-3 py-2.5 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="text-[11px] font-medium text-[#161616] tracking-wide leading-tight">Crop</div>
-            <button className="w-6 h-6 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors">
-              <Maximize className="w-4 h-4 text-[#6E6E6E]" />
-            </button>
-          </div>
-          
-          <div className="flex items-center gap-1.5">
-            <Select value={cropRatio} onValueChange={handleCropRatioChange}>
-              <SelectTrigger className="h-6 flex-1 text-[10px] border border-[#E5E5E5] bg-white hover:border-[#D1D1D1] focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded text-[#161616]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="default">Default</SelectItem>
-                <SelectItem value="1:1">1:1 (Square)</SelectItem>
-                <SelectItem value="16:9">16:9 (Widescreen)</SelectItem>
-                <SelectItem value="4:3">4:3 (Standard)</SelectItem>
-                <SelectItem value="3:2">3:2 (Photo)</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
-          </>
-        )}
-      </div>
+      )}
     </div>
   );
 };
