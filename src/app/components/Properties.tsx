@@ -250,8 +250,14 @@ export const Properties = ({
   const [reimaginePrompt, setReimaginePrompt] = useState("");
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [smartEditPrompt, setSmartEditPrompt] = useState("");
+  const [smartEditSelection, setSmartEditSelection] = useState<{
+    type: "rectangle";
+    imageSize: { width: number; height: number };
+    rect: { x: number; y: number; width: number; height: number };
+    normalized: { x: number; y: number; width: number; height: number };
+  } | null>(null);
 
-  const runAiEditFromToolbar = async (prompt: string) => {
+  const runAiEditFromToolbar = async (prompt: string, selection?: any) => {
     if (!onImageEdit) return;
     if (!selectedObject || !(selectedObject instanceof FabricImage)) return;
     const imgElement = (selectedObject as FabricImage).getElement() as HTMLImageElement;
@@ -265,10 +271,40 @@ export const Properties = ({
       if (!ctx) throw new Error("Could not get canvas context");
       ctx.drawImage(imgElement, 0, 0);
       const currentImageUrl = canvasEl.toDataURL('image/png');
+      // Base image
       const res = await fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, currentImageUrl, isEdit: true })
+        body: JSON.stringify({
+          prompt,
+          currentImageUrl,
+          isEdit: true,
+          selection: selection ?? null,
+          selectionImageUrl: (() => {
+            try {
+              if (!selection?.rect) return null;
+              const { x, y, width, height } = selection.rect;
+              const off = document.createElement('canvas');
+              // Limit very large crops to keep payload reasonable
+              const MAX_SIDE = 1536;
+              const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
+              off.width = Math.max(1, Math.round(width * scale));
+              off.height = Math.max(1, Math.round(height * scale));
+              const c = off.getContext('2d');
+              if (!c) return null;
+              c.imageSmoothingEnabled = true;
+              c.imageSmoothingQuality = 'high';
+              c.drawImage(
+                imgElement,
+                x, y, width, height,
+                0, 0, off.width, off.height
+              );
+              return off.toDataURL('image/png');
+            } catch {
+              return null;
+            }
+          })()
+        })
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
@@ -387,6 +423,7 @@ export const Properties = ({
             isImage={isImage}
             cropRatio={cropRatio}
             handleCropRatioChange={handleCropRatioChange}
+            onSmartEditSelectionChange={setSmartEditSelection}
             adjustments={{
               brightness,
               contrast,
@@ -557,6 +594,66 @@ export const Properties = ({
               {/* AI-Powered Tools */}
               {isImage && (
                 <>
+                  {/* Smart Edit (moved above Creative Director) */}
+                  {onImageEdit && (
+                  <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                      <button
+                        onClick={() => setActiveTool(activeTool==='smartEdit'? null : 'smartEdit')}
+                        className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                      >
+                        <div className="flex items-center gap-2">
+                        <Wand2 className="w-4 h-4 text-[#3B82F6]" />
+                          <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Smart Edit</span>
+                        </div>
+                        {activeTool === 'smartEdit' ? (
+                          <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
+                        )}
+                      </button>
+                    <div
+                      className={`overflow-hidden transition-all ${activeTool === 'smartEdit' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                      style={{ transition: 'max-height 240ms cubic-bezier(0.4,0,0.2,1), opacity 180ms cubic-bezier(0.4,0,0.2,1), transform 240ms cubic-bezier(0.4,0,0.2,1)' }}
+                    >
+                      <div className="pt-2 px-3 pb-3 space-y-2">
+                        <div>
+                          <p className="text-[11px] text-[#6E6E6E] mb-1.5">Describe your edit</p>
+                          <Textarea
+                            value={smartEditPrompt}
+                            onChange={(e) => setSmartEditPrompt(e.target.value)}
+                            placeholder="e.g., Make the background warmer..."
+                            className="min-h-[96px] pt-3 resize-none text-[11px] border border-[#E5E5E5] bg-white rounded-lg [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar-track]:hidden [&::-webkit-scrollbar-thumb]:hidden focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                            disabled={isAiProcessing}
+                          />
+                        </div>
+                        <Button
+                          onClick={() => {
+                            if (!smartEditSelection) {
+                              toast.error("Draw a selection on the canvas.");
+                              return;
+                            }
+                            runAiEditFromToolbar(smartEditPrompt, smartEditSelection);
+                          }}
+                          disabled={isAiProcessing || !smartEditPrompt.trim()}
+                          className="w-full h-8 text-[11px] rounded-lg gap-1.5"
+                          size="sm"
+                        >
+                          {isAiProcessing ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Applying...
+                            </>
+                          ) : (
+                            "Apply Edit"
+                          )}
+                        </Button>
+                        {!smartEditSelection && (
+                          <div className="text-[10px] text-[#9E9E9E]">Tip: Drag on the canvas to select a region.</div>
+                        )}
+                      </div>
+                    </div>
+                    </div>
+                  )}
                   {/* Creative Director */}
                 <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
                     <button
@@ -679,69 +776,7 @@ export const Properties = ({
                 </>
               )}
 
-              {/* Smart Edit (optional) */}
-              {isImage && onImageEdit && (
-              <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
-                  <button
-                    onClick={() => setActiveTool(activeTool==='smartEdit'? null : 'smartEdit')}
-                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
-                  >
-                    <div className="flex items-center gap-2">
-                    <Wand2 className="w-4 h-4 text-[#3B82F6]" />
-                      <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Smart Edit</span>
-                    </div>
-                    {activeTool === 'smartEdit' ? (
-                      <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
-                    )}
-                  </button>
-                <div
-                  className={`overflow-hidden transition-all ${activeTool === 'smartEdit' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
-                  style={{ transition: 'max-height 240ms cubic-bezier(0.4,0,0.2,1), opacity 180ms cubic-bezier(0.4,0,0.2,1), transform 240ms cubic-bezier(0.4,0,0.2,1)' }}
-                >
-                  <div className="pt-2 px-3 pb-3 space-y-2">
-                    {isImage && selectedObject && (
-                      <div className="rounded-xl border border-[#E5E5E5] overflow-hidden bg-[#F5F5F5]">
-                        <img
-                          src={(selectedObject as any).getElement?.()?.src || ""}
-                          alt="Selected image"
-                          className="w-full h-24 object-contain"
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-[11px] text-[#6E6E6E] mb-1.5">Describe your edit</p>
-                      <Textarea
-                        value={smartEditPrompt}
-                        onChange={(e) => setSmartEditPrompt(e.target.value)}
-                        placeholder="e.g., Make the background warmer..."
-                        className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white"
-                        disabled={isAiProcessing}
-                      />
-                    </div>
-                    <Button
-                      onClick={() => runAiEditFromToolbar(smartEditPrompt)}
-                      disabled={isAiProcessing || !smartEditPrompt.trim()}
-                      className="w-full h-8 text-[11px] rounded-lg gap-1.5"
-                      size="sm"
-                    >
-                      {isAiProcessing ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          Applying...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3 h-3" />
-                          Apply Edit
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-                </div>
-              )}
+              {/* Smart Edit (was moved above) */}
 
               {/* Upscale Section */}
               {isImage && (

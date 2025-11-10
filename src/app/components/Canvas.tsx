@@ -91,6 +91,11 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       const isMiddleButton = e.button === 1 || (e.buttons & 4) === 4;
       const isLeftButton = e.button === 0 || (e.buttons & 1) === 1;
       const useHandTool = activeToolRef.current === 'hand';
+      // Block panning/other draw starts during Smart Edit
+      if ((canvas as any).__smartEditActive) {
+        // Do not initiate panning or any draw tools while smart edit selection is active
+        return;
+      }
       
       // Handle text box drawing start
       if (activeToolbarButtonRef.current === 'text' && isLeftButton) {
@@ -218,6 +223,10 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       }
     });
     canvas.on('mouse:move', (opt: any) => {
+      if ((canvas as any).__smartEditActive) {
+        // Let EditSpace handle selection overlay; do not pan or draw here
+        return;
+      }
       if (isPanningRef.current) {
         const e = opt.e as MouseEvent;
         const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
@@ -326,6 +335,9 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       }
     });
     canvas.on('mouse:up', () => {
+      if ((canvas as any).__smartEditActive) {
+        return;
+      }
       isPanningRef.current = false;
       canvas.setCursor(activeToolRef.current === 'hand' ? 'grab' : 'default');
       canvas.selection = activeToolRef.current === 'pointer';
@@ -483,6 +495,8 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
 
     // Selection tracking for InspectorSidebar (supports images and text)
     const syncSelection = () => {
+      // Do not change selection state while Smart Edit selection is active
+      if ((canvas as any).__smartEditActive) return;
       const active = canvas.getActiveObject();
       
       if (!active && selectedObject) {
@@ -531,6 +545,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
 
     // Handle selection events
     canvas.on('selection:created', (e) => {
+      if ((canvas as any).__smartEditActive) return;
       const obj = e.selected?.[0];
       if (obj && obj instanceof (FabricImage as any)) {
         setSelectedImage(obj as FabricImage);
@@ -538,6 +553,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     });
 
     canvas.on('selection:updated', (e) => {
+      if ((canvas as any).__smartEditActive) return;
       const obj = e.selected?.[0];
       if (obj && obj instanceof (FabricImage as any)) {
         setSelectedImage(obj as FabricImage);
@@ -545,6 +561,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     });
 
     canvas.on('selection:cleared', () => {
+      if ((canvas as any).__smartEditActive) return;
       setSelectedImage(null);
     });
 
@@ -593,18 +610,27 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     const isPointer = activeTool === 'pointer';
     const isShapeTool = activeToolbarButton === 'shape';
     
+    // Respect Smart Edit mode if set by EditSpace
+    const smartEditActive = (fabricCanvas as any).__smartEditActive === true;
     // Set cursor based on active tool
     const isArtboardTool = activeToolbarButton === 'artboard';
-    if (isShapeTool || isArtboardTool) {
+    if (smartEditActive) {
       fabricCanvas.defaultCursor = 'crosshair';
       fabricCanvas.hoverCursor = 'crosshair';
+      (fabricCanvas as any).moveCursor = 'crosshair';
+      fabricCanvas.selection = false; // do not change active object, just prevent new selections
+      fabricCanvas.skipTargetFind = true;
     } else {
-      fabricCanvas.defaultCursor = isPointer ? 'default' : 'grab';
-      fabricCanvas.hoverCursor = isPointer ? 'move' : 'grab';
+      if (isShapeTool || isArtboardTool) {
+        fabricCanvas.defaultCursor = 'crosshair';
+        fabricCanvas.hoverCursor = 'crosshair';
+      } else {
+        fabricCanvas.defaultCursor = isPointer ? 'default' : 'grab';
+        fabricCanvas.hoverCursor = isPointer ? 'move' : 'grab';
+      }
+      fabricCanvas.selection = isPointer && !isShapeTool && !isArtboardTool;
+      fabricCanvas.skipTargetFind = !isPointer || isShapeTool || isArtboardTool;
     }
-    
-    fabricCanvas.selection = isPointer && !isShapeTool && !isArtboardTool;
-    fabricCanvas.skipTargetFind = !isPointer || isShapeTool || isArtboardTool;
     
     if (!isPointer) {
       fabricCanvas.discardActiveObject();

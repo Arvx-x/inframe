@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { FabricImage, FabricObject } from "fabric";
+import { FabricImage, FabricObject, Rect as FabricRect } from "fabric";
 import { Button } from "@/app/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { toast } from "sonner";
@@ -57,6 +57,12 @@ interface EditSpaceProps {
   selectedObject: FabricObject | null;
   canvas: any;
   onImageEdit?: (newImageUrl: string) => void;
+  onSmartEditSelectionChange?: (selection: {
+    type: "rectangle";
+    imageSize: { width: number; height: number };
+    rect: { x: number; y: number; width: number; height: number };
+    normalized: { x: number; y: number; width: number; height: number };
+  } | null) => void;
 }
 
 export function EditSpace({
@@ -67,7 +73,8 @@ export function EditSpace({
   adjustments,
   selectedObject,
   canvas,
-  onImageEdit
+  onImageEdit,
+  onSmartEditSelectionChange
 }: EditSpaceProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -115,6 +122,219 @@ export function EditSpace({
   const [selCenter, setSelCenter] = useState<{ x: number; y: number }>({ x: 0.5, y: 0.5 });
   const [isDragging, setIsDragging] = useState(false);
 
+  // Smart Edit selection state
+  const smartContainerRef = useRef<HTMLDivElement | null>(null);
+  const smartImgRef = useRef<HTMLImageElement | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const drawStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [drawRect, setDrawRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const overlayRectRef = useRef<any | null>(null);
+  const [selectionPreviewSrc, setSelectionPreviewSrc] = useState<string>("");
+
+  // Reset selection when tool changes away from smartEdit
+  useEffect(() => {
+    if (tool !== "smartEdit") {
+      setIsDrawing(false);
+      setDrawRect(null);
+      drawStartRef.current = null;
+      onSmartEditSelectionChange?.(null);
+      try {
+        if (canvas && overlayRectRef.current) {
+          canvas.remove(overlayRectRef.current);
+          overlayRectRef.current = null;
+          canvas.requestRenderAll?.();
+        }
+      } catch {}
+    }
+  }, [tool, onSmartEditSelectionChange]);
+
+  // Smart Edit: attach canvas listeners at top-level (guarded by tool)
+  useEffect(() => {
+    if (tool !== "smartEdit") return;
+    if (!canvas || !imgElement || !selectedObject) return;
+    const imgObj = (selectedObject as any);
+    const prevSelection = canvas.selection;
+    const prevSkip = canvas.skipTargetFind;
+    const prevDefaultCursor = canvas.defaultCursor;
+    const prevHoverCursor = canvas.hoverCursor;
+    const prevMoveCursor = (canvas as any).moveCursor || 'move';
+    const prevObjHoverCursor = imgObj.hoverCursor || undefined;
+    const prevObjMoveCursor = imgObj.moveCursor || undefined;
+    const prevSmartFlag = (canvas as any).__smartEditActive || false;
+    const prevLockX = !!imgObj.lockMovementX;
+    const prevLockY = !!imgObj.lockMovementY;
+    const prevHasControls = !!imgObj.hasControls;
+
+    // Mark canvas in Smart Edit mode (Canvas.tsx will respect this)
+    (canvas as any).__smartEditActive = true;
+    canvas.selection = false;
+    canvas.skipTargetFind = true;
+    canvas.defaultCursor = "crosshair";
+    canvas.hoverCursor = "crosshair";
+    (canvas as any).moveCursor = "crosshair";
+    // Ensure image doesn't show move cursor
+    imgObj.hoverCursor = "crosshair";
+    imgObj.moveCursor = "crosshair";
+    // Prevent image from moving or receiving events while selecting
+    try {
+      imgObj.set({
+        lockMovementX: true,
+        lockMovementY: true,
+        hasControls: false,
+      });
+      imgObj.setCoords?.();
+      canvas.requestRenderAll?.();
+    } catch {}
+
+    let isDown = false;
+    let startX = 0;
+    let startY = 0;
+
+    const onMouseDown = (opt: any) => {
+      if (!imgObj || typeof imgObj.getScaledWidth !== "function") return;
+      const e = opt.e as MouseEvent;
+      const pointer = canvas.getPointer(e);
+      const angle = imgObj.angle || 0;
+      if (Math.abs(((angle % 360) + 360) % 360) > 0.1) {
+        toast.error("Smart Edit selection currently supports unrotated images only.");
+        return;
+      }
+      const imgLeft = imgObj.left || 0;
+      const imgTop = imgObj.top || 0;
+      const imgRight = imgLeft + imgObj.getScaledWidth();
+      const imgBottom = imgTop + imgObj.getScaledHeight();
+      if (pointer.x < imgLeft || pointer.x > imgRight || pointer.y < imgTop || pointer.y > imgBottom) {
+        return;
+      }
+      isDown = true;
+      startX = Math.min(Math.max(pointer.x, imgLeft), imgRight);
+      startY = Math.min(Math.max(pointer.y, imgTop), imgBottom);
+      if (!overlayRectRef.current) {
+        overlayRectRef.current = new FabricRect({
+          left: startX,
+          top: startY,
+          width: 0,
+          height: 0,
+          fill: "rgba(59,130,246,0.12)",
+          stroke: "#3B82F6",
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [4, 3],
+        });
+        canvas.add(overlayRectRef.current);
+      } else {
+        overlayRectRef.current.set({ left: startX, top: startY, width: 0, height: 0 });
+      }
+      canvas.requestRenderAll();
+    };
+
+    const onMouseMove = (opt: any) => {
+      if (!isDown || !overlayRectRef.current || !imgObj) return;
+      const e = opt.e as MouseEvent;
+      const pointer = canvas.getPointer(e);
+      const imgLeft = imgObj.left || 0;
+      const imgTop = imgObj.top || 0;
+      const imgRight = imgLeft + imgObj.getScaledWidth();
+      const imgBottom = imgTop + imgObj.getScaledHeight();
+      const curX = Math.min(Math.max(pointer.x, imgLeft), imgRight);
+      const curY = Math.min(Math.max(pointer.y, imgTop), imgBottom);
+      const left = Math.min(startX, curX);
+      const top = Math.min(startY, curY);
+      const width = Math.abs(curX - startX);
+      const height = Math.abs(curY - startY);
+      overlayRectRef.current.set({ left, top, width, height });
+      canvas.requestRenderAll();
+    };
+
+    const onMouseUp = () => {
+      if (!isDown) return;
+      isDown = false;
+      if (!imgObj || !overlayRectRef.current) return;
+      const rect = overlayRectRef.current;
+      const width = rect.width || 0;
+      const height = rect.height || 0;
+      if (width < 2 || height < 2) return;
+      const imgLeft = imgObj.left || 0;
+      const imgTop = imgObj.top || 0;
+      const scaleX = imgObj.scaleX || 1;
+      const scaleY = imgObj.scaleY || 1;
+      const naturalW = imgElement.naturalWidth || (imgObj.width || 0);
+      const naturalH = imgElement.naturalHeight || (imgObj.height || 0);
+      const pxX = Math.max(0, Math.round((rect.left - imgLeft) / scaleX + (imgObj.cropX || 0)));
+      const pxY = Math.max(0, Math.round((rect.top - imgTop) / scaleY + (imgObj.cropY || 0)));
+      const pxW = Math.max(1, Math.round((width) / scaleX));
+      const pxH = Math.max(1, Math.round((height) / scaleY));
+      const selection = {
+        type: "rectangle" as const,
+        imageSize: { width: naturalW, height: naturalH },
+        rect: { x: pxX, y: pxY, width: pxW, height: pxH },
+        normalized: {
+          x: Math.min(1, Math.max(0, pxX / naturalW)),
+          y: Math.min(1, Math.max(0, pxY / naturalH)),
+          width: Math.min(1, Math.max(0, pxW / naturalW)),
+          height: Math.min(1, Math.max(0, pxH / naturalH)),
+        },
+      };
+      onSmartEditSelectionChange?.(selection);
+      try {
+        const off = document.createElement("canvas");
+        off.width = Math.min(1024, selection.rect.width);
+        off.height = Math.min(1024, selection.rect.height);
+        const ctx = off.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(
+            imgElement,
+            selection.rect.x,
+            selection.rect.y,
+            selection.rect.width,
+            selection.rect.height,
+            0,
+            0,
+            off.width,
+            off.height
+          );
+          const url = off.toDataURL("image/png");
+          setSelectionPreviewSrc(url);
+        }
+      } catch {}
+    };
+
+    canvas.on("mouse:down", onMouseDown);
+    canvas.on("mouse:move", onMouseMove);
+    canvas.on("mouse:up", onMouseUp);
+
+    return () => {
+      canvas.off("mouse:down", onMouseDown);
+      canvas.off("mouse:move", onMouseMove);
+      canvas.off("mouse:up", onMouseUp);
+      canvas.selection = prevSelection;
+      canvas.skipTargetFind = prevSkip;
+      canvas.defaultCursor = prevDefaultCursor;
+      canvas.hoverCursor = prevHoverCursor;
+      (canvas as any).moveCursor = prevMoveCursor;
+      (canvas as any).__smartEditActive = prevSmartFlag;
+      try {
+        if (overlayRectRef.current) {
+          canvas.remove(overlayRectRef.current);
+          overlayRectRef.current = null;
+          canvas.requestRenderAll?.();
+        }
+        // Restore image interactivity
+        imgObj.set({
+          lockMovementX: prevLockX,
+          lockMovementY: prevLockY,
+          hasControls: prevHasControls,
+        });
+        // restore cursors
+        if (prevObjHoverCursor !== undefined) imgObj.hoverCursor = prevObjHoverCursor;
+        if (prevObjMoveCursor !== undefined) imgObj.moveCursor = prevObjMoveCursor;
+        imgObj.setCoords?.();
+        canvas.requestRenderAll?.();
+      } catch {}
+    };
+  }, [tool, canvas, imgElement, selectedObject, onSmartEditSelectionChange]);
+
   if (!tool) {
     return (
       <div className="sticky top-0 z-10 bg-white border-b border-[#E5E5E5] h-[32vh]">
@@ -136,7 +356,35 @@ export function EditSpace({
     );
   }
 
-  // For all tools except crop, only show the selected image preview (no expanded tool UI)
+  // Smart Edit: selection happens on canvas; show cropped preview here
+  if (tool === "smartEdit") {
+    return (
+      <div className="sticky top-0 z-10 bg-white border-b border-[#E5E5E5] h-[32vh]">
+        <div className="px-0 py-3 h-full flex flex-col">
+          <div className="text-[11px] text-[#9E9E9E] px-3 mb-2">Smart Edit — Selected region preview</div>
+          <div className="relative flex-1 mx-3 rounded-lg border border-[#E5E5E5]
+                          bg-[length:16px_16px]
+                          bg-[linear-gradient(to_right,#EDEDED_1px,transparent_1px),linear-gradient(to_bottom,#EDEDED_1px,transparent_1px)]">
+            {selectionPreviewSrc ? (
+              <img
+                src={selectionPreviewSrc}
+                alt="Selection preview"
+                className="absolute inset-0 m-auto max-h-[70%] max-w-[70%] object-contain opacity-90 pointer-events-none"
+              />
+            ) : (
+              mounted && imgElement && (
+                <div className="absolute inset-0 m-auto h-full w-full flex items-center justify-center text-[11px] text-[#9E9E9E]">
+                  Draw a selection on the canvas to preview
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // For all tools except crop and smartEdit, only show the selected image preview (no expanded tool UI)
   if (tool && tool !== "crop") {
     return (
       <div className="sticky top-0 z-10 bg-white border-b border-[#E5E5E5] h-[32vh]">

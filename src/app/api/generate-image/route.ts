@@ -10,10 +10,12 @@ if (!INFRAME_API_KEY) {
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { prompt, currentImageUrl, isEdit } = body as {
+    const { prompt, currentImageUrl, isEdit, selection, selectionImageUrl } = body as {
       prompt?: string;
       currentImageUrl?: string;
       isEdit?: boolean;
+      selection?: any;
+      selectionImageUrl?: string | null;
     };
 
     if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
           role: "user",
           content: [
             { type: "text", text: prompt },
+            ...(selection ? [{ type: "text", text: `Selection JSON: ${JSON.stringify(selection)}` }] : []),
             {
               type: "image_url",
               image_url: {
@@ -54,9 +57,17 @@ export async function POST(request: Request) {
     const parts: any[] = [];
     if (isEdit && currentImageUrl) {
       parts.push({ text: prompt });
+      if (selection) {
+        parts.push({ text: `Selection JSON: ${JSON.stringify(selection)}` });
+      }
       // Expect data URL like data:image/png;base64,XXXX
       const base64 = currentImageUrl.split(",")[1] || currentImageUrl;
       parts.push({ inline_data: { mime_type: "image/png", data: base64 } });
+      // If a cropped selection image is provided, include it as well
+      if (selectionImageUrl && typeof selectionImageUrl === "string") {
+        const selBase64 = selectionImageUrl.split(",")[1] || selectionImageUrl;
+        parts.push({ inline_data: { mime_type: "image/png", data: selBase64 } });
+      }
     } else {
       parts.push({ text: `Create a high-quality, detailed image: ${prompt}` });
     }
