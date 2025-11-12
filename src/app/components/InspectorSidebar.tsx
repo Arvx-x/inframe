@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Copy, Trash2, Lock, MoreHorizontal, FlipHorizontal, FlipVertical, ChevronLeft, RotateCw, RotateCcw, Undo, Redo, HelpCircle } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { cn } from "@/app/lib/utils";
-import { FabricObject, FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine } from "fabric";
+import { FabricObject, FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine, Path as FabricPath } from "fabric";
 import { Properties } from "@/app/components/Properties";
 import { Shapes } from "@/app/components/Shapes";
 import { Text } from "@/app/components/Text";
@@ -58,9 +58,11 @@ interface InspectorSidebarProps {
   onClose: () => void;
   isClosing?: boolean;
   onImageEdit?: (newImageUrl: string) => void;
+  onEnterPathEditMode?: (path: FabricPath) => void;
+  onExitPathEditMode?: () => void;
 }
 
-export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = false, onImageEdit }: InspectorSidebarProps) => {
+export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = false, onImageEdit, onEnterPathEditMode, onExitPathEditMode }: InspectorSidebarProps) => {
   const [properties, setProperties] = useState({
     x: 0,
     y: 0,
@@ -308,15 +310,16 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     canvas.renderAll();
   };
 
-  // Only show for images, shapes, and text
+  // Only show for images, shapes, text, and paths
   const isImage = selectedObject instanceof FabricImage;
   const isRect = selectedObject instanceof FabricRect;
   const isCircle = selectedObject instanceof FabricCircle;
   const isLine = selectedObject instanceof FabricLine;
+  const isPath = selectedObject instanceof FabricPath || selectedObject?.type === 'path';
   const isShape = isRect || isCircle || isLine;
   const isText = selectedObject instanceof FabricTextbox;
   
-  if (!selectedObject || (!isImage && !isShape && !isText)) return null;
+  if (!selectedObject || (!isImage && !isShape && !isText && !isPath)) return null;
 
   return (
     <div
@@ -423,6 +426,15 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
               />
             ) : isText ? (
               <Text
+                selectedObject={selectedObject}
+                canvas={canvas}
+                properties={properties}
+                updateObject={updateObject}
+                activeTab={activeTab}
+                onDelete={handleDelete}
+              />
+            ) : isPath ? (
+              <Shapes
                 selectedObject={selectedObject}
                 canvas={canvas}
                 properties={properties}

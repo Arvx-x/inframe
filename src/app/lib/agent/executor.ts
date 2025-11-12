@@ -148,6 +148,84 @@ export function executeActions(
       prevPositions.forEach((p) => {
         inverseActions.push({ type: "move", objectIds: [p.id], params: { left: p.left, top: p.top } } as AgentAction);
       });
+    } else if (action.type === "set_fill") {
+      (action.objectIds || []).forEach((id) => {
+        const obj = getObjById(id);
+        if (!obj) return;
+        const prevFill = obj.fill || "#000000";
+        const prevOpacity = obj.opacity ?? 1;
+        obj.set({ fill: action.params.fill });
+        if (action.params.opacity !== undefined) {
+          obj.set({ opacity: action.params.opacity });
+        }
+        obj.setCoords?.();
+        inverseActions.push({
+          type: "set_fill",
+          objectIds: [id],
+          params: { fill: prevFill, opacity: prevOpacity }
+        } as AgentAction);
+      });
+    } else if (action.type === "set_stroke") {
+      (action.objectIds || []).forEach((id) => {
+        const obj = getObjById(id);
+        if (!obj) return;
+        const prevStroke = obj.stroke || "transparent";
+        const prevStrokeWidth = obj.strokeWidth || 0;
+        const prevStrokeOpacity = obj.strokeOpacity ?? 1;
+        obj.set({ stroke: action.params.stroke });
+        if (action.params.strokeWidth !== undefined) {
+          obj.set({ strokeWidth: action.params.strokeWidth });
+        }
+        if (action.params.strokeOpacity !== undefined) {
+          obj.set({ strokeOpacity: action.params.strokeOpacity });
+        }
+        obj.setCoords?.();
+        inverseActions.push({
+          type: "set_stroke",
+          objectIds: [id],
+          params: { stroke: prevStroke, strokeWidth: prevStrokeWidth, strokeOpacity: prevStrokeOpacity }
+        } as AgentAction);
+      });
+    } else if (action.type === "set_opacity") {
+      (action.objectIds || []).forEach((id) => {
+        const obj = getObjById(id);
+        if (!obj) return;
+        const prevOpacity = obj.opacity ?? 1;
+        obj.set({ opacity: clamp(action.params.opacity, 0, 1) });
+        obj.setCoords?.();
+        inverseActions.push({
+          type: "set_opacity",
+          objectIds: [id],
+          params: { opacity: prevOpacity }
+        } as AgentAction);
+      });
+    } else if (action.type === "set_text_style") {
+      (action.objectIds || []).forEach((id) => {
+        const obj = getObjById(id);
+        if (!obj || obj.type !== "textbox") return;
+        const prevFill = obj.fill || "#000000";
+        const prevFontSize = obj.fontSize || 32;
+        const prevFontFamily = obj.fontFamily || "Inter";
+        const prevFontWeight = obj.fontWeight || "400";
+        const prevTextAlign = obj.textAlign || "left";
+        if (action.params.fill !== undefined) obj.set({ fill: action.params.fill });
+        if (action.params.fontSize !== undefined) obj.set({ fontSize: clamp(action.params.fontSize, 8, 200) });
+        if (action.params.fontFamily !== undefined) obj.set({ fontFamily: action.params.fontFamily });
+        if (action.params.fontWeight !== undefined) obj.set({ fontWeight: action.params.fontWeight });
+        if (action.params.textAlign !== undefined) obj.set({ textAlign: action.params.textAlign });
+        obj.setCoords?.();
+        inverseActions.push({
+          type: "set_text_style",
+          objectIds: [id],
+          params: {
+            fill: prevFill,
+            fontSize: prevFontSize,
+            fontFamily: prevFontFamily,
+            fontWeight: prevFontWeight,
+            textAlign: prevTextAlign
+          }
+        } as AgentAction);
+      });
     }
   }
 

@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from "react";
-import { Canvas as FabricCanvas, Image as FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine, filters, Point, Object as FabricObject, Group as FabricGroup, ActiveSelection as FabricActiveSelection } from "fabric";
+import { Canvas as FabricCanvas, Image as FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine, Path as FabricPath, filters, Point, Object as FabricObject, Group as FabricGroup, ActiveSelection as FabricActiveSelection } from "fabric";
 import { Button } from "@/app/components/ui/button";
 import { Download, RotateCcw, ImagePlus, Crop, Trash2, Save, Share, Layers as LayersIcon, Eye, EyeOff, Lock, Unlock, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown } from "lucide-react";
 import { toast } from "sonner";
 import { InspectorSidebar } from "@/app/components/InspectorSidebar";
 import { Toolbar } from "@/app/components/Toolbar";
+import { PathEditor } from "@/app/components/PathEditor";
 // use local Next.js API route for canvas commands
 import { executeActions } from "@/app/lib/agent/executor";
 import type { AgentAction } from "@/app/lib/agent/canvas-schema";
@@ -25,6 +26,118 @@ interface CanvasProps {
   onCanvasExportRef?: React.MutableRefObject<(() => void) | null>;
   onCanvasColorRef?: React.MutableRefObject<((color: string) => void) | null>;
   initialCanvasColor?: string;
+}
+
+// SVG Path utility functions
+interface PathPoint {
+  x: number;
+  y: number;
+  cp1x?: number;
+  cp1y?: number;
+  cp2x?: number;
+  cp2y?: number;
+}
+
+function pointsToSVGPath(points: PathPoint[], previewPoint?: { x: number; y: number }): string {
+  if (points.length === 0) return '';
+  
+  let path = `M ${points[0].x} ${points[0].y}`;
+  
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    
+    // Check if we have control points for a curve
+    if (curr.cp1x !== undefined && curr.cp1y !== undefined && 
+        prev.cp2x !== undefined && prev.cp2y !== undefined) {
+      // Cubic Bézier curve
+      path += ` C ${prev.cp2x} ${prev.cp2y}, ${curr.cp1x} ${curr.cp1y}, ${curr.x} ${curr.y}`;
+    } else {
+      // Straight line
+      path += ` L ${curr.x} ${curr.y}`;
+    }
+  }
+  
+  // Add preview line if drawing
+  if (previewPoint && points.length > 0) {
+    const last = points[points.length - 1];
+    path += ` L ${previewPoint.x} ${previewPoint.y}`;
+  }
+  
+  return path;
+}
+
+// Parse SVG path string to extract points
+function parseSVGPath(pathString: string): PathPoint[] {
+  const points: PathPoint[] = [];
+  if (!pathString) return points;
+  
+  // Simple parser for M, L, and C commands
+  const commands = pathString.match(/[MLC][^MLC]*/g) || [];
+  let currentX = 0;
+  let currentY = 0;
+  let prevCp2x: number | undefined;
+  let prevCp2y: number | undefined;
+  
+  for (const cmd of commands) {
+    const type = cmd[0];
+    const coords = cmd.slice(1).trim().split(/[\s,]+/).map(Number).filter(n => !isNaN(n));
+    
+    if (type === 'M' && coords.length >= 2) {
+      // Move command - start point
+      currentX = coords[0];
+      currentY = coords[1];
+      points.push({ x: currentX, y: currentY });
+      prevCp2x = undefined;
+      prevCp2y = undefined;
+    } else if (type === 'L' && coords.length >= 2) {
+      // Line command
+      currentX = coords[0];
+      currentY = coords[1];
+      points.push({ x: currentX, y: currentY });
+      prevCp2x = undefined;
+      prevCp2y = undefined;
+    } else if (type === 'C' && coords.length >= 6) {
+      // Cubic Bézier curve: C cp1x cp1y cp2x cp2y x y
+      const cp1x = coords[0];
+      const cp1y = coords[1];
+      const cp2x = coords[2];
+      const cp2y = coords[3];
+      currentX = coords[4];
+      currentY = coords[5];
+      
+      // Update previous point with cp2
+      if (points.length > 0) {
+        const prev = points[points.length - 1];
+        prev.cp2x = cp2x;
+        prev.cp2y = cp2y;
+      }
+      
+      // Add new point with cp1
+      points.push({
+        x: currentX,
+        y: currentY,
+        cp1x,
+        cp1y,
+      });
+      
+      prevCp2x = cp2x;
+      prevCp2y = cp2y;
+    }
+  }
+  
+  return points;
+}
+
+// Update path object with new points
+function updatePathFromPoints(path: any, points: PathPoint[]): void {
+  const pathString = pointsToSVGPath(points);
+  if (pathString) {
+    path.set({ path: pathString });
+    // Store points for editing
+    (path as any).__pathPoints = points;
+    path.setCoords();
+  }
 }
 
 export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasColorRef, initialCanvasColor = "#F4F4F6" }: CanvasProps) {
@@ -54,7 +167,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const [selectedObject, setSelectedObject] = useState<any>(null);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
-  const [exportFormat, setExportFormat] = useState<'png' | 'jpg'>('png');
+  const [exportFormat, setExportFormat] = useState<'png' | 'jpg' | 'svg'>('png');
   const [exportType, setExportType] = useState<'canvas' | 'artboard'>('canvas');
   const isDrawingShapeRef = useRef(false);
   const isDrawingTextRef = useRef(false);
@@ -64,6 +177,23 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const drawingArtboardRef = useRef<FabricRect | null>(null);
   const drawingTextBoxRef = useRef<FabricRect | null>(null);
   const drawingTextLabelRef = useRef<FabricTextbox | null>(null);
+  
+  // Path creation state
+  const isDrawingPathRef = useRef(false);
+  const currentPathPointsRef = useRef<PathPoint[]>([]);
+  const currentPathRef = useRef<any>(null); // Fabric Path preview
+  const isDraggingControlHandleRef = useRef(false);
+  const draggingHandleIndexRef = useRef<number | null>(null);
+  const draggingHandleTypeRef = useRef<'cp1' | 'cp2' | null>(null);
+  
+  // Path editing state
+  const isEditingPathRef = useRef(false);
+  const selectedPathRef = useRef<any>(null);
+  const selectedPointIndexRef = useRef<number | null>(null);
+  const pathEditorHandlesRef = useRef<any[]>([]);
+  const [isEditingPath, setIsEditingPath] = useState(false);
+  const [editingPathPoints, setEditingPathPoints] = useState<PathPoint[]>([]);
+  
   const [isLayersOpen, setIsLayersOpen] = useState(false);
   const setHistoryAvailability = () => {
     if (onHistoryAvailableChange) {
@@ -73,6 +203,95 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const undoStackRef = useRef<AgentAction[][]>([]);
   const redoStackRef = useRef<AgentAction[][]>([]);
 
+  // Helper function to update path preview
+  const updatePathPreview = (canvas: FabricCanvas, previewPoint?: { x: number; y: number }) => {
+    if (currentPathRef.current) {
+      canvas.remove(currentPathRef.current);
+      currentPathRef.current = null;
+    }
+    
+    if (currentPathPointsRef.current.length === 0) return;
+    
+    const pathString = pointsToSVGPath(currentPathPointsRef.current, previewPoint);
+    if (!pathString) return;
+    
+    try {
+      const path = new FabricPath(pathString, {
+        stroke: '#111827',
+        strokeWidth: 2,
+        fill: '',
+        selectable: false,
+        evented: false,
+      });
+      canvas.add(path);
+      currentPathRef.current = path;
+      canvas.renderAll();
+    } catch (error) {
+      console.error('Error creating path preview:', error);
+    }
+  };
+
+  // Helper function to complete path creation
+  const completePath = (canvas: FabricCanvas) => {
+    if (!isDrawingPathRef.current || currentPathPointsRef.current.length < 2) {
+      // Cancel if not enough points
+      cancelPath(canvas);
+      return;
+    }
+    
+    // Remove preview
+    if (currentPathRef.current) {
+      canvas.remove(currentPathRef.current);
+      currentPathRef.current = null;
+    }
+    
+    // Create final path
+    const pathString = pointsToSVGPath(currentPathPointsRef.current);
+    if (!pathString) {
+      cancelPath(canvas);
+      return;
+    }
+    
+    try {
+      const path = new FabricPath(pathString, {
+        stroke: '#111827',
+        strokeWidth: 2,
+        fill: 'transparent',
+        selectable: true,
+        name: 'Path',
+      });
+      
+      // Store original path data for editing
+      (path as any).__pathPoints = currentPathPointsRef.current;
+      
+      canvas.add(path);
+      canvas.setActiveObject(path);
+      canvas.renderAll();
+      
+      // Reset state
+      isDrawingPathRef.current = false;
+      currentPathPointsRef.current = [];
+      
+      // Reset to pointer tool
+      setActiveToolbarButton('pointer');
+      activeToolbarButtonRef.current = 'pointer';
+      canvas.selection = true;
+    } catch (error) {
+      console.error('Error creating path:', error);
+      cancelPath(canvas);
+    }
+  };
+
+  // Helper function to cancel path creation
+  const cancelPath = (canvas: FabricCanvas) => {
+    if (currentPathRef.current) {
+      canvas.remove(currentPathRef.current);
+      currentPathRef.current = null;
+    }
+    isDrawingPathRef.current = false;
+    currentPathPointsRef.current = [];
+    canvas.renderAll();
+  };
 
   // Initialize canvas (browser-only)
   useEffect(() => {
@@ -216,6 +435,27 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         return;
       }
       
+      // Handle path drawing start (pen tool)
+      if (activeToolbarButtonRef.current === 'pen' && isLeftButton) {
+        opt.e.preventDefault();
+        const pointer = canvas.getPointer(e);
+        
+        if (!isDrawingPathRef.current) {
+          // Start new path
+          isDrawingPathRef.current = true;
+          currentPathPointsRef.current = [{ x: pointer.x, y: pointer.y }];
+          canvas.selection = false;
+        } else {
+          // Add new point to existing path
+          currentPathPointsRef.current.push({ x: pointer.x, y: pointer.y });
+        }
+        
+        // Update preview path
+        updatePathPreview(canvas);
+        canvas.renderAll();
+        return;
+      }
+      
       if (isMiddleButton || (useHandTool && isLeftButton)) {
         isPanningRef.current = true;
         canvas.setCursor('grabbing');
@@ -332,6 +572,13 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         }
         
         canvas.renderAll();
+      }
+      
+      // Handle path drawing preview
+      if (isDrawingPathRef.current && currentPathPointsRef.current.length > 0) {
+        opt.e.preventDefault();
+        const pointer = canvas.getPointer(opt.e);
+        updatePathPreview(canvas, { x: pointer.x, y: pointer.y });
       }
     });
     canvas.on('mouse:up', () => {
@@ -491,6 +738,16 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           setActiveTool('pointer');
         }
       }
+      
+      // Handle path drawing - no completion on mouse:up, wait for double-click or Enter
+    });
+    
+    // Handle double-click to complete path
+    canvas.on('mouse:dblclick', (opt: any) => {
+      if (isDrawingPathRef.current) {
+        opt.e.preventDefault();
+        completePath(canvas);
+      }
     });
 
     // Selection tracking for InspectorSidebar (supports images and text)
@@ -609,6 +866,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     if (!fabricCanvas) return;
     const isPointer = activeTool === 'pointer';
     const isShapeTool = activeToolbarButton === 'shape';
+    const isPenTool = activeToolbarButton === 'pen';
     
     // Respect Smart Edit mode if set by EditSpace
     const smartEditActive = (fabricCanvas as any).__smartEditActive === true;
@@ -621,15 +879,15 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       fabricCanvas.selection = false; // do not change active object, just prevent new selections
       fabricCanvas.skipTargetFind = true;
     } else {
-      if (isShapeTool || isArtboardTool) {
+      if (isShapeTool || isArtboardTool || isPenTool) {
         fabricCanvas.defaultCursor = 'crosshair';
         fabricCanvas.hoverCursor = 'crosshair';
       } else {
         fabricCanvas.defaultCursor = isPointer ? 'default' : 'grab';
         fabricCanvas.hoverCursor = isPointer ? 'move' : 'grab';
       }
-      fabricCanvas.selection = isPointer && !isShapeTool && !isArtboardTool;
-      fabricCanvas.skipTargetFind = !isPointer || isShapeTool || isArtboardTool;
+      fabricCanvas.selection = isPointer && !isShapeTool && !isArtboardTool && !isPenTool;
+      fabricCanvas.skipTargetFind = !isPointer || isShapeTool || isArtboardTool || isPenTool;
     }
     
     if (!isPointer) {
@@ -931,13 +1189,118 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
     });
   };
 
-  const handleExport = (format: 'png' | 'jpg', exportType: 'canvas' | 'artboard') => {
+  const handleExport = (format: 'png' | 'jpg' | 'svg', exportType: 'canvas' | 'artboard') => {
     if (!fabricCanvas) return;
 
     let dataURL: string;
     let filename: string;
     const timestamp = Date.now();
     const multiplier = 4; // Ultra high quality export (4x resolution)
+
+    // Handle SVG export
+    if (format === 'svg') {
+      try {
+        let svgString: string;
+        
+        if (exportType === 'artboard') {
+          // Export artboard as SVG
+          const artboards = getArtboards();
+          if (artboards.length === 0) {
+            toast.error("No artboard found on canvas");
+            return;
+          }
+
+          const selectedIsArtboard = selectedObject && (
+            (selectedObject instanceof FabricRect && (selectedObject as any).isArtboard) ||
+            selectedObject instanceof FabricImage
+          );
+          const artboard = selectedIsArtboard ? selectedObject : artboards[0];
+          const artboardBounds = artboard.getBoundingRect();
+          
+          // Get all objects within artboard bounds (including partially overlapping)
+          const objectsInArtboard = fabricCanvas.getObjects().filter((obj: any) => {
+            // Skip the artboard itself
+            if (obj === artboard) return false;
+            const objBounds = obj.getBoundingRect();
+            // Check if object overlaps with artboard
+            return !(objBounds.left + objBounds.width < artboardBounds.left ||
+                     objBounds.left > artboardBounds.left + artboardBounds.width ||
+                     objBounds.top + objBounds.height < artboardBounds.top ||
+                     objBounds.top > artboardBounds.top + artboardBounds.height);
+          });
+          
+          // Create a temporary canvas for the artboard
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = artboardBounds.width;
+          tempCanvas.height = artboardBounds.height;
+          const tempFabricCanvas = new FabricCanvas(tempCanvas, {
+            width: artboardBounds.width,
+            height: artboardBounds.height,
+            backgroundColor: fabricCanvas.backgroundColor || '#ffffff',
+          });
+          
+          // Clone and position objects relative to artboard
+          const clonedObjects = objectsInArtboard.map((obj: any) => {
+            return obj.clone().then((cloned: any) => {
+              cloned.set({
+                left: (cloned.left || 0) - artboardBounds.left,
+                top: (cloned.top || 0) - artboardBounds.top,
+              });
+              cloned.setCoords();
+              return cloned;
+            });
+          });
+          
+          // Wait for all clones, then add to temp canvas and export
+          Promise.all(clonedObjects).then((clones) => {
+            clones.forEach((clone) => tempFabricCanvas.add(clone));
+            tempFabricCanvas.renderAll();
+            
+            svgString = tempFabricCanvas.toSVG();
+            filename = `artboard-export-${timestamp}.svg`;
+            
+            // Create blob and download
+            const blob = new Blob([svgString], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = url;
+            link.click();
+            URL.revokeObjectURL(url);
+            
+            // Clean up
+            tempFabricCanvas.dispose();
+            
+            toast.success("SVG exported!");
+          }).catch((error) => {
+            console.error("Error during SVG export:", error);
+            toast.error("Failed to export SVG. Please try again.");
+          });
+          
+          return;
+        } else {
+          // Export entire canvas as SVG
+          svgString = fabricCanvas.toSVG();
+          filename = `canvas-export-${timestamp}.svg`;
+        }
+        
+        // Create blob and download
+        const blob = new Blob([svgString], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+        
+        toast.success("SVG exported!");
+        return;
+      } catch (error) {
+        console.error("Error during SVG export:", error);
+        toast.error("Failed to export SVG. Please try again.");
+        return;
+      }
+    }
 
     if (exportType === 'artboard') {
       // Export artboard with all objects on it
@@ -1455,6 +1818,19 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         return;
       }
       
+      // Handle path completion/cancellation
+      if (isDrawingPathRef.current) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (fabricCanvas) completePath(fabricCanvas);
+          return;
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          if (fabricCanvas) cancelPath(fabricCanvas);
+          return;
+        }
+      }
+      
       // Handle undo/redo
       if (meta && isZ && !e.shiftKey) {
         e.preventDefault();
@@ -1741,10 +2117,48 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           setTimeout(() => {
             setSelectedImage(null);
             setSelectedObject(null);
+            setIsEditingPath(false);
             setIsSidebarClosing(false);
           }, 300);
         }}
         onImageEdit={handleEditComplete}
+        onEnterPathEditMode={(path) => {
+          if (path && (path as any).__pathPoints) {
+            setEditingPathPoints([...(path as any).__pathPoints]);
+            setIsEditingPath(true);
+            isEditingPathRef.current = true;
+            selectedPathRef.current = path;
+          }
+        }}
+        onExitPathEditMode={() => {
+          setIsEditingPath(false);
+          isEditingPathRef.current = false;
+          selectedPathRef.current = null;
+        }}
+      />
+    )}
+
+    {/* Path Editor */}
+    {isEditingPath && selectedObject && selectedObject.type === 'path' && (
+      <PathEditor
+        canvas={fabricCanvas}
+        path={selectedObject as FabricPath}
+        isActive={isEditingPath}
+        onPointsChange={(points) => {
+          setEditingPathPoints(points);
+          if (selectedObject && (selectedObject as any).__pathPoints) {
+            (selectedObject as any).__pathPoints = points;
+            updatePathFromPoints(selectedObject, points);
+            if (fabricCanvas) {
+              fabricCanvas.renderAll();
+            }
+          }
+        }}
+        onClose={() => {
+          setIsEditingPath(false);
+          isEditingPathRef.current = false;
+          selectedPathRef.current = null;
+        }}
       />
     )}
 
@@ -1761,7 +2175,7 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
           {/* Format Selection */}
           <div className="grid gap-3">
             <Label className="text-sm font-medium">Format</Label>
-            <RadioGroup value={exportFormat} onValueChange={(value) => setExportFormat(value as 'png' | 'jpg')}>
+            <RadioGroup value={exportFormat} onValueChange={(value) => setExportFormat(value as 'png' | 'jpg' | 'svg')}>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="png" id="png" />
                 <Label htmlFor="png" className="font-normal cursor-pointer">PNG (High Quality)</Label>
@@ -1769,6 +2183,10 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="jpg" id="jpg" />
                 <Label htmlFor="jpg" className="font-normal cursor-pointer">JPG/JPEG (Compressed)</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="svg" id="svg" />
+                <Label htmlFor="svg" className="font-normal cursor-pointer">SVG (Vector)</Label>
               </div>
             </RadioGroup>
           </div>

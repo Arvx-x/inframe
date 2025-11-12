@@ -150,6 +150,16 @@ export function Toolbar({
           <TooltipContent side="right" sideOffset={12} className="z-[60]">Artboard</TooltipContent>
         </Tooltip>
 
+        {/* Pen Tool */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button onClick={() => { setActiveToolbarButton('pen'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'pen' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Pen Tool">
+              <PenTool />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={12} className="z-[60]">Pen Tool</TooltipContent>
+        </Tooltip>
+
         {/* Expanded Tools Section - COMMENTED OUT */}
         {/* <div className={`transition-all duration-200 ease-out ${isToolbarExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'} overflow-hidden flex flex-col gap-2.5 ${isToolbarExpanded ? 'pointer-events-auto' : 'pointer-events-none'}`}
           style={{

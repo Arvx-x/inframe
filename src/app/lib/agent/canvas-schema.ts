@@ -42,6 +42,45 @@ export const GroupAction = z.object({
   params: z.object({ spacing: z.number().min(0).max(400).default(20) })
 });
 
+export const SetFillAction = z.object({
+  type: z.literal("set_fill"),
+  objectIds: z.array(z.string()),
+  params: z.object({
+    fill: z.string(),
+    opacity: z.number().min(0).max(1).optional()
+  })
+});
+
+export const SetStrokeAction = z.object({
+  type: z.literal("set_stroke"),
+  objectIds: z.array(z.string()),
+  params: z.object({
+    stroke: z.string(),
+    strokeWidth: z.number().min(0).max(100).optional(),
+    strokeOpacity: z.number().min(0).max(1).optional()
+  })
+});
+
+export const SetOpacityAction = z.object({
+  type: z.literal("set_opacity"),
+  objectIds: z.array(z.string()),
+  params: z.object({
+    opacity: z.number().min(0).max(1)
+  })
+});
+
+export const SetTextStyleAction = z.object({
+  type: z.literal("set_text_style"),
+  objectIds: z.array(z.string()),
+  params: z.object({
+    fill: z.string().optional(),
+    fontSize: z.number().min(8).max(200).optional(),
+    fontFamily: z.string().optional(),
+    fontWeight: z.union([z.string(), z.number()]).optional(),
+    textAlign: z.enum(["left", "center", "right", "justify"]).optional()
+  })
+});
+
 export const Action = z.discriminatedUnion("type", [
   MoveAction,
   ResizeAction,
@@ -49,6 +88,10 @@ export const Action = z.discriminatedUnion("type", [
   AddTextAction,
   DeleteAction,
   GroupAction,
+  SetFillAction,
+  SetStrokeAction,
+  SetOpacityAction,
+  SetTextStyleAction,
 ]);
 
 export const AgentResponse = z.object({
