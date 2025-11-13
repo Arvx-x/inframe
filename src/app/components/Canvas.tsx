@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas as FabricCanvas, Image as FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine, Path as FabricPath, filters, Point, Object as FabricObject, Group as FabricGroup, ActiveSelection as FabricActiveSelection } from "fabric";
 import { Button } from "@/app/components/ui/button";
 import { Download, RotateCcw, ImagePlus, Crop, Trash2, Save, Share, Layers as LayersIcon, Eye, EyeOff, Lock, Unlock, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown } from "lucide-react";
@@ -16,9 +16,12 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/app/components/ui/radio-group";
 import { Label } from "@/app/components/ui/label";
+import { Skeleton } from "@/app/components/ui/skeleton";
 
 interface CanvasProps {
   generatedImageUrl: string | null;
+  isImagePending?: boolean;
+  pendingImageRatio?: string | null;
   onClear: () => void;
   onCanvasCommandRef?: React.MutableRefObject<((command: string) => Promise<string>) | null>;
   onCanvasHistoryRef?: React.MutableRefObject<{ undo: () => void; redo: () => void } | null>;
@@ -140,7 +143,34 @@ function updatePathFromPoints(path: any, points: PathPoint[]): void {
   }
 }
 
-export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasColorRef, initialCanvasColor = "#F4F4F6" }: CanvasProps) {
+const DEFAULT_PLACEHOLDER_SIZE = 200;
+const PLACEHOLDER_VERTICAL_OFFSET_RATIO = 0.08;
+const PLACEHOLDER_MIN_TOP = 16;
+
+const parseRatio = (ratio?: string | null): { width: number; height: number } | null => {
+  if (!ratio) return null;
+  const normalized = ratio.replace(/\s+/g, '').toLowerCase();
+  const parts = normalized.split(/[×x:]/);
+  if (parts.length !== 2) return null;
+  const width = Number(parts[0]) || 1;
+  const height = Number(parts[1]) || 1;
+  if (width <= 0 || height <= 0) return null;
+  return { width, height };
+};
+
+const computeImagePlacement = (
+  canvasWidth: number,
+  canvasHeight: number,
+  imageWidth: number,
+  imageHeight: number
+) => {
+  const left = (canvasWidth - imageWidth) / 2;
+  const verticalOffset = canvasHeight * PLACEHOLDER_VERTICAL_OFFSET_RATIO;
+  const top = Math.max((canvasHeight - imageHeight) / 2 - verticalOffset, PLACEHOLDER_MIN_TOP);
+  return { left, top };
+};
+
+export default function Canvas({ generatedImageUrl, isImagePending = false, pendingImageRatio = null, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasColorRef, initialCanvasColor = "#F4F4F6" }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [selectedImage, setSelectedImage] = useState<FabricImage | null>(null);
@@ -157,6 +187,80 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
   const isPanningRef = useRef(false);
   const [activeTool, setActiveTool] = useState<"pointer" | "hand">("pointer");
   const activeToolRef = useRef<"pointer" | "hand">("pointer");
+  const [canvasDimensions, setCanvasDimensions] = useState<{ width: number; height: number }>({
+    width: DEFAULT_PLACEHOLDER_SIZE,
+    height: DEFAULT_PLACEHOLDER_SIZE,
+  });
+
+  useEffect(() => {
+    if (!fabricCanvas) return;
+    const updateDimensions = () => {
+      const width =
+        typeof (fabricCanvas as any).getWidth === "function"
+          ? (fabricCanvas as any).getWidth()
+          : fabricCanvas.getWidth?.() ?? fabricCanvas.width ?? DEFAULT_PLACEHOLDER_SIZE;
+      const height =
+        typeof (fabricCanvas as any).getHeight === "function"
+          ? (fabricCanvas as any).getHeight()
+          : fabricCanvas.getHeight?.() ?? fabricCanvas.height ?? DEFAULT_PLACEHOLDER_SIZE;
+      setCanvasDimensions({
+        width: Math.max(width, DEFAULT_PLACEHOLDER_SIZE),
+        height: Math.max(height, DEFAULT_PLACEHOLDER_SIZE),
+      });
+    };
+
+    updateDimensions();
+    const handleResize = () => updateDimensions();
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [fabricCanvas]);
+
+  const placeholderSize = useMemo(() => {
+    const { width: canvasWidth, height: canvasHeight } = canvasDimensions;
+    if (!canvasWidth || !canvasHeight) {
+      return { width: DEFAULT_PLACEHOLDER_SIZE, height: DEFAULT_PLACEHOLDER_SIZE };
+    }
+
+    const maxWidth = canvasWidth * 0.6;
+    const maxHeight = canvasHeight * 0.6;
+    const ratio = parseRatio(pendingImageRatio);
+
+    if (!ratio) {
+      const side = Math.max(DEFAULT_PLACEHOLDER_SIZE, Math.min(maxWidth, maxHeight));
+      return { width: side, height: side };
+    }
+
+    const aspect = ratio.width / ratio.height;
+    let width = maxWidth;
+    let height = width / aspect;
+
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height * aspect;
+    }
+
+    width = Math.max(width, DEFAULT_PLACEHOLDER_SIZE);
+    height = Math.max(height, DEFAULT_PLACEHOLDER_SIZE);
+
+    return { width, height };
+  }, [canvasDimensions, pendingImageRatio]);
+
+  const placeholderPosition = useMemo(() => {
+    const { width: canvasWidth, height: canvasHeight } = canvasDimensions;
+    if (!canvasWidth || !canvasHeight) {
+      return { left: '50%', top: '50%' };
+    }
+    const { left, top } = computeImagePlacement(
+      canvasWidth,
+      canvasHeight,
+      placeholderSize.width,
+      placeholderSize.height
+    );
+    return { left: `${left}px`, top: `${top}px` };
+  }, [canvasDimensions, placeholderSize]);
+
   const activeToolbarButtonRef = useRef<'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut'>('pointer');
   const [activeShape, setActiveShape] = useState<"rect" | "circle" | "line">("circle");
   const activeShapeRef = useRef<"rect" | "circle" | "line">("circle");
@@ -921,9 +1025,16 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         img.scaleToHeight(maxHeight);
       }
 
+      const { left, top } = computeImagePlacement(
+        fabricCanvas.width!,
+        fabricCanvas.height!,
+        img.getScaledWidth(),
+        img.getScaledHeight()
+      );
+
       img.set({
-        left: (fabricCanvas.width! - img.getScaledWidth()) / 2,
-        top: (fabricCanvas.height! - img.getScaledHeight()) / 2,
+        left,
+        top,
         selectable: true,
         name: 'Image',
       });
@@ -1161,9 +1272,16 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
         img.scaleToHeight(maxHeight);
       }
 
+      const { left, top } = computeImagePlacement(
+        fabricCanvas.width!,
+        fabricCanvas.height!,
+        img.getScaledWidth(),
+        img.getScaledHeight()
+      );
+
       img.set({
-        left: (fabricCanvas.width! - img.getScaledWidth()) / 2,
-        top: (fabricCanvas.height! - img.getScaledHeight()) / 2,
+        left,
+        top,
         selectable: true,
         name: 'Image',
       });
@@ -1892,6 +2010,24 @@ export default function Canvas({ generatedImageUrl, onClear, onCanvasCommandRef,
       <ContextMenuTrigger asChild>
         <div className="relative w-full h-screen overflow-hidden bg-[#F4F4F6]">
           <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
+          {isImagePending && (
+            <div
+              className="pointer-events-none absolute z-[55]"
+              style={{
+                left: placeholderPosition.left,
+                top: placeholderPosition.top,
+              }}
+            >
+              <Skeleton
+                animate="blink"
+                className="rounded-none bg-[#d4d4d8] shadow-lg shadow-black/10"
+                style={{
+                  width: `${placeholderSize.width}px`,
+                  height: `${placeholderSize.height}px`,
+                }}
+              />
+            </div>
+          )}
           
           {/* Hidden file input for image upload */}
           <input

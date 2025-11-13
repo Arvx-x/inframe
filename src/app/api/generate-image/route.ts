@@ -10,12 +10,18 @@ if (!INFRAME_API_KEY) {
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { prompt, currentImageUrl, isEdit, selection, selectionImageUrl } = body as {
+    const { prompt, currentImageUrl, isEdit, selection, selectionImageUrl, editIntent, textEditOptions } = body as {
       prompt?: string;
       currentImageUrl?: string;
       isEdit?: boolean;
       selection?: any;
       selectionImageUrl?: string | null;
+      editIntent?: string | null;
+      textEditOptions?: {
+        allowFontChange?: boolean;
+        allowSizeChange?: boolean;
+        allowPositionChange?: boolean;
+      } | null;
     };
 
     if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
@@ -59,6 +65,54 @@ export async function POST(request: Request) {
       parts.push({ text: prompt });
       if (selection) {
         parts.push({ text: `Selection JSON: ${JSON.stringify(selection)}` });
+        parts.push({
+          text:
+            "Guardrail: Focus the edit on the region identified by the selection rectangle. You may extend or add new content outside that region when it is necessary for a coherent result, but avoid unrelated global changes elsewhere in the image.",
+        });
+        parts.push({
+          text:
+            "The returned edit will be reinserted by sampling the rectangle (x,y,width,height) from your output and pasting it back onto the original base image at the same coordinates. Keep the edited content perfectly registered with the original pixels so that the patch lines up exactly—no global shifts, scaling, or perspective changes.",
+        });
+      }
+      if (editIntent === "text") {
+        const allowFontChange = Boolean(textEditOptions?.allowFontChange);
+        const allowSizeChange = Boolean(textEditOptions?.allowSizeChange);
+        const allowPositionChange = Boolean(textEditOptions?.allowPositionChange);
+        const textGuardrails: string[] = [];
+        textGuardrails.push(
+          "Text edit request: rewrite or update the text inside the selection with the instructions in the prompt while keeping edges sharp, legible, and free of artifacts."
+        );
+        if (!allowFontChange) {
+          textGuardrails.push(
+            "Preserve the original typeface, weight, kerning, and overall typography unless the prompt explicitly requests a change."
+          );
+        } else {
+          textGuardrails.push(
+            "You may change the font or weight to satisfy the prompt, but maintain a professional, high-quality typographic result with smooth anti-aliasing."
+          );
+        }
+        if (!allowSizeChange) {
+          textGuardrails.push(
+            "Keep the text size and baseline positioning exactly aligned with the original so the text sits naturally in the design."
+          );
+        } else {
+          textGuardrails.push(
+            "Adjust text size only as needed by the prompt, ensuring the new scale is harmonious with surrounding layout."
+          );
+        }
+        if (!allowPositionChange) {
+          textGuardrails.push(
+            "Do not move the text bounding box; keep alignment, perspective, and positioning identical to the original."
+          );
+        } else {
+          textGuardrails.push(
+            "You may reposition the text per the prompt, but respect the scene perspective and ensure alignment remains natural."
+          );
+        }
+        textGuardrails.push(
+          "Match lighting, shading, and depth cues of the surrounding scene so the updated text blends seamlessly."
+        );
+        parts.push({ text: textGuardrails.join(" ") });
       }
       // Expect data URL like data:image/png;base64,XXXX
       const base64 = currentImageUrl.split(",")[1] || currentImageUrl;
@@ -68,6 +122,10 @@ export async function POST(request: Request) {
         const selBase64 = selectionImageUrl.split(",")[1] || selectionImageUrl;
         parts.push({ inline_data: { mime_type: "image/png", data: selBase64 } });
       }
+      parts.push({
+        text:
+          "Return the edited image at exactly the same resolution as the base image so the selected patch can be reapplied without scaling artifacts.",
+      });
     } else {
       parts.push({ text: `Create a high-quality, detailed image: ${prompt}` });
     }

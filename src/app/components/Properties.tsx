@@ -262,6 +262,165 @@ export const Properties = ({
     if (!selectedObject || !(selectedObject instanceof FabricImage)) return;
     const imgElement = (selectedObject as FabricImage).getElement() as HTMLImageElement;
     if (!imgElement) return;
+
+    const sanitizeSelection = (sel: typeof selection | undefined) => {
+      if (!sel || !sel.rect || !imgElement.naturalWidth || !imgElement.naturalHeight) return null;
+      const width = Math.max(1, Math.min(sel.rect.width, imgElement.naturalWidth));
+      const height = Math.max(1, Math.min(sel.rect.height, imgElement.naturalHeight));
+      if (width < 1 || height < 1) return null;
+      const x = Math.max(0, Math.min(sel.rect.x, imgElement.naturalWidth - width));
+      const y = Math.max(0, Math.min(sel.rect.y, imgElement.naturalHeight - height));
+      const normalized = {
+        x: Math.min(1, Math.max(0, x / imgElement.naturalWidth)),
+        y: Math.min(1, Math.max(0, y / imgElement.naturalHeight)),
+        width: Math.min(1, Math.max(0, width / imgElement.naturalWidth)),
+        height: Math.min(1, Math.max(0, height / imgElement.naturalHeight)),
+      };
+      return {
+        type: sel.type ?? "rectangle",
+        imageSize: {
+          width: imgElement.naturalWidth,
+          height: imgElement.naturalHeight,
+        },
+        rect: { x, y, width, height },
+        normalized,
+      };
+    };
+
+    const loadImageElement = (src: string) =>
+      new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.crossOrigin = "anonymous";
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("Failed to load image"));
+        image.src = src;
+      });
+
+    const computeChangeBounds = async (
+      baseImg: HTMLImageElement,
+      editedImg: HTMLImageElement
+    ): Promise<{ x: number; y: number; width: number; height: number } | null> => {
+      const baseWidth = baseImg.naturalWidth || baseImg.width;
+      const baseHeight = baseImg.naturalHeight || baseImg.height;
+      const editWidth = editedImg.naturalWidth || editedImg.width;
+      const editHeight = editedImg.naturalHeight || editedImg.height;
+      if (baseWidth === 0 || baseHeight === 0 || editWidth === 0 || editHeight === 0) {
+        return null;
+      }
+
+      const baseCanvas = document.createElement('canvas');
+      baseCanvas.width = baseWidth;
+      baseCanvas.height = baseHeight;
+      const baseCtx = baseCanvas.getContext('2d');
+      if (!baseCtx) return null;
+      baseCtx.drawImage(baseImg, 0, 0, baseWidth, baseHeight);
+
+      const editedCanvas = document.createElement('canvas');
+      editedCanvas.width = baseWidth;
+      editedCanvas.height = baseHeight;
+      const editedCtx = editedCanvas.getContext('2d');
+      if (!editedCtx) return null;
+      // Draw edited image scaled to match base dimensions if needed
+      editedCtx.drawImage(editedImg, 0, 0, baseWidth, baseHeight);
+
+      const baseData = baseCtx.getImageData(0, 0, baseWidth, baseHeight).data;
+      const editedData = editedCtx.getImageData(0, 0, baseWidth, baseHeight).data;
+
+      let minX = baseWidth;
+      let minY = baseHeight;
+      let maxX = -1;
+      let maxY = -1;
+      const threshold = 12;
+
+      for (let i = 0; i < baseData.length; i += 4) {
+        const r1 = baseData[i];
+        const g1 = baseData[i + 1];
+        const b1 = baseData[i + 2];
+        const a1 = baseData[i + 3];
+
+        const r2 = editedData[i];
+        const g2 = editedData[i + 1];
+        const b2 = editedData[i + 2];
+        const a2 = editedData[i + 3];
+
+        const diff =
+          Math.abs(r1 - r2) +
+          Math.abs(g1 - g2) +
+          Math.abs(b1 - b2) +
+          Math.abs(a1 - a2);
+
+        if (diff > threshold) {
+          const idx = i / 4;
+          const x = idx % baseWidth;
+          const y = Math.floor(idx / baseWidth);
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+
+      if (maxX < minX || maxY < minY) {
+        return null;
+      }
+
+      const padding = 12;
+      const rectX = Math.max(0, minX - padding);
+      const rectY = Math.max(0, minY - padding);
+      const rectWidth = Math.min(baseWidth - rectX, maxX - minX + 1 + padding * 2);
+      const rectHeight = Math.min(baseHeight - rectY, maxY - minY + 1 + padding * 2);
+
+      return {
+        x: rectX,
+        y: rectY,
+        width: rectWidth,
+        height: rectHeight,
+      };
+    };
+
+    const normalizedPrompt = prompt.toLowerCase();
+    const textIntent = (() => {
+      const mentionsText =
+        /\btext\b/.test(normalizedPrompt) ||
+        /\btitle\b/.test(normalizedPrompt) ||
+        /\bword\b/.test(normalizedPrompt) ||
+        /\bsubtitle\b/.test(normalizedPrompt) ||
+        /\bcaption\b/.test(normalizedPrompt) ||
+        /\blettering\b/.test(normalizedPrompt) ||
+        /\bheadline\b/.test(normalizedPrompt) ||
+        /['"][^'"]+['"]/.test(prompt) ||
+        /\breplace\b.+\bwith\b/.test(normalizedPrompt) ||
+        /\bchange\b.+\bto\b/.test(normalizedPrompt) ||
+        /\bwrite\b/.test(normalizedPrompt) ||
+        /\badd\b.+\btext\b/.test(normalizedPrompt);
+      if (!mentionsText) return null;
+      const allowFontChange =
+        /\bfont\b/.test(normalizedPrompt) ||
+        /\btypeface\b/.test(normalizedPrompt) ||
+        /\bstyle\b/.test(normalizedPrompt) ||
+        /\bitalic\b/.test(normalizedPrompt) ||
+        /\bbold\b/.test(normalizedPrompt);
+      const allowSizeChange =
+        /\bsize\b/.test(normalizedPrompt) ||
+        /\bbigger\b/.test(normalizedPrompt) ||
+        /\blarger\b/.test(normalizedPrompt) ||
+        /\bsmaller\b/.test(normalizedPrompt) ||
+        /\bscale\b/.test(normalizedPrompt);
+      const allowPositionChange =
+        /\bposition\b/.test(normalizedPrompt) ||
+        /\bmove\b/.test(normalizedPrompt) ||
+        /\balign\b/.test(normalizedPrompt) ||
+        /\bcenter\b/.test(normalizedPrompt) ||
+        /\balignment\b/.test(normalizedPrompt);
+      return {
+        intent: "text" as const,
+        allowFontChange,
+        allowSizeChange,
+        allowPositionChange,
+      };
+    })();
+
+    const clampedSelection = sanitizeSelection(selection);
     setIsAiProcessing(true);
     try {
       const canvasEl = document.createElement('canvas');
@@ -279,11 +438,19 @@ export const Properties = ({
           prompt,
           currentImageUrl,
           isEdit: true,
-          selection: selection ?? null,
+          selection: clampedSelection ?? null,
+          editIntent: textIntent?.intent ?? null,
+          textEditOptions: textIntent
+            ? {
+                allowFontChange: textIntent.allowFontChange,
+                allowSizeChange: textIntent.allowSizeChange,
+                allowPositionChange: textIntent.allowPositionChange,
+              }
+            : null,
           selectionImageUrl: (() => {
             try {
-              if (!selection?.rect) return null;
-              const { x, y, width, height } = selection.rect;
+              if (!clampedSelection?.rect) return null;
+              const { x, y, width, height } = clampedSelection.rect;
               const off = document.createElement('canvas');
               // Limit very large crops to keep payload reasonable
               const MAX_SIDE = 1536;
@@ -309,10 +476,66 @@ export const Properties = ({
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       if (data?.imageUrl) {
-        onImageEdit(data.imageUrl);
+        let finalImageUrl = data.imageUrl;
+        if (clampedSelection) {
+          try {
+            const [baseImage, editedImage] = await Promise.all([
+              loadImageElement(currentImageUrl),
+              loadImageElement(data.imageUrl),
+            ]);
+            const baseWidth = baseImage.naturalWidth || baseImage.width;
+            const baseHeight = baseImage.naturalHeight || baseImage.height;
+            const editWidth = editedImage.naturalWidth || editedImage.width;
+            const editHeight = editedImage.naturalHeight || editedImage.height;
+            const changeBounds = await computeChangeBounds(baseImage, editedImage);
+            const fallbackRect = clampedSelection.rect;
+            const patch = changeBounds || fallbackRect;
+            const { x, y, width, height } = patch;
+
+            if (baseWidth > 0 && baseHeight > 0 && width > 0 && height > 0) {
+              const compositeCanvas = document.createElement('canvas');
+              compositeCanvas.width = baseWidth;
+              compositeCanvas.height = baseHeight;
+              const compositeCtx = compositeCanvas.getContext('2d');
+              if (compositeCtx) {
+                compositeCtx.drawImage(baseImage, 0, 0, baseWidth, baseHeight);
+                const ratioX = editWidth / baseWidth || 1;
+                const ratioY = editHeight / baseHeight || 1;
+                const srcX = Math.max(0, Math.round(x * ratioX));
+                const srcY = Math.max(0, Math.round(y * ratioY));
+                const srcW = Math.max(1, Math.round(width * ratioX));
+                const srcH = Math.max(1, Math.round(height * ratioY));
+                const safeSrcW = Math.max(1, Math.min(srcW, editWidth - srcX));
+                const safeSrcH = Math.max(1, Math.min(srcH, editHeight - srcY));
+                const destW = Math.max(1, Math.min(width, baseWidth - x));
+                const destH = Math.max(1, Math.min(height, baseHeight - y));
+                compositeCtx.drawImage(
+                  editedImage,
+                  srcX,
+                  srcY,
+                  safeSrcW,
+                  safeSrcH,
+                  x,
+                  y,
+                  destW,
+                  destH
+                );
+                finalImageUrl = compositeCanvas.toDataURL('image/png');
+              }
+            }
+          } catch (err) {
+            console.error("Smart edit compositing failed:", err);
+          }
+        }
+        onImageEdit(finalImageUrl);
+        if (clampedSelection) {
+          setSmartEditSelection(clampedSelection);
+        }
+        toast.success("Smart Edit applied to selected region");
       }
     } catch (e) {
-      // ignore
+      console.error("Smart Edit failed:", e);
+      toast.error("Smart Edit failed. Please try again.");
     } finally {
       setIsAiProcessing(false);
     }

@@ -6,6 +6,7 @@ import { Textarea } from "@/app/components/ui/textarea";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
 import { Card } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
+import { Skeleton } from "@/app/components/ui/skeleton";
 import { Loader2, Sparkles, CheckCircle2, RefreshCw, ArrowUp, Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -465,8 +466,14 @@ Elements: ${keywords?.elements.join(", ") || "none specified"}.`;
                     )}
 
                     {direction.isGenerating && (
-                      <div className="mt-3 flex items-center justify-center py-8">
-                        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        {Array.from({ length: 4 }).map((_, idx) => (
+                          <Skeleton
+                            key={idx}
+                            animate="blink"
+                            className="aspect-square w-full rounded-lg bg-muted/70"
+                          />
+                        ))}
                       </div>
                     )}
                   </Card>

@@ -12,6 +12,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/
 
 export default function Page() {
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [isImagePending, setIsImagePending] = useState(false);
+  const [pendingRatio, setPendingRatio] = useState<string | null>(null);
   const canvasCommandRef = useRef<((command: string) => Promise<string>) | null>(null);
   const canvasHistoryRef = useRef<{ undo: () => void; redo: () => void } | null>(null);
   const canvasExportRef = useRef<(() => void) | null>(null);
@@ -86,6 +88,8 @@ export default function Page() {
       <div className="absolute top-12 left-0 right-0 bottom-0">
         <Canvas
           generatedImageUrl={generatedImageUrl}
+          isImagePending={isImagePending}
+          pendingImageRatio={pendingRatio}
           onClear={handleClear}
           onCanvasCommandRef={canvasCommandRef}
           onCanvasHistoryRef={canvasHistoryRef}
@@ -101,6 +105,15 @@ export default function Page() {
         <div className="pointer-events-auto fixed bottom-4 left-1/2 -translate-x-1/2 w-[40%] max-w-[600px] overflow-visible">
           <PromptSidebar
             onImageGenerated={handleImageGenerated}
+            onImageGenerationPending={(pending, options) => {
+              setIsImagePending(pending);
+              if (pending && options?.ratio) {
+                setPendingRatio(options.ratio);
+              }
+              if (!pending) {
+                setPendingRatio(null);
+              }
+            }}
             currentImageUrl={generatedImageUrl}
             onCanvasCommand={handleCanvasCommand}
             onCanvasUndo={() => canvasHistoryRef.current?.undo()}

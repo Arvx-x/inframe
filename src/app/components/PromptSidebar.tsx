@@ -7,6 +7,7 @@ import { ScrollArea } from "@/app/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
 import { Input } from "@/app/components/ui/input";
+import { Skeleton } from "@/app/components/ui/skeleton";
 import { Sparkles, Loader2, ArrowUp, Wand2, ImagePlus, Zap, Brain, PenTool, Plus, Undo2, Redo2, Minus, Palette, X, Palette as DesignIcon, MousePointer as CanvasIcon, ChevronDown } from "lucide-react";
 // Calls go to local Next.js API routes instead of Supabase Edge Functions
 import { toast } from "sonner";
@@ -16,6 +17,8 @@ interface Message {
   content: string;
   imageUrl?: string;
   timestamp?: number;
+  id?: string;
+  pendingImage?: boolean;
 }
 
 type ChatMode = "canvas" | "design" | "chat";
@@ -72,8 +75,13 @@ const buildRefinedPrompt = (
   ].filter(Boolean).join("\n");
 };
 
+interface ImageGenerationPendingOptions {
+  ratio?: string;
+}
+
 interface PromptSidebarProps {
   onImageGenerated: (imageUrl: string) => void;
+  onImageGenerationPending?: (pending: boolean, options?: ImageGenerationPendingOptions) => void;
   currentImageUrl: string | null;
   onCanvasCommand?: (command: string) => Promise<string>;
   onCanvasUndo?: () => void;
@@ -82,7 +90,7 @@ interface PromptSidebarProps {
   onProjectNameUpdate?: (name: string) => void;
 }
 
-export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCanvasCommand, onCanvasUndo, onCanvasRedo, showHistoryControls = false, onProjectNameUpdate }: PromptSidebarProps) {
+export default function PromptSidebar({ onImageGenerated, onImageGenerationPending, currentImageUrl, onCanvasCommand, onCanvasUndo, onCanvasRedo, showHistoryControls = false, onProjectNameUpdate }: PromptSidebarProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -98,7 +106,71 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
   const [hasSetProjectName, setHasSetProjectName] = useState(false);
   const [selectedRatio, setSelectedRatio] = useState<string>("1×1");
   const [selectedModel, setSelectedModel] = useState<string>("DALL-E 3");
+  const pendingMessageIdsRef = useRef<Set<string>>(new Set());
   
+  const generateMessageId = () =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const updatePendingStatus = (options?: ImageGenerationPendingOptions) => {
+    if (onImageGenerationPending) {
+      onImageGenerationPending(pendingMessageIdsRef.current.size > 0, options);
+    }
+  };
+
+  const addPendingImageMessage = (target: "chat" | "design") => {
+    const id = generateMessageId();
+    pendingMessageIdsRef.current.add(id);
+    updatePendingStatus({ ratio: selectedRatio });
+    const pendingMessage: Message = {
+      id,
+      role: "assistant",
+      content: "",
+      pendingImage: true,
+      timestamp: Date.now(),
+    };
+
+    if (target === "chat") {
+      setChatMessages(prev => [...prev, pendingMessage]);
+    } else {
+      setMessages(prev => [...prev, pendingMessage]);
+    }
+
+    return id;
+  };
+
+  const resolvePendingImageMessage = (target: "chat" | "design", id: string, imageUrl: string) => {
+    const updater = (prev: Message[]) =>
+      prev.map(msg =>
+        msg.id === id ? { ...msg, imageUrl, pendingImage: false } : msg
+      );
+
+    if (target === "chat") {
+      setChatMessages(updater);
+    } else {
+      setMessages(updater);
+    }
+
+    if (pendingMessageIdsRef.current.delete(id)) {
+      updatePendingStatus();
+    }
+  };
+
+  const removePendingImageMessage = (target: "chat" | "design", id: string) => {
+    const updater = (prev: Message[]) => prev.filter(msg => msg.id !== id);
+
+    if (target === "chat") {
+      setChatMessages(updater);
+    } else {
+      setMessages(updater);
+    }
+
+    if (pendingMessageIdsRef.current.delete(id)) {
+      updatePendingStatus();
+    }
+  };
+
   // Extract project name from user message
   const extractProjectName = (message: string): string => {
     // Clean the message
@@ -317,48 +389,60 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
         
         // Check if AI is ready to generate
         if (data.success && data.shouldGenerate) {
-          // Generate the image
-          const category = classifyIdea(data.finalPrompt || userMessage.content);
-          const keywords = extractKeywords(data.finalPrompt || userMessage.content);
-          const refinedPrompt = buildRefinedPrompt(
-            data.finalPrompt || userMessage.content, 
-            category, 
-            keywords, 
-            false,
-            excludeText,
-            selectedColors
-          );
-          
-          console.log('Generating image with refined prompt:', refinedPrompt);
-          
-          const genRes = await fetch('/api/generate-image', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt: refinedPrompt
-            })
-          });
-          
-          if (!genRes.ok) {
-            const errorText = await genRes.text();
-            console.error('Image generation failed:', errorText);
-            throw new Error(errorText);
-          }
-          
-          const genData = await genRes.json();
-          console.log('Image generation response:', genData);
-          
-          if (genData?.imageUrl) {
-            onImageGenerated(genData.imageUrl);
-            const confirmMessage: Message = {
-              role: "assistant",
-              content: "✨ Image created successfully! I've added it to your canvas.",
-              timestamp: Date.now()
-            };
-            setChatMessages((prev) => [...prev, confirmMessage]);
-            toast.success("Image generated!");
-          } else {
-            throw new Error("No image URL in generation response");
+          const pendingId = addPendingImageMessage("chat");
+
+          try {
+            // Generate the image
+            const category = classifyIdea(data.finalPrompt || userMessage.content);
+            const keywords = extractKeywords(data.finalPrompt || userMessage.content);
+            const refinedPrompt = buildRefinedPrompt(
+              data.finalPrompt || userMessage.content, 
+              category, 
+              keywords, 
+              false,
+              excludeText,
+              selectedColors
+            );
+            
+            console.log('Generating image with refined prompt:', refinedPrompt);
+            
+            const genRes = await fetch('/api/generate-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                prompt: refinedPrompt
+              })
+            });
+            
+            if (!genRes.ok) {
+              const errorText = await genRes.text();
+              console.error('Image generation failed:', errorText);
+              removePendingImageMessage("chat", pendingId);
+              throw new Error(errorText);
+            }
+            
+            const genData = await genRes.json();
+            console.log('Image generation response:', genData);
+            
+            if (genData?.imageUrl) {
+              resolvePendingImageMessage("chat", pendingId, genData.imageUrl);
+              onImageGenerated(genData.imageUrl);
+              const confirmMessage: Message = {
+                role: "assistant",
+                content: "✨ Image created successfully! I've added it to your canvas.",
+                timestamp: Date.now()
+              };
+              setChatMessages((prev) => [...prev, confirmMessage]);
+              toast.success("Image generated!");
+            } else {
+              removePendingImageMessage("chat", pendingId);
+              throw new Error("No image URL in generation response");
+            }
+          } catch (err) {
+            if (pendingId) {
+              removePendingImageMessage("chat", pendingId);
+            }
+            throw err;
           }
         } else {
           // Continue conversation
@@ -447,22 +531,45 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
               if (chosen.length > 0) {
                 const direction = chosen[0];
                 const basePrompt = `${wizardKeywords?.useCase || 'image'} with ${(wizardKeywords?.tone || []).join(', ')}`;
-                const mmgRes = await fetch('/api/design-wizard', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ phase: 'generateFromDirection', direction, basePrompt })
-                });
-                if (!mmgRes.ok) throw new Error(await mmgRes.text());
-                const mmgData = await mmgRes.json();
-                const variants = mmgData?.variants || [];
-                for (const v of variants) {
-                  if (v?.imageUrl) {
-                    onImageGenerated(v.imageUrl);
-                    setMessages((prev) => [
-                      ...prev,
-                      { role: 'assistant', imageUrl: v.imageUrl, content: '', timestamp: Date.now() }
-                    ]);
+                let pendingId: string | null = null;
+                try {
+                  pendingId = addPendingImageMessage("design");
+                  const mmgRes = await fetch('/api/design-wizard', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phase: 'generateFromDirection', direction, basePrompt })
+                  });
+                  if (!mmgRes.ok) {
+                    throw new Error(await mmgRes.text());
                   }
+                  const mmgData = await mmgRes.json();
+                  const variants = (mmgData?.variants || []).filter((v: any) => v?.imageUrl);
+
+                  if (variants.length > 0) {
+                    const [firstVariant, ...restVariants] = variants;
+                    resolvePendingImageMessage("design", pendingId, firstVariant.imageUrl);
+                    onImageGenerated(firstVariant.imageUrl);
+
+                    for (const v of restVariants) {
+                      onImageGenerated(v.imageUrl);
+                      setMessages(prev => [
+                        ...prev,
+                        {
+                          role: 'assistant',
+                          imageUrl: v.imageUrl,
+                          content: '',
+                          timestamp: Date.now(),
+                        },
+                      ]);
+                    }
+                  } else if (pendingId) {
+                    removePendingImageMessage("design", pendingId);
+                  }
+                } catch (error) {
+                  if (pendingId) {
+                    removePendingImageMessage("design", pendingId);
+                  }
+                  throw error;
                 }
               }
               const assistantMessage: Message = { role: 'assistant', content: 'Added selected visuals to canvas. Want to refine or generate more?', timestamp: Date.now() };
@@ -484,20 +591,30 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
               if (!refineRes.ok) throw new Error(await refineRes.text());
               const refineData = await refineRes.json();
               const basePrompt = refineData?.data?.updatedPrompt || `${wizardKeywords?.useCase || 'image'} with ${(wizardKeywords?.tone || []).join(', ')}`;
-              const genRes = await fetch('/api/generate-image', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: basePrompt })
-              });
-              if (genRes.ok) {
-                const genData = await genRes.json();
-                if (genData?.imageUrl) {
-                  onImageGenerated(genData.imageUrl);
-                  setMessages((prev) => [
-                    ...prev,
-                    { role: 'assistant', imageUrl: genData.imageUrl, content: '', timestamp: Date.now() }
-                  ]);
+              let pendingId: string | null = null;
+              try {
+                pendingId = addPendingImageMessage("design");
+                const genRes = await fetch('/api/generate-image', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ prompt: basePrompt })
+                });
+                if (genRes.ok) {
+                  const genData = await genRes.json();
+                  if (genData?.imageUrl) {
+                    resolvePendingImageMessage("design", pendingId, genData.imageUrl);
+                    onImageGenerated(genData.imageUrl);
+                  } else if (pendingId) {
+                    removePendingImageMessage("design", pendingId);
+                  }
+                } else if (pendingId) {
+                  removePendingImageMessage("design", pendingId);
                 }
+              } catch (error) {
+                if (pendingId) {
+                  removePendingImageMessage("design", pendingId);
+                }
+                throw error;
               }
               const assistantMessage: Message = { role: 'assistant', content: 'Refined the style and added a new variation. Want to refine again or switch to another direction?', timestamp: Date.now() };
               setMessages(prev => [...prev, assistantMessage]);
@@ -513,20 +630,27 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
               const refineData = await refineRes2.json();
               const basePrompt = refineData?.data?.updatedPrompt || `${wizardKeywords?.useCase || 'image'} with ${(wizardKeywords?.tone || []).join(', ')}`;
               for (const _ of picks) {
-                const genRes = await fetch('/api/generate-image', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ prompt: basePrompt })
-                });
-                if (genRes.ok) {
-                  const genData = await genRes.json();
-                  if (genData?.imageUrl) {
-                    onImageGenerated(genData.imageUrl);
-                    setMessages((prev) => [
-                      ...prev,
-                      { role: 'assistant', imageUrl: genData.imageUrl, content: '', timestamp: Date.now() }
-                    ]);
+                const pendingId = addPendingImageMessage("design");
+                try {
+                  const genRes = await fetch('/api/generate-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: basePrompt })
+                  });
+                  if (genRes.ok) {
+                    const genData = await genRes.json();
+                    if (genData?.imageUrl) {
+                      resolvePendingImageMessage("design", pendingId, genData.imageUrl);
+                      onImageGenerated(genData.imageUrl);
+                    } else {
+                      removePendingImageMessage("design", pendingId);
+                    }
+                  } else {
+                    removePendingImageMessage("design", pendingId);
                   }
+                } catch (error) {
+                  removePendingImageMessage("design", pendingId);
+                  throw error;
                 }
               }
               const assistantMessage: Message = { role: 'assistant', content: 'Added visuals for the chosen direction. Want to refine or pick another?', timestamp: Date.now() };
@@ -540,21 +664,33 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
           }
         } else {
           // Quick create mode - route through dedicated image endpoint
-          const quickRes = await fetch('/api/generate-image', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: userMessage.content, isEdit: !!currentImageUrl, currentImageUrl })
-          });
-          if (!quickRes.ok) throw new Error(await quickRes.text());
-          const data = await quickRes.json();
-          if (!data?.imageUrl) throw new Error("No image URL returned");
+          let pendingId: string | null = null;
+          try {
+            pendingId = addPendingImageMessage("design");
+            const quickRes = await fetch('/api/generate-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt: userMessage.content, isEdit: !!currentImageUrl, currentImageUrl })
+            });
+            if (!quickRes.ok) {
+              throw new Error(await quickRes.text());
+            }
+            const data = await quickRes.json();
+            if (!data?.imageUrl) {
+              throw new Error("No image URL returned");
+            }
 
-          onImageGenerated(data.imageUrl);
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", imageUrl: data.imageUrl, content: "", timestamp: Date.now() },
-          ]);
-          toast.success("Image generated!");
+            onImageGenerated(data.imageUrl);
+            if (pendingId) {
+              resolvePendingImageMessage("design", pendingId, data.imageUrl);
+            }
+            toast.success("Image generated!");
+          } catch (error) {
+            if (pendingId) {
+              removePendingImageMessage("design", pendingId);
+            }
+            throw error;
+          }
         }
       }
     } catch (error) {
@@ -739,12 +875,33 @@ export default function PromptSidebar({ onImageGenerated, currentImageUrl, onCan
               {chatMessages.map((message, index) => (
                 <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {message.role === 'user' ? (
-                    <div className="max-w-[80%] rounded-lg px-3 py-2 bg-muted text-foreground">
-                      <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                    <div className="max-w-[80%] space-y-2 text-foreground">
+                      {message.imageUrl && (
+                        <div className="rounded-lg border border-border overflow-hidden">
+                          <img src={message.imageUrl} alt="Uploaded" className="w-full h-auto" />
+                        </div>
+                      )}
+                      {message.content && (
+                        <div className="rounded-lg px-3 py-2 bg-muted text-sm whitespace-pre-wrap">
+                          {message.content}
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="max-w-[80%] text-foreground">
-                      <div className="text-sm whitespace-normal">{message.content}</div>
+                    <div className="max-w-[80%] space-y-2 text-foreground">
+                      {message.pendingImage && (
+                        <div className="rounded-lg border border-border overflow-hidden bg-muted/20">
+                          <Skeleton animate="blink" className="h-40 w-full bg-muted/60" />
+                        </div>
+                      )}
+                      {message.imageUrl && !message.pendingImage && (
+                        <div className="rounded-lg border border-border overflow-hidden">
+                          <img src={message.imageUrl} alt="Generated" className="w-full h-auto" />
+                        </div>
+                      )}
+                      {message.content && (
+                        <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                      )}
                     </div>
                   )}
                 </div>

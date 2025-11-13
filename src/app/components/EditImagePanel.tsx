@@ -6,6 +6,7 @@ import { Textarea } from "@/app/components/ui/textarea";
 import { X, Loader2, Wand2, Sparkles } from "lucide-react";
 // Use local API route for image editing
 import { toast } from "sonner";
+import { Skeleton } from "@/app/components/ui/skeleton";
 
 interface EditImagePanelProps {
   position: { x: number; y: number };
@@ -108,12 +109,17 @@ export default function EditImagePanel({ position, imageElement, onEditComplete,
       <div className="p-4 space-y-4">
         {/* Image Preview */}
         {imageElement && (
-          <div className="rounded-lg border border-border overflow-hidden bg-muted/20">
+          <div className="relative rounded-lg border border-border overflow-hidden bg-muted/20">
             <img
               src={imageElement.src}
               alt="Selected image"
-              className="w-full h-40 object-contain"
+              className={`w-full h-40 object-contain transition-opacity duration-200 ${isEditing ? 'opacity-0' : 'opacity-100'}`}
             />
+            {isEditing && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/70">
+                <Skeleton animate="blink" className="h-full w-full bg-muted/50" />
+              </div>
+            )}
           </div>
         )}
 

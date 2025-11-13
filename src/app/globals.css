@@ -231,3 +231,18 @@
     opacity: 0;
   }
 }
+
+/* Blinking skeleton animation */
+@keyframes skeleton-blink {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.animate-blink {
+  animation: skeleton-blink 1.2s ease-in-out infinite;
+}
