@@ -198,19 +198,19 @@ export function Toolbar({
             transition: 'left 200ms cubic-bezier(0.4, 0, 0.2, 1), top 200ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms cubic-bezier(0.4, 0, 0.2, 1)'
           }}
         >
-          {/* Pointer Button */}
+          {/* Move Button */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button 
                 onClick={() => { setPenSubTool('pointer'); }} 
                 variant="ghost" 
                 className={`h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${penSubTool === 'pointer' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} 
-                aria-label="Pointer"
+                aria-label="Move"
               >
                 <MousePointer />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={12} className="z-[60]">Pointer</TooltipContent>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">Move</TooltipContent>
           </Tooltip>
 
           {/* Curve Button */}
