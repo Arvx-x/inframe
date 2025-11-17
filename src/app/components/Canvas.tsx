@@ -41,11 +41,12 @@ interface PathPoint {
   cp2y?: number;
 }
 
-function pointsToSVGPath(points: PathPoint[], previewPoint?: { x: number; y: number }): string {
+function pointsToSVGPath(points: PathPoint[], previewPoint?: { x: number; y: number }, isClosed: boolean = false): string {
   if (points.length === 0) return '';
   
   let path = `M ${points[0].x} ${points[0].y}`;
   
+  // Draw lines to all points except the first (if closed, we'll use Z command instead)
   for (let i = 1; i < points.length; i++) {
     const prev = points[i - 1];
     const curr = points[i];
@@ -61,8 +62,13 @@ function pointsToSVGPath(points: PathPoint[], previewPoint?: { x: number; y: num
     }
   }
   
-  // Add preview line if drawing
-  if (previewPoint && points.length > 0) {
+  // If path is closed, use Z command to close it (connects to first point)
+  if (isClosed && points.length > 2) {
+    path += ' Z';
+  }
+  
+  // Add preview line if drawing (and not closed)
+  if (previewPoint && points.length > 0 && !isClosed) {
     const last = points[points.length - 1];
     path += ` L ${previewPoint.x} ${previewPoint.y}`;
   }
@@ -133,8 +139,8 @@ function parseSVGPath(pathString: string): PathPoint[] {
 }
 
 // Update path object with new points
-function updatePathFromPoints(path: any, points: PathPoint[]): void {
-  const pathString = pointsToSVGPath(points);
+function updatePathFromPoints(path: any, points: PathPoint[], isClosed: boolean = false): void {
+  const pathString = pointsToSVGPath(points, undefined, isClosed);
   if (pathString) {
     path.set({ path: pathString });
     // Store points for editing
@@ -290,7 +296,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut'
   >('pointer');
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
-  const [penMode, setPenMode] = useState<'straight' | 'curve'>('straight');
+  const [penSubTool, setPenSubTool] = useState<'draw' | 'pointer' | 'curve'>('draw');
   const [selectedObject, setSelectedObject] = useState<any>(null);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
@@ -306,8 +312,10 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   const drawingTextLabelRef = useRef<FabricTextbox | null>(null);
   
   // Path creation state
-  const penModeRef = useRef<'straight' | 'curve'>('straight');
+  const penSubToolRef = useRef<'draw' | 'pointer' | 'curve'>('draw');
   const isDrawingPathRef = useRef(false);
+  const isPathDrawingStoppedRef = useRef(false); // Track if drawing is stopped after closing
+  const isPathClosedRef = useRef(false); // Track if path is closed (without duplicating first point)
   const currentPathPointsRef = useRef<PathPoint[]>([]);
   const currentPathRef = useRef<any>(null); // Fabric Path preview
   const penNodeHandlesRef = useRef<FabricCircle[]>([]);
@@ -315,7 +323,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   const penPreviewLineRef = useRef<FabricLine | null>(null);
   const isDraggingControlHandleRef = useRef(false);
   const draggingHandleIndexRef = useRef<number | null>(null);
-  const draggingHandleTypeRef = useRef<'cp1' | 'cp2' | null>(null);
+  const draggingHandleTypeRef = useRef<'point' | 'cp1' | 'cp2' | null>(null);
   
   // Path editing state
   const isEditingPathRef = useRef(false);
@@ -362,6 +370,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       isClosingStart = Math.hypot(dx, dy) <= PEN_CLOSE_THRESHOLD;
     }
 
+    // Draw lines between consecutive points
     for (let i = 1; i < points.length; i++) {
       const prev = points[i - 1];
       const curr = points[i];
@@ -376,32 +385,45 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       canvas.add(line);
       penNodeLinesRef.current.push(line);
     }
+    
+    // If path is closed, draw line from last point to first point
+    if (isPathClosedRef.current && points.length > 2) {
+      const last = points[points.length - 1];
+      const first = points[0];
+      const closingLine = new FabricLine([last.x, last.y, first.x, first.y], {
+        stroke: '#94A3B8',
+        strokeWidth: 1.5,
+        selectable: false,
+        evented: false,
+        strokeDashArray: [4, 4],
+        excludeFromExport: true,
+      });
+      canvas.add(closingLine);
+      penNodeLinesRef.current.push(closingLine);
+    }
 
     points.forEach((point, index) => {
       const isStart = index === 0;
-      const baseRadius = isStart ? 6 : 4;
+      const baseRadius = 5; // All nodes same size
       const highlightStart = isStart && isClosingStart;
+      // Make nodes evented when in pointer mode so they can be clicked
+      const isPointerMode = penSubToolRef.current === 'pointer';
       const circle = new FabricCircle({
         left: point.x,
         top: point.y,
-        radius: highlightStart ? baseRadius + 2 : baseRadius,
-        fill: isStart ? (highlightStart ? '#0EA5E9' : '#ffffff') : '#111827',
-        stroke: isStart ? '#0EA5E9' : '#ffffff',
+        radius: highlightStart ? baseRadius + 1 : baseRadius,
+        fill: '#111827', // Same color for all points
+        stroke: '#ffffff', // Same stroke for all points
         strokeWidth: 2,
         selectable: false,
-        evented: false,
+        evented: isPointerMode, // Allow clicking in pointer mode
         originX: 'center',
         originY: 'center',
         excludeFromExport: true,
-        shadow: highlightStart
-          ? ({
-              color: 'rgba(14,165,233,0.25)',
-              blur: 12,
-              offsetX: 0,
-              offsetY: 0,
-            } as any)
-          : undefined,
+        hoverCursor: isPointerMode ? 'move' : 'default',
       });
+      // Store index for reference
+      (circle as any).__pointIndex = index;
       canvas.add(circle);
       penNodeHandlesRef.current.push(circle);
     });
@@ -436,7 +458,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       return;
     }
     
-    const pathString = pointsToSVGPath(currentPathPointsRef.current, previewPoint);
+    const pathString = pointsToSVGPath(currentPathPointsRef.current, previewPoint, isPathClosedRef.current);
     if (!pathString) return;
     
     try {
@@ -472,7 +494,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     clearPenNodeOverlay(canvas);
     
     // Create final path
-    const pathString = pointsToSVGPath(currentPathPointsRef.current);
+    const pathString = pointsToSVGPath(currentPathPointsRef.current, undefined, isPathClosedRef.current);
     if (!pathString) {
       cancelPath(canvas);
       return;
@@ -515,6 +537,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       currentPathRef.current = null;
     }
     isDrawingPathRef.current = false;
+    isPathClosedRef.current = false;
     currentPathPointsRef.current = [];
     clearPenNodeOverlay(canvas);
     canvas.renderAll();
@@ -666,46 +689,190 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       if (activeToolbarButtonRef.current === 'pen' && isLeftButton) {
         opt.e.preventDefault();
         const pointer = canvas.getPointer(e);
+        const currentSubTool = penSubToolRef.current;
         
-        if (isDrawingPathRef.current && currentPathPointsRef.current.length > 0) {
-          const first = currentPathPointsRef.current[0];
-          const dx = pointer.x - first.x;
-          const dy = pointer.y - first.y;
-          const distanceToStart = Math.hypot(dx, dy);
-          if (distanceToStart <= PEN_CLOSE_THRESHOLD && currentPathPointsRef.current.length > 2) {
-            // Close path by connecting to the starting node
-            currentPathPointsRef.current.push({ ...first });
-            updatePathPreview(canvas);
-            completePath(canvas);
-            return;
+        // Check if clicking on a node handle (for dragging in pointer mode or stopping after closing)
+        let clickedNodeIndex = -1;
+        if (opt.target && Array.isArray(penNodeHandlesRef.current) && penNodeHandlesRef.current.length > 0) {
+          // First check if target has __pointIndex property (it's a node handle)
+          const pointIndex = (opt.target as any)?.__pointIndex;
+          if (typeof pointIndex === 'number' && pointIndex >= 0 && pointIndex < penNodeHandlesRef.current.length) {
+            const handle = penNodeHandlesRef.current[pointIndex];
+            if (handle && handle === opt.target) {
+              clickedNodeIndex = pointIndex;
+            }
+          }
+          
+          // If not found by __pointIndex, check by distance
+          if (clickedNodeIndex === -1) {
+            for (let i = 0; i < penNodeHandlesRef.current.length; i++) {
+              const handle = penNodeHandlesRef.current[i];
+              if (!handle) continue;
+              const handleX = handle.left || 0;
+              const handleY = handle.top || 0;
+              const distance = Math.hypot(pointer.x - handleX, pointer.y - handleY);
+              if (distance <= 10) { // 10px threshold
+                clickedNodeIndex = i;
+                break;
+              }
+            }
           }
         }
-
-        const isCurveMode = penModeRef.current === 'curve';
-
+        
+        // If path is closed and a node is clicked, stop drawing
+        if (isPathDrawingStoppedRef.current && clickedNodeIndex >= 0) {
+          isDrawingPathRef.current = false;
+          isPathDrawingStoppedRef.current = false;
+          return;
+        }
+        
+        // Handle different sub-tool modes
+        if (currentSubTool === 'pointer') {
+          // Pointer mode: allow dragging nodes or adding points to midpoints
+          if (clickedNodeIndex >= 0) {
+            // Start dragging a node
+            selectedPointIndexRef.current = clickedNodeIndex;
+            isDraggingControlHandleRef.current = true;
+            draggingHandleIndexRef.current = clickedNodeIndex;
+            draggingHandleTypeRef.current = 'point';
+            canvas.selection = false;
+            return;
+          }
+          
+          // Check if clicking near midpoint of a segment
+          if (currentPathPointsRef.current.length >= 2) {
+            let closestSegmentIndex = -1;
+            let closestT = 0;
+            let minDist = Infinity;
+            
+            for (let i = 0; i < currentPathPointsRef.current.length - 1; i++) {
+              const p1 = currentPathPointsRef.current[i];
+              const p2 = currentPathPointsRef.current[i + 1];
+              const dx = p2.x - p1.x;
+              const dy = p2.y - p1.y;
+              const lengthSq = dx * dx + dy * dy;
+              
+              if (lengthSq === 0) continue;
+              
+              const t = Math.max(0, Math.min(1, ((pointer.x - p1.x) * dx + (pointer.y - p1.y) * dy) / lengthSq));
+              const projX = p1.x + t * dx;
+              const projY = p1.y + t * dy;
+              const dist = Math.sqrt((pointer.x - projX) ** 2 + (pointer.y - projY) ** 2);
+              
+              // Check if near midpoint (t between 0.3 and 0.7) and within threshold
+              if (dist < minDist && dist < 10 && t > 0.3 && t < 0.7) {
+                minDist = dist;
+                closestSegmentIndex = i;
+                closestT = t;
+              }
+            }
+            
+            if (closestSegmentIndex >= 0) {
+              // Insert point at midpoint
+              const p1 = currentPathPointsRef.current[closestSegmentIndex];
+              const p2 = currentPathPointsRef.current[closestSegmentIndex + 1];
+              const newPoint: PathPoint = {
+                x: p1.x + (p2.x - p1.x) * closestT,
+                y: p1.y + (p2.y - p1.y) * closestT,
+              };
+              currentPathPointsRef.current.splice(closestSegmentIndex + 1, 0, newPoint);
+              updatePathPreview(canvas);
+              canvas.renderAll();
+              return;
+            }
+          }
+          
+          // If not clicking on node or midpoint, do nothing in pointer mode
+          return;
+        } else if (currentSubTool === 'curve') {
+          // Curve mode: convert straight segments to curves
+          if (currentPathPointsRef.current.length >= 2) {
+            let closestSegmentIndex = -1;
+            let minDist = Infinity;
+            
+            for (let i = 0; i < currentPathPointsRef.current.length - 1; i++) {
+              const p1 = currentPathPointsRef.current[i];
+              const p2 = currentPathPointsRef.current[i + 1];
+              
+              // Check if segment is straight (no control points)
+              if (p1.cp2x !== undefined || p2.cp1x !== undefined) continue;
+              
+              const dx = p2.x - p1.x;
+              const dy = p2.y - p1.y;
+              const lengthSq = dx * dx + dy * dy;
+              
+              if (lengthSq === 0) continue;
+              
+              const t = Math.max(0, Math.min(1, ((pointer.x - p1.x) * dx + (pointer.y - p1.y) * dy) / lengthSq));
+              const projX = p1.x + t * dx;
+              const projY = p1.y + t * dy;
+              const dist = Math.sqrt((pointer.x - projX) ** 2 + (pointer.y - projY) ** 2);
+              
+              if (dist < minDist && dist < 15) {
+                minDist = dist;
+                closestSegmentIndex = i;
+              }
+            }
+            
+            if (closestSegmentIndex >= 0) {
+              // Start dragging to create curve
+              const p1 = currentPathPointsRef.current[closestSegmentIndex];
+              const p2 = currentPathPointsRef.current[closestSegmentIndex + 1];
+              const CURVE_HANDLE_TENSION = 0.33;
+              const dx = p2.x - p1.x;
+              const dy = p2.y - p1.y;
+              
+              p1.cp2x = p1.x + dx * CURVE_HANDLE_TENSION;
+              p1.cp2y = p1.y + dy * CURVE_HANDLE_TENSION;
+              p2.cp1x = p2.x - dx * CURVE_HANDLE_TENSION;
+              p2.cp1y = p2.y - dy * CURVE_HANDLE_TENSION;
+              
+              isDraggingControlHandleRef.current = true;
+              draggingHandleIndexRef.current = closestSegmentIndex;
+              draggingHandleTypeRef.current = 'cp2';
+              canvas.selection = false;
+              updatePathPreview(canvas);
+              canvas.renderAll();
+              return;
+            }
+          }
+          return;
+        }
+        
+        // Draw mode: add points
         if (!isDrawingPathRef.current) {
           // Start new path
           isDrawingPathRef.current = true;
+          isPathDrawingStoppedRef.current = false;
+          isPathClosedRef.current = false;
           currentPathPointsRef.current = [{ x: pointer.x, y: pointer.y }];
           canvas.selection = false;
-        } else {
-          // Add new point to existing path
-          const newPoint: PathPoint = { x: pointer.x, y: pointer.y };
-          const prevPoint = currentPathPointsRef.current[currentPathPointsRef.current.length - 1];
-
-          if (isCurveMode && prevPoint) {
-            applyCurveHandles(prevPoint, newPoint);
-          } else if (!isCurveMode && prevPoint) {
-            clearCurveHandles(prevPoint, 'cp2');
-            clearCurveHandles(newPoint, 'cp1');
+          updatePathPreview(canvas);
+          canvas.renderAll();
+        } else if (!isPathDrawingStoppedRef.current) {
+          // Check if closing path
+          if (currentPathPointsRef.current.length > 0) {
+            const first = currentPathPointsRef.current[0];
+            const dx = pointer.x - first.x;
+            const dy = pointer.y - first.y;
+            const distanceToStart = Math.hypot(dx, dy);
+            
+            if (distanceToStart <= PEN_CLOSE_THRESHOLD && currentPathPointsRef.current.length > 2) {
+              // Close path by marking it as closed (don't add duplicate point)
+              isPathClosedRef.current = true;
+              updatePathPreview(canvas);
+              isPathDrawingStoppedRef.current = true; // Stop drawing, wait for node click
+              canvas.renderAll();
+              return;
+            }
           }
-
+          
+          // Add new point to existing path (straight line)
+          const newPoint: PathPoint = { x: pointer.x, y: pointer.y };
           currentPathPointsRef.current.push(newPoint);
+          updatePathPreview(canvas);
+          canvas.renderAll();
         }
-        
-        // Update preview path
-        updatePathPreview(canvas);
-        canvas.renderAll();
         return;
       }
       
@@ -827,8 +994,55 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         canvas.renderAll();
       }
       
+      // Handle path node dragging (pointer mode)
+      if (isDraggingControlHandleRef.current && draggingHandleIndexRef.current !== null && 
+          activeToolbarButtonRef.current === 'pen' && penSubToolRef.current === 'pointer') {
+        opt.e.preventDefault();
+        const pointer = canvas.getPointer(opt.e);
+        const pointIndex = draggingHandleIndexRef.current;
+        
+        if (pointIndex >= 0 && pointIndex < currentPathPointsRef.current.length) {
+          const point = currentPathPointsRef.current[pointIndex];
+          if (draggingHandleTypeRef.current === 'point') {
+            point.x = pointer.x;
+            point.y = pointer.y;
+            updatePathPreview(canvas);
+            canvas.renderAll();
+          }
+        }
+        return;
+      }
+      
+      // Handle curve handle dragging (curve mode)
+      if (isDraggingControlHandleRef.current && draggingHandleIndexRef.current !== null && 
+          activeToolbarButtonRef.current === 'pen' && penSubToolRef.current === 'curve') {
+        opt.e.preventDefault();
+        const pointer = canvas.getPointer(opt.e);
+        const segmentIndex = draggingHandleIndexRef.current;
+        
+        if (segmentIndex >= 0 && segmentIndex < currentPathPointsRef.current.length - 1) {
+          const p1 = currentPathPointsRef.current[segmentIndex];
+          const p2 = currentPathPointsRef.current[segmentIndex + 1];
+          
+          if (draggingHandleTypeRef.current === 'cp2') {
+            // Update control points based on drag distance
+            const dx = pointer.x - p1.x;
+            const dy = pointer.y - p1.y;
+            p1.cp2x = pointer.x;
+            p1.cp2y = pointer.y;
+            // Mirror the other control point for smooth curves
+            p2.cp1x = p2.x - dx;
+            p2.cp1y = p2.y - dy;
+            updatePathPreview(canvas);
+            canvas.renderAll();
+          }
+        }
+        return;
+      }
+      
       // Handle path drawing preview
-      if (isDrawingPathRef.current && currentPathPointsRef.current.length > 0) {
+      if (isDrawingPathRef.current && currentPathPointsRef.current.length > 0 && 
+          !isPathDrawingStoppedRef.current && penSubToolRef.current === 'draw') {
         opt.e.preventDefault();
         const pointer = canvas.getPointer(opt.e);
         updatePathPreview(canvas, { x: pointer.x, y: pointer.y });
@@ -837,6 +1051,13 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     canvas.on('mouse:up', () => {
       if ((canvas as any).__smartEditActive) {
         return;
+      }
+      
+      // Stop dragging nodes or curve handles
+      if (isDraggingControlHandleRef.current) {
+        isDraggingControlHandleRef.current = false;
+        draggingHandleIndexRef.current = null;
+        draggingHandleTypeRef.current = null;
       }
       isPanningRef.current = false;
       canvas.setCursor(activeToolRef.current === 'hand' ? 'grab' : 'default');
@@ -995,11 +1216,52 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       // Handle path drawing - no completion on mouse:up, wait for double-click or Enter
     });
     
-    // Handle double-click to complete path
+    // Handle double-click to exit editing mode
     canvas.on('mouse:dblclick', (opt: any) => {
-      if (isDrawingPathRef.current) {
+      // Check if pen tool is active and we're in edit mode (drawing or have visible nodes)
+      const isInEditMode = activeToolbarButtonRef.current === 'pen' && 
+                           (isDrawingPathRef.current || penNodeHandlesRef.current.length > 0);
+      
+      if (isInEditMode) {
         opt.e.preventDefault();
-        completePath(canvas);
+        // Exit editing mode: finalize path and hide nodes/toolbar
+        if (currentPathPointsRef.current.length >= 2) {
+          // Create final path
+          const pathString = pointsToSVGPath(currentPathPointsRef.current, undefined, isPathClosedRef.current);
+          if (pathString) {
+            try {
+              const path = new FabricPath(pathString, {
+                stroke: '#111827',
+                strokeWidth: 2,
+                fill: 'transparent',
+                selectable: true,
+                name: 'Path',
+              });
+              
+              // Store original path data for editing
+              (path as any).__pathPoints = currentPathPointsRef.current;
+              
+              canvas.add(path);
+              canvas.setActiveObject(path);
+              
+              // Clear editing state
+              cancelPath(canvas);
+              setActiveToolbarButton('pointer');
+              activeToolbarButtonRef.current = 'pointer';
+              setPenSubTool('draw');
+              canvas.selection = true;
+              canvas.renderAll();
+            } catch (error) {
+              console.error('Error creating path:', error);
+              cancelPath(canvas);
+            }
+          }
+        } else {
+          cancelPath(canvas);
+          setActiveToolbarButton('pointer');
+          activeToolbarButtonRef.current = 'pointer';
+          setPenSubTool('draw');
+        }
       }
     });
 
@@ -1115,12 +1377,26 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   }, [activeShape]);
 
   useEffect(() => {
-    penModeRef.current = penMode;
-  }, [penMode]);
+    penSubToolRef.current = penSubTool;
+    // Update node handles when switching modes (to make them evented in pointer mode)
+    if (fabricCanvas && isDrawingPathRef.current && currentPathPointsRef.current.length > 0) {
+      updatePathPreview(fabricCanvas);
+      // Update cursor when switching to pointer mode
+      if (penSubTool === 'pointer') {
+        fabricCanvas.defaultCursor = 'default';
+        fabricCanvas.hoverCursor = 'move';
+      }
+    }
+  }, [penSubTool, fabricCanvas]);
 
   useEffect(() => {
     if (!fabricCanvas) return;
     if (activeToolbarButton !== 'pen') {
+      // Clear path editing state when pen tool is deselected
+      if (isDrawingPathRef.current) {
+        cancelPath(fabricCanvas);
+        setPenSubTool('draw');
+      }
       if (
         penNodeHandlesRef.current.length > 0 ||
         penNodeLinesRef.current.length > 0 ||
@@ -1138,6 +1414,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     const isPointer = activeTool === 'pointer';
     const isShapeTool = activeToolbarButton === 'shape';
     const isPenTool = activeToolbarButton === 'pen';
+    const isPenPointerMode = isPenTool && penSubTool === 'pointer';
     
     // Respect Smart Edit mode if set by EditSpace
     const smartEditActive = (fabricCanvas as any).__smartEditActive === true;
@@ -1149,6 +1426,12 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       (fabricCanvas as any).moveCursor = 'crosshair';
       fabricCanvas.selection = false; // do not change active object, just prevent new selections
       fabricCanvas.skipTargetFind = true;
+    } else if (isPenPointerMode) {
+      // Pointer mode in pen tool - show pointer cursor
+      fabricCanvas.defaultCursor = 'default';
+      fabricCanvas.hoverCursor = 'move';
+      fabricCanvas.selection = false;
+      fabricCanvas.skipTargetFind = false;
     } else {
       if (isShapeTool || isArtboardTool || isPenTool) {
         fabricCanvas.defaultCursor = 'crosshair';
@@ -1166,7 +1449,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       fabricCanvas.requestRenderAll();
       setSelectedImage(null);
     }
-  }, [activeTool, activeToolbarButton, fabricCanvas]);
+  }, [activeTool, activeToolbarButton, penSubTool, fabricCanvas]);
 
   const handleAddActiveShape = () => {
     if (activeShape === 'rect') return handleAddRect();
@@ -2221,8 +2504,8 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             onFileChange={handleFileChange}
             onUploadClick={handleUploadClick}
             leftOffset={isLayersOpen ? 272 : 8}
-            penMode={penMode}
-            setPenMode={setPenMode}
+            penSubTool={penSubTool}
+            setPenSubTool={setPenSubTool}
           />
 
           {/* Layers floating button */}
