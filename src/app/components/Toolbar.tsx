@@ -1,18 +1,36 @@
 'use client';
 
 import { useState } from "react";
+import type { SVGProps } from "react";
 import { Button } from "@/app/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { 
   Type, Square, Circle as CircleIcon, Minus, Pencil, Plus, 
   MousePointer, Hand, ChevronDown, PenTool, Frame, Pipette, 
-  Paintbrush, Move, Layers, Grid, Ruler, Eraser, Image as ImageIcon 
+  Paintbrush, Move, Layers, Grid, Ruler, Eraser, Image as ImageIcon
 } from "lucide-react";
 
 type ToolbarButton = 'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut';
 type Tool = 'pointer' | 'hand';
 type Shape = 'rect' | 'circle' | 'line';
+type PenMode = 'straight' | 'curve';
+
+const CurvePenIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <path d="M4 20C4 12 12 4 20 4" />
+    <circle cx="4" cy="20" r="1.5" />
+    <circle cx="20" cy="4" r="1.5" />
+  </svg>
+);
 
 interface ToolbarProps {
   activeTool: Tool;
@@ -28,6 +46,8 @@ interface ToolbarProps {
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onUploadClick: () => void;
   leftOffset?: number;
+  penMode: PenMode;
+  setPenMode: (mode: PenMode) => void;
 }
 
 export function Toolbar({
@@ -44,6 +64,8 @@ export function Toolbar({
   onFileChange,
   onUploadClick,
   leftOffset = 8,
+  penMode,
+  setPenMode,
 }: ToolbarProps) {
   return (
     <TooltipProvider>
@@ -126,7 +148,7 @@ export function Toolbar({
                 <ChevronDown className="w-2 h-2 text-foreground/80" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="center" sideOffset={8} className="rounded-xl">
+            <DropdownMenuContent align="start" side="right" sideOffset={6} className="rounded-xl">
               <DropdownMenuItem className="gap-2 text-sm" onClick={() => { setActiveToolbarButton('shape'); setActiveShape('rect'); }}>
                 <Square className="w-4 h-4" /> Rectangle
               </DropdownMenuItem>
@@ -151,14 +173,39 @@ export function Toolbar({
         </Tooltip>
 
         {/* Pen Tool */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button onClick={() => { setActiveToolbarButton('pen'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'pen' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Pen Tool">
-              <PenTool />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={12} className="z-[60]">Pen Tool</TooltipContent>
-        </Tooltip>
+        <div className="relative inline-flex items-center">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={() => { setActiveToolbarButton('pen'); }} variant="ghost" className={`h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${activeToolbarButton === 'pen' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} aria-label="Pen Tool">
+                {penMode === 'straight' ? <PenTool /> : <CurvePenIcon />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={12} className="z-[60]">
+              {penMode === 'straight' ? 'Straight Pen' : 'Curve Pen'}
+            </TooltipContent>
+          </Tooltip>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="absolute right-0 top-1/2 -translate-y-1/2 h-2.5 w-2.5 p-0 rounded-none bg-transparent hover:bg-transparent focus-visible:ring-0 [&_svg]:!size-2" aria-label="Pen options">
+                <ChevronDown className="w-2 h-2 text-foreground/80" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="right" sideOffset={6} className="rounded-xl">
+              <DropdownMenuItem
+                className="gap-2 text-sm"
+                onClick={() => { setActiveToolbarButton('pen'); setPenMode('straight'); }}
+              >
+                <PenTool className="w-4 h-4" /> Straight Pen
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="gap-2 text-sm"
+                onClick={() => { setActiveToolbarButton('pen'); setPenMode('curve'); }}
+              >
+                <CurvePenIcon className="w-4 h-4" /> Curve Pen
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
         {/* Expanded Tools Section - COMMENTED OUT */}
         {/* <div className={`transition-all duration-200 ease-out ${isToolbarExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'} overflow-hidden flex flex-col gap-2.5 ${isToolbarExpanded ? 'pointer-events-auto' : 'pointer-events-none'}`}

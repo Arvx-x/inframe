@@ -143,9 +143,31 @@ function updatePathFromPoints(path: any, points: PathPoint[]): void {
   }
 }
 
+const applyCurveHandles = (prev: PathPoint, curr: PathPoint) => {
+  const dx = curr.x - prev.x;
+  const dy = curr.y - prev.y;
+  prev.cp2x = prev.x + dx * CURVE_HANDLE_TENSION;
+  prev.cp2y = prev.y + dy * CURVE_HANDLE_TENSION;
+  curr.cp1x = curr.x - dx * CURVE_HANDLE_TENSION;
+  curr.cp1y = curr.y - dy * CURVE_HANDLE_TENSION;
+};
+
+const clearCurveHandles = (point: PathPoint, target: 'cp1' | 'cp2' | 'both' = 'both') => {
+  if (target === 'cp1' || target === 'both') {
+    point.cp1x = undefined;
+    point.cp1y = undefined;
+  }
+  if (target === 'cp2' || target === 'both') {
+    point.cp2x = undefined;
+    point.cp2y = undefined;
+  }
+};
+
 const DEFAULT_PLACEHOLDER_SIZE = 200;
 const PLACEHOLDER_VERTICAL_OFFSET_RATIO = 0.08;
 const PLACEHOLDER_MIN_TOP = 16;
+const PEN_CLOSE_THRESHOLD = 14;
+const CURVE_HANDLE_TENSION = 0.4;
 
 const parseRatio = (ratio?: string | null): { width: number; height: number } | null => {
   if (!ratio) return null;
@@ -268,6 +290,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut'
   >('pointer');
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
+  const [penMode, setPenMode] = useState<'straight' | 'curve'>('straight');
   const [selectedObject, setSelectedObject] = useState<any>(null);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
@@ -283,9 +306,13 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   const drawingTextLabelRef = useRef<FabricTextbox | null>(null);
   
   // Path creation state
+  const penModeRef = useRef<'straight' | 'curve'>('straight');
   const isDrawingPathRef = useRef(false);
   const currentPathPointsRef = useRef<PathPoint[]>([]);
   const currentPathRef = useRef<any>(null); // Fabric Path preview
+  const penNodeHandlesRef = useRef<FabricCircle[]>([]);
+  const penNodeLinesRef = useRef<FabricLine[]>([]);
+  const penPreviewLineRef = useRef<FabricLine | null>(null);
   const isDraggingControlHandleRef = useRef(false);
   const draggingHandleIndexRef = useRef<number | null>(null);
   const draggingHandleTypeRef = useRef<'cp1' | 'cp2' | null>(null);
@@ -307,6 +334,95 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   const undoStackRef = useRef<AgentAction[][]>([]);
   const redoStackRef = useRef<AgentAction[][]>([]);
 
+  const clearPenNodeOverlay = (canvas: FabricCanvas) => {
+    penNodeHandlesRef.current.forEach(handle => canvas.remove(handle));
+    penNodeHandlesRef.current = [];
+    penNodeLinesRef.current.forEach(line => canvas.remove(line));
+    penNodeLinesRef.current = [];
+    if (penPreviewLineRef.current) {
+      canvas.remove(penPreviewLineRef.current);
+      penPreviewLineRef.current = null;
+    }
+  };
+
+  const updatePenNodeOverlay = (canvas: FabricCanvas, previewPoint?: { x: number; y: number }) => {
+    clearPenNodeOverlay(canvas);
+    if (currentPathPointsRef.current.length === 0) {
+      return;
+    }
+
+    const points = currentPathPointsRef.current;
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    let isClosingStart = false;
+
+    if (previewPoint && points.length > 2 && firstPoint) {
+      const dx = previewPoint.x - firstPoint.x;
+      const dy = previewPoint.y - firstPoint.y;
+      isClosingStart = Math.hypot(dx, dy) <= PEN_CLOSE_THRESHOLD;
+    }
+
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const line = new FabricLine([prev.x, prev.y, curr.x, curr.y], {
+        stroke: '#94A3B8',
+        strokeWidth: 1.5,
+        selectable: false,
+        evented: false,
+        strokeDashArray: [4, 4],
+        excludeFromExport: true,
+      });
+      canvas.add(line);
+      penNodeLinesRef.current.push(line);
+    }
+
+    points.forEach((point, index) => {
+      const isStart = index === 0;
+      const baseRadius = isStart ? 6 : 4;
+      const highlightStart = isStart && isClosingStart;
+      const circle = new FabricCircle({
+        left: point.x,
+        top: point.y,
+        radius: highlightStart ? baseRadius + 2 : baseRadius,
+        fill: isStart ? (highlightStart ? '#0EA5E9' : '#ffffff') : '#111827',
+        stroke: isStart ? '#0EA5E9' : '#ffffff',
+        strokeWidth: 2,
+        selectable: false,
+        evented: false,
+        originX: 'center',
+        originY: 'center',
+        excludeFromExport: true,
+        shadow: highlightStart
+          ? ({
+              color: 'rgba(14,165,233,0.25)',
+              blur: 12,
+              offsetX: 0,
+              offsetY: 0,
+            } as any)
+          : undefined,
+      });
+      canvas.add(circle);
+      penNodeHandlesRef.current.push(circle);
+    });
+
+    if (previewPoint && lastPoint) {
+      const previewLine = new FabricLine(
+        [lastPoint.x, lastPoint.y, previewPoint.x, previewPoint.y],
+        {
+          stroke: '#0EA5E9',
+          strokeWidth: 1.5,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [2, 2],
+          excludeFromExport: true,
+        }
+      );
+      canvas.add(previewLine);
+      penPreviewLineRef.current = previewLine;
+    }
+  };
+
   // Helper function to update path preview
   const updatePathPreview = (canvas: FabricCanvas, previewPoint?: { x: number; y: number }) => {
     if (currentPathRef.current) {
@@ -314,7 +430,11 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       currentPathRef.current = null;
     }
     
-    if (currentPathPointsRef.current.length === 0) return;
+    if (currentPathPointsRef.current.length === 0) {
+      clearPenNodeOverlay(canvas);
+      canvas.renderAll();
+      return;
+    }
     
     const pathString = pointsToSVGPath(currentPathPointsRef.current, previewPoint);
     if (!pathString) return;
@@ -329,6 +449,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       });
       canvas.add(path);
       currentPathRef.current = path;
+      updatePenNodeOverlay(canvas, previewPoint);
       canvas.renderAll();
     } catch (error) {
       console.error('Error creating path preview:', error);
@@ -348,6 +469,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       canvas.remove(currentPathRef.current);
       currentPathRef.current = null;
     }
+    clearPenNodeOverlay(canvas);
     
     // Create final path
     const pathString = pointsToSVGPath(currentPathPointsRef.current);
@@ -394,6 +516,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     }
     isDrawingPathRef.current = false;
     currentPathPointsRef.current = [];
+    clearPenNodeOverlay(canvas);
     canvas.renderAll();
   };
 
@@ -544,6 +667,22 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         opt.e.preventDefault();
         const pointer = canvas.getPointer(e);
         
+        if (isDrawingPathRef.current && currentPathPointsRef.current.length > 0) {
+          const first = currentPathPointsRef.current[0];
+          const dx = pointer.x - first.x;
+          const dy = pointer.y - first.y;
+          const distanceToStart = Math.hypot(dx, dy);
+          if (distanceToStart <= PEN_CLOSE_THRESHOLD && currentPathPointsRef.current.length > 2) {
+            // Close path by connecting to the starting node
+            currentPathPointsRef.current.push({ ...first });
+            updatePathPreview(canvas);
+            completePath(canvas);
+            return;
+          }
+        }
+
+        const isCurveMode = penModeRef.current === 'curve';
+
         if (!isDrawingPathRef.current) {
           // Start new path
           isDrawingPathRef.current = true;
@@ -551,7 +690,17 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           canvas.selection = false;
         } else {
           // Add new point to existing path
-          currentPathPointsRef.current.push({ x: pointer.x, y: pointer.y });
+          const newPoint: PathPoint = { x: pointer.x, y: pointer.y };
+          const prevPoint = currentPathPointsRef.current[currentPathPointsRef.current.length - 1];
+
+          if (isCurveMode && prevPoint) {
+            applyCurveHandles(prevPoint, newPoint);
+          } else if (!isCurveMode && prevPoint) {
+            clearCurveHandles(prevPoint, 'cp2');
+            clearCurveHandles(newPoint, 'cp1');
+          }
+
+          currentPathPointsRef.current.push(newPoint);
         }
         
         // Update preview path
@@ -964,6 +1113,24 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   useEffect(() => {
     activeShapeRef.current = activeShape;
   }, [activeShape]);
+
+  useEffect(() => {
+    penModeRef.current = penMode;
+  }, [penMode]);
+
+  useEffect(() => {
+    if (!fabricCanvas) return;
+    if (activeToolbarButton !== 'pen') {
+      if (
+        penNodeHandlesRef.current.length > 0 ||
+        penNodeLinesRef.current.length > 0 ||
+        penPreviewLineRef.current
+      ) {
+        clearPenNodeOverlay(fabricCanvas);
+        fabricCanvas.renderAll();
+      }
+    }
+  }, [activeToolbarButton, fabricCanvas]);
 
   // Apply tool mode to canvas behavior and cursors
   useEffect(() => {
@@ -2054,6 +2221,8 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             onFileChange={handleFileChange}
             onUploadClick={handleUploadClick}
             leftOffset={isLayersOpen ? 272 : 8}
+            penMode={penMode}
+            setPenMode={setPenMode}
           />
 
           {/* Layers floating button */}
