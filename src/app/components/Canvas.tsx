@@ -479,9 +479,11 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   };
 
   // Helper function to complete path creation
-  const completePath = (canvas: FabricCanvas) => {
-    if (!isDrawingPathRef.current || currentPathPointsRef.current.length < 2) {
-      // Cancel if not enough points
+  const completePath = (canvas: FabricCanvas, options?: { switchToPointer?: boolean }) => {
+    const { switchToPointer = true } = options || {};
+    const hasPathInProgress = !!currentPathRef.current || isDrawingPathRef.current;
+    if (!hasPathInProgress) return;
+    if (currentPathPointsRef.current.length < 2) {
       cancelPath(canvas);
       return;
     }
@@ -518,12 +520,16 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       
       // Reset state
       isDrawingPathRef.current = false;
+      isPathDrawingStoppedRef.current = false;
+      isPathClosedRef.current = false;
       currentPathPointsRef.current = [];
-      
-      // Reset to pointer tool
-      setActiveToolbarButton('pointer');
-      activeToolbarButtonRef.current = 'pointer';
-      canvas.selection = true;
+
+      if (switchToPointer) {
+        // Reset to pointer tool
+        setActiveToolbarButton('pointer');
+        activeToolbarButtonRef.current = 'pointer';
+        canvas.selection = true;
+      }
     } catch (error) {
       console.error('Error creating path:', error);
       cancelPath(canvas);
@@ -723,7 +729,9 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         if (isPathDrawingStoppedRef.current && clickedNodeIndex >= 0) {
           isDrawingPathRef.current = false;
           isPathDrawingStoppedRef.current = false;
-          return;
+          if (currentSubTool !== 'pointer') {
+            return;
+          }
         }
         
         // Handle different sub-tool modes
@@ -1393,9 +1401,16 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     if (!fabricCanvas) return;
     if (activeToolbarButton !== 'pen') {
       // Clear path editing state when pen tool is deselected
-      if (isDrawingPathRef.current) {
-        cancelPath(fabricCanvas);
+      const hasPathInProgress =
+        currentPathPointsRef.current.length >= 2 &&
+        (currentPathRef.current !== null || isDrawingPathRef.current);
+      if (hasPathInProgress) {
+        if (currentPathPointsRef.current.length >= 2) {
+          completePath(fabricCanvas, { switchToPointer: false });
+        }
         setPenSubTool('draw');
+      } else if (isDrawingPathRef.current) {
+        cancelPath(fabricCanvas);
       }
       if (
         penNodeHandlesRef.current.length > 0 ||
