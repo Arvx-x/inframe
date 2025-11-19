@@ -6,6 +6,7 @@ import { FabricObject, FabricImage, Textbox as FabricTextbox, Rect as FabricRect
 import { Properties } from "@/app/components/Properties";
 import { Shapes } from "@/app/components/Shapes";
 import { Text } from "@/app/components/Text";
+import { ArtboardProperties } from "@/app/components/ArtboardProperties";
 import Colors from "@/app/components/colors";
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -60,9 +61,10 @@ interface InspectorSidebarProps {
   onImageEdit?: (newImageUrl: string) => void;
   onEnterPathEditMode?: (path: FabricPath) => void;
   onExitPathEditMode?: () => void;
+  onCanvasCommand?: (command: string) => Promise<string>;
 }
 
-export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = false, onImageEdit, onEnterPathEditMode, onExitPathEditMode }: InspectorSidebarProps) => {
+export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = false, onImageEdit, onEnterPathEditMode, onExitPathEditMode, onCanvasCommand }: InspectorSidebarProps) => {
   const [properties, setProperties] = useState({
     x: 0,
     y: 0,
@@ -310,7 +312,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     canvas.renderAll();
   };
 
-  // Only show for images, shapes, text, and paths
+  // Only show for images, shapes, text, paths, and artboards
   const isImage = selectedObject instanceof FabricImage;
   const isRect = selectedObject instanceof FabricRect;
   const isCircle = selectedObject instanceof FabricCircle;
@@ -318,8 +320,9 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
   const isPath = selectedObject instanceof FabricPath || selectedObject?.type === 'path';
   const isShape = isRect || isCircle || isLine;
   const isText = selectedObject instanceof FabricTextbox;
+  const isArtboard = isRect && (selectedObject as any).isArtboard;
   
-  if (!selectedObject || (!isImage && !isShape && !isText && !isPath)) return null;
+  if (!selectedObject || (!isImage && !isShape && !isText && !isPath && !isArtboard)) return null;
 
   return (
     <div
@@ -412,7 +415,17 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         {/* Tools/Transform Tabs - Show component content */}
         {activeTab !== "color" && (
           <>
-            {isImage ? (
+            {isArtboard ? (
+              <ArtboardProperties 
+                selectedObject={selectedObject}
+                canvas={canvas}
+                properties={properties}
+                updateObject={updateObject}
+                activeTab={activeTab}
+                onDelete={handleDelete}
+                onCanvasCommand={onCanvasCommand}
+              />
+            ) : isImage ? (
               <Properties 
                 selectedObject={selectedObject}
                 canvas={canvas}

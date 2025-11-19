@@ -2725,6 +2725,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           }, 300);
         }}
         onImageEdit={handleEditComplete}
+        onCanvasCommand={handleCanvasCommand}
         onEnterPathEditMode={(path) => {
           if (path && (path as any).__pathPoints) {
             setEditingPathPoints([...(path as any).__pathPoints]);
