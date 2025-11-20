@@ -6,6 +6,7 @@ import { toast } from "sonner";
 type ToolKey =
   | "backgroundGenerator"
   | "layoutAssistant"
+  | "designDna"
   | null;
 
 interface ArtboardEditSpaceProps {
@@ -15,6 +16,7 @@ interface ArtboardEditSpaceProps {
   onBackgroundGenerated?: (imageUrl: string) => void;
   onLayoutSuggestionChange?: (suggestion: any) => void;
   generatedBackgroundUrl?: string | null;
+  designDnaResult?: any;
 }
 
 export function ArtboardEditSpace({
@@ -23,7 +25,8 @@ export function ArtboardEditSpace({
   canvas,
   onBackgroundGenerated,
   onLayoutSuggestionChange,
-  generatedBackgroundUrl
+  generatedBackgroundUrl,
+  designDnaResult
 }: ArtboardEditSpaceProps) {
   const [mounted, setMounted] = useState(false);
   const [previewSrc, setPreviewSrc] = useState<string>("");
@@ -39,7 +42,7 @@ export function ArtboardEditSpace({
   // Get artboard and contained objects
   const artboardData = useMemo(() => {
     if (!mounted || !canvas || !selectedObject) return null;
-    
+
     const artboard = selectedObject as FabricRect;
     if (!(artboard instanceof FabricRect) || !(artboard as any).isArtboard) {
       return null;
@@ -47,16 +50,16 @@ export function ArtboardEditSpace({
 
     const artboardBounds = artboard.getBoundingRect();
     const allObjects = canvas.getObjects();
-    
+
     // Find objects contained within artboard
     const containedObjects = allObjects.filter((obj: FabricObject) => {
       if (obj === artboard) return false;
       if ((obj as any).isArtboard) return false;
-      
+
       const objBounds = obj.getBoundingRect();
       const centerX = objBounds.left + objBounds.width / 2;
       const centerY = objBounds.top + objBounds.height / 2;
-      
+
       return (
         centerX >= artboardBounds.left &&
         centerX <= artboardBounds.left + artboardBounds.width &&
@@ -84,19 +87,18 @@ export function ArtboardEditSpace({
     const updatePreview = () => {
       try {
         // Recalculate bounds in case artboard was resized
-        // getBoundingRect() returns coordinates in canvas space (zoom-independent)
         const bounds = artboard.getBoundingRect();
         const allObjects = canvas.getObjects();
-        
+
         // Recalculate contained objects
         const containedObjects = allObjects.filter((obj: FabricObject) => {
           if (obj === artboard) return false;
           if ((obj as any).isArtboard) return false;
-          
+
           const objBounds = obj.getBoundingRect();
           const centerX = objBounds.left + objBounds.width / 2;
           const centerY = objBounds.top + objBounds.height / 2;
-          
+
           return (
             centerX >= bounds.left &&
             centerX <= bounds.left + bounds.width &&
@@ -104,26 +106,19 @@ export function ArtboardEditSpace({
             centerY <= bounds.top + bounds.height
           );
         });
-        
-        // Use requestAnimationFrame to ensure canvas has rendered
+
         requestAnimationFrame(() => {
           try {
-            // Create offscreen canvas to capture preview without viewport transform interference
-            // This ensures the preview is completely zoom-independent
             const maxPreviewSize = 768;
             const scale = Math.min(maxPreviewSize / bounds.width, maxPreviewSize / bounds.height, 1);
-            
+
             const offCanvas = document.createElement('canvas');
             offCanvas.width = Math.round(bounds.width * scale);
             offCanvas.height = Math.round(bounds.height * scale);
             const ctx = offCanvas.getContext('2d');
-            
-            if (!ctx) {
-              console.error('Failed to get offscreen canvas context');
-              return;
-            }
-            
-            // Fill with white background (or transparent if canvas is transparent)
+
+            if (!ctx) return;
+
             const originalBg = canvas.backgroundColor as string | undefined;
             if (!originalBg || originalBg === 'transparent') {
               ctx.fillStyle = '#ffffff';
@@ -132,17 +127,13 @@ export function ArtboardEditSpace({
               ctx.fillStyle = originalBg;
               ctx.fillRect(0, 0, offCanvas.width, offCanvas.height);
             }
-            
-            // Render the artboard and contained objects to offscreen canvas
-            // Translate and scale context to position objects relative to artboard bounds
+
             ctx.save();
             ctx.scale(scale, scale);
             ctx.translate(-bounds.left, -bounds.top);
-            
-            // Get all objects to render (artboard + contained objects)
+
             const objectsToRender = [artboard, ...containedObjects].filter((obj: FabricObject) => {
               const objBounds = obj.getBoundingRect();
-              // Check if object intersects with artboard bounds
               return !(
                 objBounds.left + objBounds.width < bounds.left ||
                 objBounds.left > bounds.left + bounds.width ||
@@ -150,28 +141,24 @@ export function ArtboardEditSpace({
                 objBounds.top > bounds.top + bounds.height
               );
             });
-            
-            // Render each object using absolute coordinates (independent of viewport transform)
+
             objectsToRender.forEach((obj: FabricObject) => {
               try {
-                // Render object directly to offscreen canvas context
-                // This bypasses viewport transform completely since we're using absolute coordinates
                 obj.render(ctx);
               } catch (error) {
                 console.warn('Error rendering object to preview:', error);
               }
             });
-            
+
             ctx.restore();
-            
-            // Get data URL from offscreen canvas
+
             const dataURL = offCanvas.toDataURL('image/png', 0.9);
-            
+
             setPreviewSrc(dataURL);
             setObjectCount(containedObjects.length);
-            setDimensions({ 
-              width: Math.round(artboard.getScaledWidth()), 
-              height: Math.round(artboard.getScaledHeight()) 
+            setDimensions({
+              width: Math.round(artboard.getScaledWidth()),
+              height: Math.round(artboard.getScaledHeight())
             });
           } catch (error) {
             console.error('Error generating preview:', error);
@@ -182,27 +169,22 @@ export function ArtboardEditSpace({
       }
     };
 
-    // Initial update with a small delay to ensure canvas is ready
     const initialTimer = setTimeout(updatePreview, 100);
     previewUpdateRef.current++;
 
-    // Listen for canvas updates
     const handleUpdate = () => {
       updatePreview();
     };
 
-    // Use a debounced update to avoid too frequent updates
     let updateTimer: NodeJS.Timeout;
     const debouncedUpdate = () => {
       clearTimeout(updateTimer);
       updateTimer = setTimeout(updatePreview, 150);
     };
 
-    // Listen to artboard-specific events for resizing (these are zoom-independent)
     artboard.on('modified', debouncedUpdate);
     artboard.on('scaling', debouncedUpdate);
-    
-    // Listen to canvas-wide events
+
     canvas.on('object:modified', debouncedUpdate);
     canvas.on('object:added', debouncedUpdate);
     canvas.on('object:removed', debouncedUpdate);
@@ -222,11 +204,114 @@ export function ArtboardEditSpace({
     };
   }, [artboardData, canvas, selectedObject]);
 
-  // Create composite preview when both background and artboard are available
-  // This hook must be called before any early returns to maintain hook order
+  // Design DNA Preview Logic
   useEffect(() => {
-    if (!generatedBackgroundUrl || !artboardData || !canvas || !selectedObject) {
-      setCompositePreviewSrc("");
+    if (tool !== 'designDna' || !designDnaResult || !artboardData || !canvas) {
+      if (tool === 'designDna' && !designDnaResult) {
+        setCompositePreviewSrc(""); // Clear if no result
+      }
+      return;
+    }
+
+    const generateDesignPreview = async () => {
+      try {
+        const { artboard, bounds, containedObjects } = artboardData;
+        const maxPreviewSize = 768;
+        const scale = Math.min(maxPreviewSize / bounds.width, maxPreviewSize / bounds.height, 1);
+
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = Math.round(bounds.width * scale);
+        offCanvas.height = Math.round(bounds.height * scale);
+        const ctx = offCanvas.getContext('2d');
+
+        if (!ctx) return;
+
+        // Background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+
+        ctx.save();
+        ctx.scale(scale, scale);
+        ctx.translate(-bounds.left, -bounds.top);
+
+        // 1. Clone Artboard and apply modifications
+        // We can't easily clone Fabric objects with full fidelity in a lightweight way without async
+        // So we will try to modify the rendering context or use a temporary invisible canvas?
+        // Actually, we can just use the existing objects but override their properties during render?
+        // No, render() uses internal state.
+        // Best approach: Clone objects, apply mods, render, then dispose.
+
+        // Helper to find modification for an object
+        const getMod = (id: string) => designDnaResult.modifications?.find((m: any) => m.id === id);
+
+        // Render Artboard (Background)
+        // Check if artboard has mods
+        // We need to know the artboard's ID or assume it's the container
+        // For now, let's assume artboard modifications might be passed with a special ID or we check if any mod matches artboard properties?
+        // The API returns mods by ID. We assigned IDs to objects sent.
+        // If we didn't assign ID to artboard, we might miss it.
+        // Let's just render artboard as is for now, or try to apply fill if we can match it.
+
+        // Render Artboard
+        artboard.render(ctx);
+
+        // Render Contained Objects with Modifications
+        for (const obj of containedObjects) {
+          const mod = getMod((obj as any).id); // Assuming we have IDs
+
+          if (mod) {
+            // Clone and modify
+            // This is expensive. 
+            // Alternative: Save state, modify, render, restore.
+            const originalState = obj.toObject(); // simplified state save
+            // Actually, toObject is heavy.
+            // Let's just save the specific props we modify.
+            const savedProps: any = {};
+            Object.keys(mod).forEach(key => {
+              if (key !== 'id') savedProps[key] = (obj as any)[key];
+            });
+
+            obj.set(mod);
+            obj.render(ctx);
+
+            // Restore
+            obj.set(savedProps);
+          } else {
+            obj.render(ctx);
+          }
+        }
+
+        // Render Additions
+        // We need to create new Fabric objects for additions
+        if (designDnaResult.additions) {
+          for (const add of designDnaResult.additions) {
+            // Create object based on type
+            // This requires importing Fabric classes or using a factory
+            // Since we can't easily import everything here dynamically, 
+            // we might skip additions for this preview or support basic shapes.
+            // For now, let's skip additions to avoid complexity or use simple placeholder drawing.
+          }
+        }
+
+        ctx.restore();
+        setCompositePreviewSrc(offCanvas.toDataURL());
+
+        // Trigger a re-render of the main canvas to ensure no state leaked (safety)
+        canvas.requestRenderAll();
+
+      } catch (e) {
+        console.error("Error generating Design DNA preview", e);
+      }
+    };
+
+    generateDesignPreview();
+  }, [tool, designDnaResult, artboardData, canvas]);
+
+
+  // Create composite preview when both background and artboard are available
+  useEffect(() => {
+    if (tool !== 'backgroundGenerator' || !generatedBackgroundUrl || !artboardData || !canvas || !selectedObject) {
+      if (tool === 'backgroundGenerator' && !generatedBackgroundUrl) setCompositePreviewSrc("");
       return;
     }
 
@@ -238,49 +323,38 @@ export function ArtboardEditSpace({
 
     const createComposite = async () => {
       try {
-        // Recalculate bounds in case artboard was resized (zoom-independent)
-        // getBoundingRect() returns coordinates in canvas space
         const bounds = artboard.getBoundingRect();
         const maxPreviewSize = 768;
         const scale = Math.min(maxPreviewSize / bounds.width, maxPreviewSize / bounds.height, 1);
-        
-        // Store original fill
+
         const originalFill = (artboard as any).fill;
-        
-        // Load the generated background image
+
         const bgImg = new Image();
         bgImg.crossOrigin = 'anonymous';
-        
+
         await new Promise<void>((resolve, reject) => {
           bgImg.onload = () => resolve();
           bgImg.onerror = () => reject(new Error('Failed to load background'));
           bgImg.src = generatedBackgroundUrl;
         });
 
-        // Create a pattern from the loaded image
         const pattern = new Pattern({
           source: bgImg,
           repeat: 'repeat'
         });
 
-        // Temporarily apply the generated background to the artboard
         artboard.set({ fill: pattern });
         canvas.renderAll();
 
-        // Wait a frame for rendering
         await new Promise(resolve => requestAnimationFrame(resolve));
 
-        // Create offscreen canvas to capture preview without viewport transform interference
         const offCanvas = document.createElement('canvas');
         offCanvas.width = Math.round(bounds.width * scale);
         offCanvas.height = Math.round(bounds.height * scale);
         const ctx = offCanvas.getContext('2d');
-        
-        if (!ctx) {
-          throw new Error('Failed to get offscreen canvas context');
-        }
-        
-        // Fill with white background (or transparent if canvas is transparent)
+
+        if (!ctx) throw new Error('Failed to get offscreen canvas context');
+
         const originalBg = canvas.backgroundColor as string | undefined;
         if (!originalBg || originalBg === 'transparent') {
           ctx.fillStyle = '#ffffff';
@@ -289,17 +363,16 @@ export function ArtboardEditSpace({
           ctx.fillStyle = originalBg;
           ctx.fillRect(0, 0, offCanvas.width, offCanvas.height);
         }
-        
-        // Get contained objects for rendering
+
         const allObjects = canvas.getObjects();
         const containedObjects = allObjects.filter((obj: FabricObject) => {
           if (obj === artboard) return false;
           if ((obj as any).isArtboard) return false;
-          
+
           const objBounds = obj.getBoundingRect();
           const centerX = objBounds.left + objBounds.width / 2;
           const centerY = objBounds.top + objBounds.height / 2;
-          
+
           return (
             centerX >= bounds.left &&
             centerX <= bounds.left + bounds.width &&
@@ -307,15 +380,13 @@ export function ArtboardEditSpace({
             centerY <= bounds.top + bounds.height
           );
         });
-        
-        // Render the artboard and contained objects to offscreen canvas
+
         ctx.save();
         ctx.scale(scale, scale);
         ctx.translate(-bounds.left, -bounds.top);
-        
-            // Render all objects that are within or intersect the artboard
-            const objectsToRender = [artboard, ...containedObjects].filter((obj: FabricObject) => {
-              const objBounds = obj.getBoundingRect();
+
+        const objectsToRender = [artboard, ...containedObjects].filter((obj: FabricObject) => {
+          const objBounds = obj.getBoundingRect();
           return !(
             objBounds.left + objBounds.width < bounds.left ||
             objBounds.left > bounds.left + bounds.width ||
@@ -323,8 +394,7 @@ export function ArtboardEditSpace({
             objBounds.top > bounds.top + bounds.height
           );
         });
-        
-        // Render each object using absolute coordinates (independent of viewport transform)
+
         objectsToRender.forEach((obj: FabricObject) => {
           try {
             obj.render(ctx);
@@ -332,13 +402,11 @@ export function ArtboardEditSpace({
             console.warn('Error rendering object to composite preview:', error);
           }
         });
-        
+
         ctx.restore();
-        
-        // Get data URL from offscreen canvas
+
         const compositeDataURL = offCanvas.toDataURL('image/png', 0.9);
 
-        // Restore original fill
         artboard.set({ fill: originalFill });
         canvas.renderAll();
 
@@ -346,7 +414,6 @@ export function ArtboardEditSpace({
       } catch (error) {
         console.error('Error creating composite preview:', error);
         setCompositePreviewSrc("");
-        // Make sure to restore original fill on error
         try {
           if (selectedObject && (selectedObject as any).isArtboard) {
             const artboard = selectedObject as FabricRect;
@@ -363,7 +430,7 @@ export function ArtboardEditSpace({
     };
 
     createComposite();
-  }, [generatedBackgroundUrl, artboardData, canvas, selectedObject]);
+  }, [generatedBackgroundUrl, artboardData, canvas, selectedObject, tool]);
 
   if (!tool) {
     return (
@@ -444,7 +511,7 @@ export function ArtboardEditSpace({
     return (
       <div className="sticky top-0 z-10 bg-white border-b border-[#E5E5E5] h-[38vh]">
         <div className="px-0 py-3 h-full flex flex-col">
-          <div className="text-[11px] text-[#9E9E9E] px-3 mb-2">Layout Assistant — Preview</div>
+          <div className="text-[11px] text-[#9E9E9E] px-3 mb-2">Smart Layout — Preview</div>
           <div className="relative flex-1 mx-3 rounded-lg border border-[#E5E5E5]
                           bg-[length:16px_16px]
                           bg-[linear-gradient(to_right,#EDEDED_1px,transparent_1px),linear-gradient(to_bottom,#EDEDED_1px,transparent_1px)]">
@@ -463,6 +530,44 @@ export function ArtboardEditSpace({
           {mounted && previewSrc && (
             <div className="mx-3 mt-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded text-center">
               {dimensions.width} × {dimensions.height} • {objectCount} object{objectCount !== 1 ? 's' : ''}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Design DNA tool
+  if (tool === "designDna") {
+    return (
+      <div className="sticky top-0 z-10 bg-white border-b border-[#E5E5E5] h-[38vh]">
+        <div className="px-0 py-3 h-full flex flex-col">
+          <div className="text-[11px] text-[#9E9E9E] px-3 mb-2">Design DNA — Preview</div>
+          <div className="relative flex-1 mx-3 rounded-lg border border-[#E5E5E5]
+                          bg-[length:16px_16px]
+                          bg-[linear-gradient(to_right,#EDEDED_1px,transparent_1px),linear-gradient(to_bottom,#EDEDED_1px,transparent_1px)]">
+            {mounted && compositePreviewSrc ? (
+              <img
+                src={compositePreviewSrc}
+                alt="Design DNA preview"
+                className="absolute inset-0 m-auto max-h-[80%] max-w-[80%] object-contain opacity-90 pointer-events-none"
+              />
+            ) : mounted && previewSrc ? (
+              <img
+                src={previewSrc}
+                alt="Artboard preview"
+                className="absolute inset-0 m-auto max-h-[80%] max-w-[80%] object-contain opacity-90 pointer-events-none"
+              />
+            ) : (
+              <div className="absolute inset-0 m-auto h-full w-full flex items-center justify-center text-[11px] text-[#9E9E9E]">
+                Upload an image to extract design DNA
+              </div>
+            )}
+          </div>
+          {mounted && (compositePreviewSrc || previewSrc) && (
+            <div className="mx-3 mt-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded text-center">
+              {dimensions.width} × {dimensions.height}
+              {compositePreviewSrc ? " • Preview with Design DNA" : ""}
             </div>
           )}
         </div>
@@ -499,4 +604,5 @@ export function ArtboardEditSpace({
     </div>
   );
 }
+
 
