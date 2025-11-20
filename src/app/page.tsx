@@ -20,10 +20,10 @@ export default function DashboardPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-    // Redirect to home if not authenticated
+    // Redirect unsigned users to editor to use canvas
     useEffect(() => {
         if (!authLoading && !user) {
-            router.push('/');
+            router.push('/editor');
         }
     }, [user, authLoading, router]);
 
@@ -66,8 +66,21 @@ export default function DashboardPage() {
         router.push('/editor');
     };
 
-    if (authLoading || !user) {
-        return null;
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-background">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            </div>
+        );
+    }
+
+    if (!user) {
+        // Redirect will happen in useEffect, show loading meanwhile
+        return (
+            <div className="flex items-center justify-center h-screen bg-background">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            </div>
+        );
     }
 
     return (
