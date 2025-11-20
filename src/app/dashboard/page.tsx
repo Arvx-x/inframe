@@ -8,8 +8,9 @@ import { ProjectsGrid } from '@/app/components/ProjectsGrid';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ProfileDropdown } from '@/app/components/ProfileDropdown';
-import { Search, Grid3x3, List, Plus } from 'lucide-react';
+import { Search, Grid3x3, List, Plus, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import Link from 'next/link';
 
 export default function DashboardPage() {
     const { user, loading: authLoading } = useAuth();
@@ -63,7 +64,7 @@ export default function DashboardPage() {
     }, [searchQuery, projects]);
 
     const handleCreateProject = () => {
-        router.push('/editor');
+        router.push('/');
     };
 
     if (authLoading || !user) {
@@ -75,9 +76,14 @@ export default function DashboardPage() {
             {/* Header */}
             <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="container flex h-14 items-center px-4">
-                    {/* Left: Profile + Title */}
+                    {/* Left: Back button + Title */}
                     <div className="flex items-center gap-4 flex-1">
-                        <ProfileDropdown />
+                        <Link href="/">
+                            <Button variant="ghost" size="sm" className="gap-2">
+                                <ArrowLeft className="h-4 w-4" />
+                                Back to Editor
+                            </Button>
+                        </Link>
                         <h1 className="text-lg font-semibold">My Projects</h1>
                     </div>
 
@@ -95,14 +101,14 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    {/* Right: View toggle */}
+                    {/* Right: View toggle + Profile */}
                     <div className="flex items-center gap-2 flex-1 justify-end">
                         <div className="flex items-center border rounded-md">
                             <Button
                                 variant={viewMode === 'grid' ? 'default' : 'ghost'}
                                 size="sm"
                                 onClick={() => setViewMode('grid')}
-                                className={viewMode === 'grid' ? 'rounded-r-none bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 text-white' : 'rounded-r-none'}
+                                className="rounded-r-none"
                             >
                                 <Grid3x3 className="h-4 w-4" />
                             </Button>
@@ -110,11 +116,12 @@ export default function DashboardPage() {
                                 variant={viewMode === 'list' ? 'default' : 'ghost'}
                                 size="sm"
                                 onClick={() => setViewMode('list')}
-                                className={viewMode === 'list' ? 'rounded-l-none bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 text-white' : 'rounded-l-none'}
+                                className="rounded-l-none"
                             >
                                 <List className="h-4 w-4" />
                             </Button>
                         </div>
+                        <ProfileDropdown />
                     </div>
                 </div>
             </header>
@@ -123,7 +130,7 @@ export default function DashboardPage() {
             <main className="container px-4 py-8">
                 {/* Create New Project Button */}
                 <div className="mb-6">
-                    <Button onClick={handleCreateProject} size="lg" className="gap-2 bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 text-white">
+                    <Button onClick={handleCreateProject} size="lg" className="gap-2">
                         <Plus className="h-5 w-5" />
                         New Project
                     </Button>

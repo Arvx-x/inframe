@@ -27,8 +27,10 @@ interface CanvasProps {
   onCanvasHistoryRef?: React.MutableRefObject<{ undo: () => void; redo: () => void } | null>;
   onHistoryAvailableChange?: (available: boolean) => void;
   onCanvasExportRef?: React.MutableRefObject<(() => void) | null>;
+  onCanvasSaveRef?: React.MutableRefObject<(() => any) | null>;
   onCanvasColorRef?: React.MutableRefObject<((color: string) => void) | null>;
   initialCanvasColor?: string;
+  initialCanvasData?: any;
 }
 
 // SVG Path utility functions
@@ -43,17 +45,17 @@ interface PathPoint {
 
 function pointsToSVGPath(points: PathPoint[], previewPoint?: { x: number; y: number }, isClosed: boolean = false): string {
   if (points.length === 0) return '';
-  
+
   let path = `M ${points[0].x} ${points[0].y}`;
-  
+
   // Draw lines to all points except the first (if closed, we'll use Z command instead)
   for (let i = 1; i < points.length; i++) {
     const prev = points[i - 1];
     const curr = points[i];
-    
+
     // Check if we have control points for a curve
-    if (curr.cp1x !== undefined && curr.cp1y !== undefined && 
-        prev.cp2x !== undefined && prev.cp2y !== undefined) {
+    if (curr.cp1x !== undefined && curr.cp1y !== undefined &&
+      prev.cp2x !== undefined && prev.cp2y !== undefined) {
       // Cubic Bézier curve
       path += ` C ${prev.cp2x} ${prev.cp2y}, ${curr.cp1x} ${curr.cp1y}, ${curr.x} ${curr.y}`;
     } else {
@@ -61,18 +63,18 @@ function pointsToSVGPath(points: PathPoint[], previewPoint?: { x: number; y: num
       path += ` L ${curr.x} ${curr.y}`;
     }
   }
-  
+
   // If path is closed, use Z command to close it (connects to first point)
   if (isClosed && points.length > 2) {
     path += ' Z';
   }
-  
+
   // Add preview line if drawing (and not closed)
   if (previewPoint && points.length > 0 && !isClosed) {
     const last = points[points.length - 1];
     path += ` L ${previewPoint.x} ${previewPoint.y}`;
   }
-  
+
   return path;
 }
 
@@ -80,18 +82,18 @@ function pointsToSVGPath(points: PathPoint[], previewPoint?: { x: number; y: num
 function parseSVGPath(pathString: string): PathPoint[] {
   const points: PathPoint[] = [];
   if (!pathString) return points;
-  
+
   // Simple parser for M, L, and C commands
   const commands = pathString.match(/[MLC][^MLC]*/g) || [];
   let currentX = 0;
   let currentY = 0;
   let prevCp2x: number | undefined;
   let prevCp2y: number | undefined;
-  
+
   for (const cmd of commands) {
     const type = cmd[0];
     const coords = cmd.slice(1).trim().split(/[\s,]+/).map(Number).filter(n => !isNaN(n));
-    
+
     if (type === 'M' && coords.length >= 2) {
       // Move command - start point
       currentX = coords[0];
@@ -114,14 +116,14 @@ function parseSVGPath(pathString: string): PathPoint[] {
       const cp2y = coords[3];
       currentX = coords[4];
       currentY = coords[5];
-      
+
       // Update previous point with cp2
       if (points.length > 0) {
         const prev = points[points.length - 1];
         prev.cp2x = cp2x;
         prev.cp2y = cp2y;
       }
-      
+
       // Add new point with cp1
       points.push({
         x: currentX,
@@ -129,12 +131,12 @@ function parseSVGPath(pathString: string): PathPoint[] {
         cp1x,
         cp1y,
       });
-      
+
       prevCp2x = cp2x;
       prevCp2y = cp2y;
     }
   }
-  
+
   return points;
 }
 
@@ -198,7 +200,7 @@ const computeImagePlacement = (
   return { left, top };
 };
 
-export default function Canvas({ generatedImageUrl, isImagePending = false, pendingImageRatio = null, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasColorRef, initialCanvasColor = "#F4F4F6" }: CanvasProps) {
+export default function Canvas({ generatedImageUrl, isImagePending = false, pendingImageRatio = null, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasSaveRef, onCanvasColorRef, initialCanvasColor = "#F4F4F6", initialCanvasData }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [selectedImage, setSelectedImage] = useState<FabricImage | null>(null);
@@ -244,6 +246,19 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       window.removeEventListener("resize", handleResize);
     };
   }, [fabricCanvas]);
+
+  // Load initial canvas data
+  useEffect(() => {
+    if (fabricCanvas && initialCanvasData) {
+      fabricCanvas.loadFromJSON(initialCanvasData, () => {
+        fabricCanvas.renderAll();
+        // Reset history stack after loading initial data
+        undoStackRef.current = [];
+        redoStackRef.current = [];
+        setHistoryAvailability();
+      });
+    }
+  }, [fabricCanvas, initialCanvasData]);
 
   const placeholderSize = useMemo(() => {
     const { width: canvasWidth, height: canvasHeight } = canvasDimensions;
@@ -310,7 +325,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   const drawingArtboardRef = useRef<FabricRect | null>(null);
   const drawingTextBoxRef = useRef<FabricRect | null>(null);
   const drawingTextLabelRef = useRef<FabricTextbox | null>(null);
-  
+
   // Path creation state
   const penSubToolRef = useRef<'draw' | 'pointer' | 'curve'>('draw');
   const isDrawingPathRef = useRef(false);
@@ -324,7 +339,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   const isDraggingControlHandleRef = useRef(false);
   const draggingHandleIndexRef = useRef<number | null>(null);
   const draggingHandleTypeRef = useRef<'point' | 'cp1' | 'cp2' | null>(null);
-  
+
   // Path editing state
   const isEditingPathRef = useRef(false);
   const selectedPathRef = useRef<any>(null);
@@ -332,7 +347,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   const pathEditorHandlesRef = useRef<any[]>([]);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [editingPathPoints, setEditingPathPoints] = useState<PathPoint[]>([]);
-  
+
   const [isLayersOpen, setIsLayersOpen] = useState(false);
   const setHistoryAvailability = () => {
     if (onHistoryAvailableChange) {
@@ -385,7 +400,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       canvas.add(line);
       penNodeLinesRef.current.push(line);
     }
-    
+
     // If path is closed, draw line from last point to first point
     if (isPathClosedRef.current && points.length > 2) {
       const last = points[points.length - 1];
@@ -451,16 +466,16 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       canvas.remove(currentPathRef.current);
       currentPathRef.current = null;
     }
-    
+
     if (currentPathPointsRef.current.length === 0) {
       clearPenNodeOverlay(canvas);
       canvas.renderAll();
       return;
     }
-    
+
     const pathString = pointsToSVGPath(currentPathPointsRef.current, previewPoint, isPathClosedRef.current);
     if (!pathString) return;
-    
+
     try {
       const path = new FabricPath(pathString, {
         stroke: '#111827',
@@ -487,21 +502,21 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       cancelPath(canvas);
       return;
     }
-    
+
     // Remove preview
     if (currentPathRef.current) {
       canvas.remove(currentPathRef.current);
       currentPathRef.current = null;
     }
     clearPenNodeOverlay(canvas);
-    
+
     // Create final path
     const pathString = pointsToSVGPath(currentPathPointsRef.current, undefined, isPathClosedRef.current);
     if (!pathString) {
       cancelPath(canvas);
       return;
     }
-    
+
     try {
       const path = new FabricPath(pathString, {
         stroke: '#111827',
@@ -510,14 +525,14 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         selectable: true,
         name: 'Path',
       });
-      
+
       // Store original path data for editing
       (path as any).__pathPoints = currentPathPointsRef.current;
-      
+
       canvas.add(path);
       canvas.setActiveObject(path);
       canvas.renderAll();
-      
+
       // Reset state
       isDrawingPathRef.current = false;
       isPathDrawingStoppedRef.current = false;
@@ -571,14 +586,14 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         // Do not initiate panning or any draw tools while smart edit selection is active
         return;
       }
-      
+
       // Handle text box drawing start
       if (activeToolbarButtonRef.current === 'text' && isLeftButton) {
         opt.e.preventDefault();
         isDrawingTextRef.current = true;
         const pointer = canvas.getPointer(e);
         startPointRef.current = { x: pointer.x, y: pointer.y };
-        
+
         // Create a visual rectangle to show text box area
         const rect = new FabricRect({
           left: pointer.x,
@@ -613,14 +628,14 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         canvas.renderAll();
         return;
       }
-      
+
       // Handle artboard drawing start
       if (activeToolbarButtonRef.current === 'artboard' && isLeftButton) {
         opt.e.preventDefault();
         isDrawingArtboardRef.current = true;
         const pointer = canvas.getPointer(e);
         startPointRef.current = { x: pointer.x, y: pointer.y };
-        
+
         const artboard = new FabricRect({
           left: pointer.x,
           top: pointer.y,
@@ -642,14 +657,14 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         canvas.renderAll();
         return;
       }
-      
+
       // Handle shape drawing start
       if (activeToolbarButtonRef.current === 'shape' && isLeftButton) {
         opt.e.preventDefault();
         isDrawingShapeRef.current = true;
         const pointer = canvas.getPointer(e);
         startPointRef.current = { x: pointer.x, y: pointer.y };
-        
+
         if (activeShapeRef.current === 'rect') {
           const rect = new FabricRect({
             left: pointer.x,
@@ -686,17 +701,17 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           drawingShapeRef.current = line;
           canvas.add(line);
         }
-        
+
         canvas.renderAll();
         return;
       }
-      
+
       // Handle path drawing start (pen tool)
       if (activeToolbarButtonRef.current === 'pen' && isLeftButton) {
         opt.e.preventDefault();
         const pointer = canvas.getPointer(e);
         const currentSubTool = penSubToolRef.current;
-        
+
         // Check if clicking on a node handle (for dragging in pointer mode or stopping after closing)
         let clickedNodeIndex = -1;
         if (opt.target && Array.isArray(penNodeHandlesRef.current) && penNodeHandlesRef.current.length > 0) {
@@ -708,7 +723,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               clickedNodeIndex = pointIndex;
             }
           }
-          
+
           // If not found by __pointIndex, check by distance
           if (clickedNodeIndex === -1) {
             for (let i = 0; i < penNodeHandlesRef.current.length; i++) {
@@ -724,7 +739,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             }
           }
         }
-        
+
         // If path is closed and a node is clicked, stop drawing
         if (isPathDrawingStoppedRef.current && clickedNodeIndex >= 0) {
           isDrawingPathRef.current = false;
@@ -733,7 +748,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             return;
           }
         }
-        
+
         // Handle different sub-tool modes
         if (currentSubTool === 'pointer') {
           // Pointer mode: allow dragging nodes or adding points to midpoints
@@ -746,27 +761,27 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             canvas.selection = false;
             return;
           }
-          
+
           // Check if clicking near midpoint of a segment
           if (currentPathPointsRef.current.length >= 2) {
             let closestSegmentIndex = -1;
             let closestT = 0;
             let minDist = Infinity;
-            
+
             for (let i = 0; i < currentPathPointsRef.current.length - 1; i++) {
               const p1 = currentPathPointsRef.current[i];
               const p2 = currentPathPointsRef.current[i + 1];
               const dx = p2.x - p1.x;
               const dy = p2.y - p1.y;
               const lengthSq = dx * dx + dy * dy;
-              
+
               if (lengthSq === 0) continue;
-              
+
               const t = Math.max(0, Math.min(1, ((pointer.x - p1.x) * dx + (pointer.y - p1.y) * dy) / lengthSq));
               const projX = p1.x + t * dx;
               const projY = p1.y + t * dy;
               const dist = Math.sqrt((pointer.x - projX) ** 2 + (pointer.y - projY) ** 2);
-              
+
               // Check if near midpoint (t between 0.3 and 0.7) and within threshold
               if (dist < minDist && dist < 10 && t > 0.3 && t < 0.7) {
                 minDist = dist;
@@ -774,7 +789,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
                 closestT = t;
               }
             }
-            
+
             if (closestSegmentIndex >= 0) {
               // Insert point at midpoint
               const p1 = currentPathPointsRef.current[closestSegmentIndex];
@@ -789,7 +804,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               return;
             }
           }
-          
+
           // If not clicking on node or midpoint, do nothing in pointer mode
           return;
         } else if (currentSubTool === 'curve') {
@@ -797,31 +812,31 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           if (currentPathPointsRef.current.length >= 2) {
             let closestSegmentIndex = -1;
             let minDist = Infinity;
-            
+
             for (let i = 0; i < currentPathPointsRef.current.length - 1; i++) {
               const p1 = currentPathPointsRef.current[i];
               const p2 = currentPathPointsRef.current[i + 1];
-              
+
               // Check if segment is straight (no control points)
               if (p1.cp2x !== undefined || p2.cp1x !== undefined) continue;
-              
+
               const dx = p2.x - p1.x;
               const dy = p2.y - p1.y;
               const lengthSq = dx * dx + dy * dy;
-              
+
               if (lengthSq === 0) continue;
-              
+
               const t = Math.max(0, Math.min(1, ((pointer.x - p1.x) * dx + (pointer.y - p1.y) * dy) / lengthSq));
               const projX = p1.x + t * dx;
               const projY = p1.y + t * dy;
               const dist = Math.sqrt((pointer.x - projX) ** 2 + (pointer.y - projY) ** 2);
-              
+
               if (dist < minDist && dist < 15) {
                 minDist = dist;
                 closestSegmentIndex = i;
               }
             }
-            
+
             if (closestSegmentIndex >= 0) {
               // Start dragging to create curve
               const p1 = currentPathPointsRef.current[closestSegmentIndex];
@@ -829,12 +844,12 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               const CURVE_HANDLE_TENSION = 0.33;
               const dx = p2.x - p1.x;
               const dy = p2.y - p1.y;
-              
+
               p1.cp2x = p1.x + dx * CURVE_HANDLE_TENSION;
               p1.cp2y = p1.y + dy * CURVE_HANDLE_TENSION;
               p2.cp1x = p2.x - dx * CURVE_HANDLE_TENSION;
               p2.cp1y = p2.y - dy * CURVE_HANDLE_TENSION;
-              
+
               isDraggingControlHandleRef.current = true;
               draggingHandleIndexRef.current = closestSegmentIndex;
               draggingHandleTypeRef.current = 'cp2';
@@ -846,7 +861,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           }
           return;
         }
-        
+
         // Draw mode: add points
         if (!isDrawingPathRef.current) {
           // Start new path
@@ -864,7 +879,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             const dx = pointer.x - first.x;
             const dy = pointer.y - first.y;
             const distanceToStart = Math.hypot(dx, dy);
-            
+
             if (distanceToStart <= PEN_CLOSE_THRESHOLD && currentPathPointsRef.current.length > 2) {
               // Close path by marking it as closed (don't add duplicate point)
               isPathClosedRef.current = true;
@@ -874,7 +889,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               return;
             }
           }
-          
+
           // Add new point to existing path (straight line)
           const newPoint: PathPoint = { x: pointer.x, y: pointer.y };
           currentPathPointsRef.current.push(newPoint);
@@ -883,7 +898,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         }
         return;
       }
-      
+
       if (isMiddleButton || (useHandTool && isLeftButton)) {
         isPanningRef.current = true;
         canvas.setCursor('grabbing');
@@ -902,7 +917,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         vpt[5] += e.movementY;
         canvas.setViewportTransform(vpt);
       }
-      
+
       // Handle text box drawing
       if (isDrawingTextRef.current && startPointRef.current && drawingTextBoxRef.current) {
         opt.e.preventDefault();
@@ -911,12 +926,12 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         const startY = startPointRef.current.y;
         const currentX = pointer.x;
         const currentY = pointer.y;
-        
+
         const width = Math.abs(currentX - startX);
         const height = Math.abs(currentY - startY);
         const left = Math.min(startX, currentX);
         const top = Math.min(startY, currentY);
-        
+
         drawingTextBoxRef.current.set({
           left,
           top,
@@ -931,10 +946,10 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             text: `${Math.round(width)} × ${Math.round(height)}`
           });
         }
-        
+
         canvas.renderAll();
       }
-      
+
       // Handle artboard drawing
       if (isDrawingArtboardRef.current && startPointRef.current && drawingArtboardRef.current) {
         opt.e.preventDefault();
@@ -943,22 +958,22 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         const startY = startPointRef.current.y;
         const currentX = pointer.x;
         const currentY = pointer.y;
-        
+
         const width = Math.abs(currentX - startX);
         const height = Math.abs(currentY - startY);
         const left = Math.min(startX, currentX);
         const top = Math.min(startY, currentY);
-        
+
         drawingArtboardRef.current.set({
           left,
           top,
           width,
           height
         });
-        
+
         canvas.renderAll();
       }
-      
+
       // Handle shape drawing
       if (isDrawingShapeRef.current && startPointRef.current && drawingShapeRef.current) {
         opt.e.preventDefault();
@@ -967,12 +982,12 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         const startY = startPointRef.current.y;
         const currentX = pointer.x;
         const currentY = pointer.y;
-        
+
         const width = Math.abs(currentX - startX);
         const height = Math.abs(currentY - startY);
         const left = Math.min(startX, currentX);
         const top = Math.min(startY, currentY);
-        
+
         if (drawingShapeRef.current instanceof FabricRect) {
           drawingShapeRef.current.set({
             left,
@@ -998,17 +1013,17 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             y2: currentY
           });
         }
-        
+
         canvas.renderAll();
       }
-      
+
       // Handle path node dragging (pointer mode)
-      if (isDraggingControlHandleRef.current && draggingHandleIndexRef.current !== null && 
-          activeToolbarButtonRef.current === 'pen' && penSubToolRef.current === 'pointer') {
+      if (isDraggingControlHandleRef.current && draggingHandleIndexRef.current !== null &&
+        activeToolbarButtonRef.current === 'pen' && penSubToolRef.current === 'pointer') {
         opt.e.preventDefault();
         const pointer = canvas.getPointer(opt.e);
         const pointIndex = draggingHandleIndexRef.current;
-        
+
         if (pointIndex >= 0 && pointIndex < currentPathPointsRef.current.length) {
           const point = currentPathPointsRef.current[pointIndex];
           if (draggingHandleTypeRef.current === 'point') {
@@ -1020,18 +1035,18 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         }
         return;
       }
-      
+
       // Handle curve handle dragging (curve mode)
-      if (isDraggingControlHandleRef.current && draggingHandleIndexRef.current !== null && 
-          activeToolbarButtonRef.current === 'pen' && penSubToolRef.current === 'curve') {
+      if (isDraggingControlHandleRef.current && draggingHandleIndexRef.current !== null &&
+        activeToolbarButtonRef.current === 'pen' && penSubToolRef.current === 'curve') {
         opt.e.preventDefault();
         const pointer = canvas.getPointer(opt.e);
         const segmentIndex = draggingHandleIndexRef.current;
-        
+
         if (segmentIndex >= 0 && segmentIndex < currentPathPointsRef.current.length - 1) {
           const p1 = currentPathPointsRef.current[segmentIndex];
           const p2 = currentPathPointsRef.current[segmentIndex + 1];
-          
+
           if (draggingHandleTypeRef.current === 'cp2') {
             // Update control points based on drag distance
             const dx = pointer.x - p1.x;
@@ -1047,10 +1062,10 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         }
         return;
       }
-      
+
       // Handle path drawing preview
-      if (isDrawingPathRef.current && currentPathPointsRef.current.length > 0 && 
-          !isPathDrawingStoppedRef.current && penSubToolRef.current === 'draw') {
+      if (isDrawingPathRef.current && currentPathPointsRef.current.length > 0 &&
+        !isPathDrawingStoppedRef.current && penSubToolRef.current === 'draw') {
         opt.e.preventDefault();
         const pointer = canvas.getPointer(opt.e);
         updatePathPreview(canvas, { x: pointer.x, y: pointer.y });
@@ -1060,7 +1075,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       if ((canvas as any).__smartEditActive) {
         return;
       }
-      
+
       // Stop dragging nodes or curve handles
       if (isDraggingControlHandleRef.current) {
         isDraggingControlHandleRef.current = false;
@@ -1070,12 +1085,12 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       isPanningRef.current = false;
       canvas.setCursor(activeToolRef.current === 'hand' ? 'grab' : 'default');
       canvas.selection = activeToolRef.current === 'pointer';
-      
+
       // Handle text box drawing completion
       if (isDrawingTextRef.current) {
         isDrawingTextRef.current = false;
         startPointRef.current = null;
-        
+
         // Always reset cursor and tool state
         canvas.selection = true;
         canvas.defaultCursor = 'default';
@@ -1084,13 +1099,13 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         setActiveTool('pointer');
         activeToolbarButtonRef.current = 'pointer';
         activeToolRef.current = 'pointer';
-        
+
         if (drawingTextBoxRef.current) {
           const width = drawingTextBoxRef.current.width || 0;
           const height = drawingTextBoxRef.current.height || 0;
           const left = drawingTextBoxRef.current.left || 0;
           const top = drawingTextBoxRef.current.top || 0;
-          
+
           // Remove the visual guide rectangle
           canvas.remove(drawingTextBoxRef.current);
           drawingTextBoxRef.current = null;
@@ -1099,7 +1114,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             canvas.remove(drawingTextLabelRef.current);
             drawingTextLabelRef.current = null;
           }
-          
+
           // Create area text if dragged enough; otherwise create point text with default width
           const PLACEHOLDER = "Type something…";
           const makeTextbox = (tw: number, tx: number, ty: number) => {
@@ -1159,7 +1174,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           }
         }
       }
-      
+
       // Handle artboard drawing completion
       if (isDrawingArtboardRef.current) {
         isDrawingArtboardRef.current = false;
@@ -1167,9 +1182,9 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         if (drawingArtboardRef.current) {
           // Check if artboard has minimum size before finalizing
           const hasMinimumSize = (drawingArtboardRef.current.width || 0) > 10 && (drawingArtboardRef.current.height || 0) > 10;
-          
+
           if (hasMinimumSize) {
-            drawingArtboardRef.current.set({ 
+            drawingArtboardRef.current.set({
               selectable: true,
               evented: true,
             });
@@ -1187,7 +1202,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         setActiveToolbarButton('pointer');
         activeToolbarButtonRef.current = 'pointer';
       }
-      
+
       // Handle shape drawing completion
       if (isDrawingShapeRef.current) {
         isDrawingShapeRef.current = false;
@@ -1195,7 +1210,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         if (drawingShapeRef.current) {
           // Check if shape has minimum size before finalizing
           let hasMinimumSize = false;
-          
+
           if (drawingShapeRef.current instanceof FabricRect) {
             hasMinimumSize = (drawingShapeRef.current.width || 0) > 5 && (drawingShapeRef.current.height || 0) > 5;
           } else if (drawingShapeRef.current instanceof FabricCircle) {
@@ -1203,7 +1218,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           } else if (drawingShapeRef.current instanceof FabricLine) {
             hasMinimumSize = true; // Lines are always valid
           }
-          
+
           if (hasMinimumSize) {
             drawingShapeRef.current.set({ selectable: true });
             canvas.setActiveObject(drawingShapeRef.current);
@@ -1214,22 +1229,22 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             canvas.renderAll();
           }
           drawingShapeRef.current = null;
-          
+
           // Reset to pointer tool after drawing
           setActiveToolbarButton('pointer');
           setActiveTool('pointer');
         }
       }
-      
+
       // Handle path drawing - no completion on mouse:up, wait for double-click or Enter
     });
-    
+
     // Handle double-click to exit editing mode
     canvas.on('mouse:dblclick', (opt: any) => {
       // Check if pen tool is active and we're in edit mode (drawing or have visible nodes)
-      const isInEditMode = activeToolbarButtonRef.current === 'pen' && 
-                           (isDrawingPathRef.current || penNodeHandlesRef.current.length > 0);
-      
+      const isInEditMode = activeToolbarButtonRef.current === 'pen' &&
+        (isDrawingPathRef.current || penNodeHandlesRef.current.length > 0);
+
       if (isInEditMode) {
         opt.e.preventDefault();
         // Exit editing mode: finalize path and hide nodes/toolbar
@@ -1245,13 +1260,13 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
                 selectable: true,
                 name: 'Path',
               });
-              
+
               // Store original path data for editing
               (path as any).__pathPoints = currentPathPointsRef.current;
-              
+
               canvas.add(path);
               canvas.setActiveObject(path);
-              
+
               // Clear editing state
               cancelPath(canvas);
               setActiveToolbarButton('pointer');
@@ -1278,7 +1293,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       // Do not change selection state while Smart Edit selection is active
       if ((canvas as any).__smartEditActive) return;
       const active = canvas.getActiveObject();
-      
+
       if (!active && selectedObject) {
         // User deselected - trigger closing animation
         setIsSidebarClosing(true);
@@ -1430,7 +1445,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     const isShapeTool = activeToolbarButton === 'shape';
     const isPenTool = activeToolbarButton === 'pen';
     const isPenPointerMode = isPenTool && penSubTool === 'pointer';
-    
+
     // Respect Smart Edit mode if set by EditSpace
     const smartEditActive = (fabricCanvas as any).__smartEditActive === true;
     // Set cursor based on active tool
@@ -1458,7 +1473,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       fabricCanvas.selection = isPointer && !isShapeTool && !isArtboardTool && !isPenTool;
       fabricCanvas.skipTargetFind = !isPointer || isShapeTool || isArtboardTool || isPenTool;
     }
-    
+
     if (!isPointer) {
       fabricCanvas.discardActiveObject();
       fabricCanvas.requestRenderAll();
@@ -1482,7 +1497,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     }).then((img) => {
       const maxWidth = fabricCanvas.width! * 0.6;
       const maxHeight = fabricCanvas.height! * 0.6;
-      
+
       if (img.width! > maxWidth) {
         img.scaleToWidth(maxWidth);
       }
@@ -1507,9 +1522,9 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       fabricCanvas.add(img);
       fabricCanvas.setActiveObject(img);
       fabricCanvas.renderAll();
-      
+
       setSelectedImage(img);
-      
+
       toast.success("Image added to canvas");
     }).catch((error) => {
       console.error("Error loading image:", error);
@@ -1784,7 +1799,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     if (format === 'svg') {
       try {
         let svgString: string;
-        
+
         if (exportType === 'artboard') {
           // Export artboard as SVG
           const artboards = getArtboards();
@@ -1799,7 +1814,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           );
           const artboard = selectedIsArtboard ? selectedObject : artboards[0];
           const artboardBounds = artboard.getBoundingRect();
-          
+
           // Get all objects within artboard bounds (including partially overlapping)
           const objectsInArtboard = fabricCanvas.getObjects().filter((obj: any) => {
             // Skip the artboard itself
@@ -1807,11 +1822,11 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             const objBounds = obj.getBoundingRect();
             // Check if object overlaps with artboard
             return !(objBounds.left + objBounds.width < artboardBounds.left ||
-                     objBounds.left > artboardBounds.left + artboardBounds.width ||
-                     objBounds.top + objBounds.height < artboardBounds.top ||
-                     objBounds.top > artboardBounds.top + artboardBounds.height);
+              objBounds.left > artboardBounds.left + artboardBounds.width ||
+              objBounds.top + objBounds.height < artboardBounds.top ||
+              objBounds.top > artboardBounds.top + artboardBounds.height);
           });
-          
+
           // Create a temporary canvas for the artboard
           const tempCanvas = document.createElement('canvas');
           tempCanvas.width = artboardBounds.width;
@@ -1821,7 +1836,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             height: artboardBounds.height,
             backgroundColor: fabricCanvas.backgroundColor || '#ffffff',
           });
-          
+
           // Clone and position objects relative to artboard
           const clonedObjects = objectsInArtboard.map((obj: any) => {
             return obj.clone().then((cloned: any) => {
@@ -1833,15 +1848,15 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               return cloned;
             });
           });
-          
+
           // Wait for all clones, then add to temp canvas and export
           Promise.all(clonedObjects).then((clones) => {
             clones.forEach((clone) => tempFabricCanvas.add(clone));
             tempFabricCanvas.renderAll();
-            
+
             svgString = tempFabricCanvas.toSVG();
             filename = `artboard-export-${timestamp}.svg`;
-            
+
             // Create blob and download
             const blob = new Blob([svgString], { type: 'image/svg+xml' });
             const url = URL.createObjectURL(blob);
@@ -1850,23 +1865,23 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             link.href = url;
             link.click();
             URL.revokeObjectURL(url);
-            
+
             // Clean up
             tempFabricCanvas.dispose();
-            
+
             toast.success("SVG exported!");
           }).catch((error) => {
             console.error("Error during SVG export:", error);
             toast.error("Failed to export SVG. Please try again.");
           });
-          
+
           return;
         } else {
           // Export entire canvas as SVG
           svgString = fabricCanvas.toSVG();
           filename = `canvas-export-${timestamp}.svg`;
         }
-        
+
         // Create blob and download
         const blob = new Blob([svgString], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
@@ -1875,7 +1890,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         link.href = url;
         link.click();
         URL.revokeObjectURL(url);
-        
+
         toast.success("SVG exported!");
         return;
       } catch (error) {
@@ -1899,22 +1914,22 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         selectedObject instanceof FabricImage
       );
       const artboard = selectedIsArtboard ? selectedObject : artboards[0];
-      
+
       // Get artboard bounding box
       const artboardBounds = artboard.getBoundingRect();
-      
+
       // Use Fabric's built-in cropping to export just the artboard region
       // This includes everything rendered within that region
       try {
         // Store original background
         const originalBg = fabricCanvas.backgroundColor as string | undefined;
-        
+
         // Temporarily set white background if needed
         if (!originalBg || originalBg === 'transparent') {
           fabricCanvas.backgroundColor = '#ffffff';
           fabricCanvas.renderAll();
         }
-        
+
         // Export the cropped region with ultra high quality
         dataURL = fabricCanvas.toDataURL({
           format: format === 'jpg' ? 'jpeg' : 'png',
@@ -1925,18 +1940,18 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           width: artboardBounds.width,
           height: artboardBounds.height,
         });
-        
+
         filename = `artboard-export-${timestamp}.${format === 'jpg' ? 'jpg' : 'png'}`;
-        
+
         const link = document.createElement('a');
         link.download = filename;
         link.href = dataURL;
         link.click();
-        
+
         // Restore original background
         fabricCanvas.backgroundColor = originalBg || 'transparent';
         fabricCanvas.renderAll();
-        
+
         toast.success("Artboard exported!");
       } catch (error) {
         console.error("Error during artboard export:", error);
@@ -1957,17 +1972,17 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       });
 
       filename = `canvas-export-${timestamp}.${format === 'jpg' ? 'jpg' : 'png'}`;
-      
+
       const link = document.createElement('a');
       link.download = filename;
       link.href = dataURL;
       link.click();
-      
+
       // Restore original background
       (fabricCanvas as any).backgroundColor = (originalBg as string | undefined) || 'transparent';
       fabricCanvas.renderAll();
       fabricCanvas.renderAll();
-      
+
       toast.success("Canvas exported!");
     }
   };
@@ -2003,7 +2018,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       fabricCanvas.add(img);
       fabricCanvas.setActiveObject(img);
       fabricCanvas.renderAll();
-      
+
       setSelectedImage(img);
       setSelectedObject(img); // Update selectedObject so sidebar stays open
     }).catch((error) => {
@@ -2011,6 +2026,16 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       toast.error("Failed to load edited image");
     });
   };
+
+  // Expose save function
+  useEffect(() => {
+    if (onCanvasSaveRef) {
+      onCanvasSaveRef.current = () => {
+        if (!fabricCanvas) return null;
+        return fabricCanvas.toJSON();
+      };
+    }
+  }, [fabricCanvas, onCanvasSaveRef]);
 
   const handleNewProject = () => {
     if (!fabricCanvas) return;
@@ -2362,7 +2387,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       const isY = e.key.toLowerCase() === 'y';
       const isDelete = e.key === 'Delete' || e.key === 'Backspace';
       const meta = e.metaKey || e.ctrlKey;
-      
+
       // Handle Delete/Backspace key
       if (isDelete && !meta && !e.shiftKey && !e.altKey) {
         // Don't delete if user is typing in an input field
@@ -2370,14 +2395,14 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
           return;
         }
-        
+
         if (fabricCanvas) {
           // Get active object (could be a single object or a group/selection)
           const activeObject = fabricCanvas.getActiveObject();
-          
+
           if (activeObject) {
             e.preventDefault();
-            
+
             // Handle ActiveSelection (multiple objects selected)
             if (activeObject instanceof FabricActiveSelection) {
               const objects = activeObject.getObjects();
@@ -2388,11 +2413,11 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               // Handle single object
               fabricCanvas.remove(activeObject);
             }
-            
+
             // Clear selection
             fabricCanvas.discardActiveObject();
             fabricCanvas.renderAll();
-            
+
             // Update state
             setSelectedObject(null);
             setSelectedImage(null);
@@ -2400,7 +2425,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         }
         return;
       }
-      
+
       // Handle path completion/cancellation
       if (isDrawingPathRef.current) {
         if (e.key === 'Enter') {
@@ -2413,7 +2438,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           return;
         }
       }
-      
+
       // Handle undo/redo
       if (meta && isZ && !e.shiftKey) {
         e.preventDefault();
@@ -2451,7 +2476,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   // Get artboard objects (FabricRect objects marked as artboards)
   const getArtboards = () => {
     if (!fabricCanvas) return [];
-    return fabricCanvas.getObjects().filter((obj: FabricObject) => 
+    return fabricCanvas.getObjects().filter((obj: FabricObject) =>
       (obj instanceof FabricRect && (obj as any).isArtboard) || obj instanceof FabricImage
     ) as (FabricRect | FabricImage)[];
   };
@@ -2471,367 +2496,367 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
 
   return (
     <>
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div className="relative w-full h-screen overflow-hidden bg-[#F4F4F6]">
-          <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
-          {isImagePending && (
-            <div
-              className="pointer-events-none absolute z-[55]"
-              style={{
-                left: placeholderPosition.left,
-                top: placeholderPosition.top,
-              }}
-            >
-              <Skeleton
-                animate="blink"
-                className="rounded-none bg-[#d4d4d8] shadow-lg shadow-black/10"
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="relative w-full h-screen overflow-hidden bg-[#F4F4F6]">
+            <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
+            {isImagePending && (
+              <div
+                className="pointer-events-none absolute z-[55]"
                 style={{
-                  width: `${placeholderSize.width}px`,
-                  height: `${placeholderSize.height}px`,
+                  left: placeholderPosition.left,
+                  top: placeholderPosition.top,
                 }}
-              />
-            </div>
-          )}
-          
-          {/* Hidden file input for image upload */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            className="hidden"
-            aria-label="Upload image"
-          />
-          
-          {/* Left Toolbar (Vertical layout) */}
-          <Toolbar
-            activeTool={activeTool}
-            setActiveTool={setActiveTool}
-            activeToolbarButton={activeToolbarButton}
-            setActiveToolbarButton={setActiveToolbarButton}
-            activeShape={activeShape}
-            setActiveShape={setActiveShape}
-            isToolbarExpanded={isToolbarExpanded}
-            setIsToolbarExpanded={setIsToolbarExpanded}
-            onAddText={handleAddText}
-            fileInputRef={fileInputRef}
-            onFileChange={handleFileChange}
-            onUploadClick={handleUploadClick}
-            leftOffset={isLayersOpen ? 272 : 8}
-            penSubTool={penSubTool}
-            setPenSubTool={setPenSubTool}
-          />
+              >
+                <Skeleton
+                  animate="blink"
+                  className="rounded-none bg-[#d4d4d8] shadow-lg shadow-black/10"
+                  style={{
+                    width: `${placeholderSize.width}px`,
+                    height: `${placeholderSize.height}px`,
+                  }}
+                />
+              </div>
+            )}
 
-          {/* Layers floating button */}
-          <div className="pointer-events-auto fixed bottom-4 left-2 z-[60]">
-            <button
-              type="button"
-              onClick={() => setIsLayersOpen((o) => !o)}
-              aria-label="Layers"
-              className="w-12 h-12 rounded-full bg-white text-[#111827] shadow-lg border border-[#E5E7EB] hover:bg-[#F9FAFB] flex items-center justify-center transition-colors"
-            >
-              <LayersIcon className="w-6 h-6" />
-            </button>
-          </div>
-
-          {/* Layers sidebar (always mounted for slide animation) */}
-          {fabricCanvas && (
-            <LayersPanel
-              canvas={fabricCanvas}
-              onRequestClose={() => setIsLayersOpen(false)}
-              open={isLayersOpen}
+            {/* Hidden file input for image upload */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="hidden"
+              aria-label="Upload image"
             />
-          )}
 
-        </div>
-      </ContextMenuTrigger>
+            {/* Left Toolbar (Vertical layout) */}
+            <Toolbar
+              activeTool={activeTool}
+              setActiveTool={setActiveTool}
+              activeToolbarButton={activeToolbarButton}
+              setActiveToolbarButton={setActiveToolbarButton}
+              activeShape={activeShape}
+              setActiveShape={setActiveShape}
+              isToolbarExpanded={isToolbarExpanded}
+              setIsToolbarExpanded={setIsToolbarExpanded}
+              onAddText={handleAddText}
+              fileInputRef={fileInputRef}
+              onFileChange={handleFileChange}
+              onUploadClick={handleUploadClick}
+              leftOffset={isLayersOpen ? 272 : 8}
+              penSubTool={penSubTool}
+              setPenSubTool={setPenSubTool}
+            />
 
-      {/* Right-click context menu */}
-      <ContextMenuContent>
-        <ContextMenuItem
-          onSelect={(e) => {
-            if (!fabricCanvas) return;
-            const many = fabricCanvas.getActiveObjects();
-            if (many && many.length > 1) {
-              // Remove objects from canvas
-              many.forEach(obj => fabricCanvas.remove(obj));
-              
-              // Create group
-              const group = new FabricGroup(many, {
-                canvas: fabricCanvas
-              } as any);
-              
-              // Name the group
-              const existingGroups = fabricCanvas.getObjects().filter((obj: FabricObject) => 
-                obj instanceof FabricGroup && (obj as any).name?.startsWith('Group')
-              );
-              const groupNumber = existingGroups.length;
-              (group as any).name = `Group ${groupNumber + 1}`;
-              
-              // Add group to canvas
-              fabricCanvas.add(group);
-              fabricCanvas.setActiveObject(group);
+            {/* Layers floating button */}
+            <div className="pointer-events-auto fixed bottom-4 left-2 z-[60]">
+              <button
+                type="button"
+                onClick={() => setIsLayersOpen((o) => !o)}
+                aria-label="Layers"
+                className="w-12 h-12 rounded-full bg-white text-[#111827] shadow-lg border border-[#E5E7EB] hover:bg-[#F9FAFB] flex items-center justify-center transition-colors"
+              >
+                <LayersIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Layers sidebar (always mounted for slide animation) */}
+            {fabricCanvas && (
+              <LayersPanel
+                canvas={fabricCanvas}
+                onRequestClose={() => setIsLayersOpen(false)}
+                open={isLayersOpen}
+              />
+            )}
+
+          </div>
+        </ContextMenuTrigger>
+
+        {/* Right-click context menu */}
+        <ContextMenuContent>
+          <ContextMenuItem
+            onSelect={(e) => {
+              if (!fabricCanvas) return;
+              const many = fabricCanvas.getActiveObjects();
+              if (many && many.length > 1) {
+                // Remove objects from canvas
+                many.forEach(obj => fabricCanvas.remove(obj));
+
+                // Create group
+                const group = new FabricGroup(many, {
+                  canvas: fabricCanvas
+                } as any);
+
+                // Name the group
+                const existingGroups = fabricCanvas.getObjects().filter((obj: FabricObject) =>
+                  obj instanceof FabricGroup && (obj as any).name?.startsWith('Group')
+                );
+                const groupNumber = existingGroups.length;
+                (group as any).name = `Group ${groupNumber + 1}`;
+
+                // Add group to canvas
+                fabricCanvas.add(group);
+                fabricCanvas.setActiveObject(group);
+                fabricCanvas.requestRenderAll();
+                fabricCanvas.fire('object:modified', { target: group } as any);
+              }
+            }}
+          >
+            Group
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => {
+              if (!fabricCanvas) return;
+              const active = fabricCanvas.getActiveObject();
+              if (active && active instanceof FabricGroup) {
+                const group = active as FabricGroup;
+                const items = (group as any)._objects?.slice() as FabricObject[] || [];
+
+                if (items.length === 0) return;
+
+                // Get group's transform
+                const groupLeft = group.left || 0;
+                const groupTop = group.top || 0;
+                const groupScaleX = group.scaleX || 1;
+                const groupScaleY = group.scaleY || 1;
+                const groupAngle = group.angle || 0;
+
+                // Destroy the group properly
+                (group as any)._restoreObjectsState?.();
+                fabricCanvas.remove(group);
+
+                // Restore each item with proper transformations
+                items.forEach(item => {
+                  // Get item's position relative to group
+                  const itemLeft = (item.left || 0) * groupScaleX;
+                  const itemTop = (item.top || 0) * groupScaleY;
+
+                  // Apply group rotation if any
+                  if (groupAngle !== 0) {
+                    const rad = (groupAngle * Math.PI) / 180;
+                    const cos = Math.cos(rad);
+                    const sin = Math.sin(rad);
+                    const rotatedX = itemLeft * cos - itemTop * sin;
+                    const rotatedY = itemLeft * sin + itemTop * cos;
+
+                    item.set({
+                      left: groupLeft + rotatedX,
+                      top: groupTop + rotatedY,
+                      scaleX: (item.scaleX || 1) * groupScaleX,
+                      scaleY: (item.scaleY || 1) * groupScaleY,
+                      angle: (item.angle || 0) + groupAngle,
+                      group: undefined,
+                      visible: true,
+                      evented: true,
+                      selectable: true
+                    });
+                  } else {
+                    item.set({
+                      left: groupLeft + itemLeft,
+                      top: groupTop + itemTop,
+                      scaleX: (item.scaleX || 1) * groupScaleX,
+                      scaleY: (item.scaleY || 1) * groupScaleY,
+                      group: undefined,
+                      visible: true,
+                      evented: true,
+                      selectable: true
+                    });
+                  }
+
+                  // Clean up group references
+                  (item as any).group = undefined;
+                  (item as any).parent = undefined;
+
+                  item.setCoords();
+                  fabricCanvas.add(item);
+                });
+
+                fabricCanvas.discardActiveObject();
+                fabricCanvas.requestRenderAll();
+                fabricCanvas.fire('object:modified', { target: items[0] } as any);
+              }
+            }}
+          >
+            Ungroup
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            onSelect={() => {
+              if (!fabricCanvas) return;
+              const objs = fabricCanvas.getActiveObjects();
+              if (!objs || objs.length === 0) return;
+              objs.forEach((o) => (fabricCanvas as any).bringObjectForward(o));
+              fabricCanvas.fire('object:modified', { target: objs[0] } as any);
               fabricCanvas.requestRenderAll();
-              fabricCanvas.fire('object:modified', { target: group } as any);
-            }
-          }}
-        >
-          Group
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() => {
-            if (!fabricCanvas) return;
-            const active = fabricCanvas.getActiveObject();
-            if (active && active instanceof FabricGroup) {
-              const group = active as FabricGroup;
-              const items = (group as any)._objects?.slice() as FabricObject[] || [];
-              
-              if (items.length === 0) return;
-              
-              // Get group's transform
-              const groupLeft = group.left || 0;
-              const groupTop = group.top || 0;
-              const groupScaleX = group.scaleX || 1;
-              const groupScaleY = group.scaleY || 1;
-              const groupAngle = group.angle || 0;
-              
-              // Destroy the group properly
-              (group as any)._restoreObjectsState?.();
-              fabricCanvas.remove(group);
-              
-              // Restore each item with proper transformations
-              items.forEach(item => {
-                // Get item's position relative to group
-                const itemLeft = (item.left || 0) * groupScaleX;
-                const itemTop = (item.top || 0) * groupScaleY;
-                
-                // Apply group rotation if any
-                if (groupAngle !== 0) {
-                  const rad = (groupAngle * Math.PI) / 180;
-                  const cos = Math.cos(rad);
-                  const sin = Math.sin(rad);
-                  const rotatedX = itemLeft * cos - itemTop * sin;
-                  const rotatedY = itemLeft * sin + itemTop * cos;
-                  
-                  item.set({
-                    left: groupLeft + rotatedX,
-                    top: groupTop + rotatedY,
-                    scaleX: (item.scaleX || 1) * groupScaleX,
-                    scaleY: (item.scaleY || 1) * groupScaleY,
-                    angle: (item.angle || 0) + groupAngle,
-                    group: undefined,
-                    visible: true,
-                    evented: true,
-                    selectable: true
-                  });
-                } else {
-                  item.set({
-                    left: groupLeft + itemLeft,
-                    top: groupTop + itemTop,
-                    scaleX: (item.scaleX || 1) * groupScaleX,
-                    scaleY: (item.scaleY || 1) * groupScaleY,
-                    group: undefined,
-                    visible: true,
-                    evented: true,
-                    selectable: true
-                  });
-                }
-                
-                // Clean up group references
-                (item as any).group = undefined;
-                (item as any).parent = undefined;
-                
-                item.setCoords();
-                fabricCanvas.add(item);
-              });
-              
+            }}
+          >
+            Bring Forward
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => {
+              if (!fabricCanvas) return;
+              const objs = fabricCanvas.getActiveObjects();
+              if (!objs || objs.length === 0) return;
+              objs.forEach((o) => (fabricCanvas as any).sendObjectBackwards(o));
+              fabricCanvas.fire('object:modified', { target: objs[0] } as any);
+              fabricCanvas.requestRenderAll();
+            }}
+          >
+            Send Backward
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => {
+              if (!fabricCanvas) return;
+              const objs = fabricCanvas.getActiveObjects();
+              if (!objs || objs.length === 0) return;
+              objs.forEach((o) => (fabricCanvas as any).bringObjectToFront(o));
+              fabricCanvas.fire('object:modified', { target: objs[0] } as any);
+              fabricCanvas.requestRenderAll();
+            }}
+          >
+            Bring to Front
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => {
+              if (!fabricCanvas) return;
+              const objs = fabricCanvas.getActiveObjects();
+              if (!objs || objs.length === 0) return;
+              objs.forEach((o) => (fabricCanvas as any).sendObjectToBack(o));
+              fabricCanvas.fire('object:modified', { target: objs[0] } as any);
+              fabricCanvas.requestRenderAll();
+            }}
+          >
+            Send to Back
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      {/* Inspector Sidebar (shows when any object is selected) */}
+      {selectedObject && (
+        <InspectorSidebar
+          selectedObject={selectedObject}
+          canvas={fabricCanvas}
+          isClosing={isSidebarClosing}
+          onClose={() => {
+            if (fabricCanvas) {
               fabricCanvas.discardActiveObject();
               fabricCanvas.requestRenderAll();
-              fabricCanvas.fire('object:modified', { target: items[0] } as any);
+            }
+            setIsSidebarClosing(true);
+            setTimeout(() => {
+              setSelectedImage(null);
+              setSelectedObject(null);
+              setIsEditingPath(false);
+              setIsSidebarClosing(false);
+            }, 300);
+          }}
+          onImageEdit={handleEditComplete}
+          onCanvasCommand={handleCanvasCommand}
+          onEnterPathEditMode={(path) => {
+            if (path && (path as any).__pathPoints) {
+              setEditingPathPoints([...(path as any).__pathPoints]);
+              setIsEditingPath(true);
+              isEditingPathRef.current = true;
+              selectedPathRef.current = path;
             }
           }}
-        >
-          Ungroup
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          onSelect={() => {
-            if (!fabricCanvas) return;
-            const objs = fabricCanvas.getActiveObjects();
-            if (!objs || objs.length === 0) return;
-            objs.forEach((o) => (fabricCanvas as any).bringObjectForward(o));
-            fabricCanvas.fire('object:modified', { target: objs[0] } as any);
-            fabricCanvas.requestRenderAll();
-          }}
-        >
-          Bring Forward
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() => {
-            if (!fabricCanvas) return;
-            const objs = fabricCanvas.getActiveObjects();
-            if (!objs || objs.length === 0) return;
-            objs.forEach((o) => (fabricCanvas as any).sendObjectBackwards(o));
-            fabricCanvas.fire('object:modified', { target: objs[0] } as any);
-            fabricCanvas.requestRenderAll();
-          }}
-        >
-          Send Backward
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() => {
-            if (!fabricCanvas) return;
-            const objs = fabricCanvas.getActiveObjects();
-            if (!objs || objs.length === 0) return;
-            objs.forEach((o) => (fabricCanvas as any).bringObjectToFront(o));
-            fabricCanvas.fire('object:modified', { target: objs[0] } as any);
-            fabricCanvas.requestRenderAll();
-          }}
-        >
-          Bring to Front
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() => {
-            if (!fabricCanvas) return;
-            const objs = fabricCanvas.getActiveObjects();
-            if (!objs || objs.length === 0) return;
-            objs.forEach((o) => (fabricCanvas as any).sendObjectToBack(o));
-            fabricCanvas.fire('object:modified', { target: objs[0] } as any);
-            fabricCanvas.requestRenderAll();
-          }}
-        >
-          Send to Back
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
-    {/* Inspector Sidebar (shows when any object is selected) */}
-    {selectedObject && (
-      <InspectorSidebar
-        selectedObject={selectedObject}
-        canvas={fabricCanvas}
-        isClosing={isSidebarClosing}
-        onClose={() => {
-          if (fabricCanvas) {
-            fabricCanvas.discardActiveObject();
-            fabricCanvas.requestRenderAll();
-          }
-          setIsSidebarClosing(true);
-          setTimeout(() => {
-            setSelectedImage(null);
-            setSelectedObject(null);
+          onExitPathEditMode={() => {
             setIsEditingPath(false);
-            setIsSidebarClosing(false);
-          }, 300);
-        }}
-        onImageEdit={handleEditComplete}
-        onCanvasCommand={handleCanvasCommand}
-        onEnterPathEditMode={(path) => {
-          if (path && (path as any).__pathPoints) {
-            setEditingPathPoints([...(path as any).__pathPoints]);
-            setIsEditingPath(true);
-            isEditingPathRef.current = true;
-            selectedPathRef.current = path;
-          }
-        }}
-        onExitPathEditMode={() => {
-          setIsEditingPath(false);
-          isEditingPathRef.current = false;
-          selectedPathRef.current = null;
-        }}
-      />
-    )}
+            isEditingPathRef.current = false;
+            selectedPathRef.current = null;
+          }}
+        />
+      )}
 
-    {/* Path Editor */}
-    {isEditingPath && selectedObject && selectedObject.type === 'path' && (
-      <PathEditor
-        canvas={fabricCanvas}
-        path={selectedObject as FabricPath}
-        isActive={isEditingPath}
-        onPointsChange={(points) => {
-          setEditingPathPoints(points);
-          if (selectedObject && (selectedObject as any).__pathPoints) {
-            (selectedObject as any).__pathPoints = points;
-            updatePathFromPoints(selectedObject, points);
-            if (fabricCanvas) {
-              fabricCanvas.renderAll();
+      {/* Path Editor */}
+      {isEditingPath && selectedObject && selectedObject.type === 'path' && (
+        <PathEditor
+          canvas={fabricCanvas}
+          path={selectedObject as FabricPath}
+          isActive={isEditingPath}
+          onPointsChange={(points) => {
+            setEditingPathPoints(points);
+            if (selectedObject && (selectedObject as any).__pathPoints) {
+              (selectedObject as any).__pathPoints = points;
+              updatePathFromPoints(selectedObject, points);
+              if (fabricCanvas) {
+                fabricCanvas.renderAll();
+              }
             }
-          }
-        }}
-        onClose={() => {
-          setIsEditingPath(false);
-          isEditingPathRef.current = false;
-          selectedPathRef.current = null;
-        }}
-      />
-    )}
+          }}
+          onClose={() => {
+            setIsEditingPath(false);
+            isEditingPathRef.current = false;
+            selectedPathRef.current = null;
+          }}
+        />
+      )}
 
-    {/* Export Dialog */}
-    <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Export</DialogTitle>
-          <DialogDescription>
-            Choose export format and what to export
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-6 py-4">
-          {/* Format Selection */}
-          <div className="grid gap-3">
-            <Label className="text-sm font-medium">Format</Label>
-            <RadioGroup value={exportFormat} onValueChange={(value) => setExportFormat(value as 'png' | 'jpg' | 'svg')}>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="png" id="png" />
-                <Label htmlFor="png" className="font-normal cursor-pointer">PNG (High Quality)</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="jpg" id="jpg" />
-                <Label htmlFor="jpg" className="font-normal cursor-pointer">JPG/JPEG (Compressed)</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="svg" id="svg" />
-                <Label htmlFor="svg" className="font-normal cursor-pointer">SVG (Vector)</Label>
-              </div>
-            </RadioGroup>
-          </div>
+      {/* Export Dialog */}
+      <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Export</DialogTitle>
+            <DialogDescription>
+              Choose export format and what to export
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-6 py-4">
+            {/* Format Selection */}
+            <div className="grid gap-3">
+              <Label className="text-sm font-medium">Format</Label>
+              <RadioGroup value={exportFormat} onValueChange={(value) => setExportFormat(value as 'png' | 'jpg' | 'svg')}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="png" id="png" />
+                  <Label htmlFor="png" className="font-normal cursor-pointer">PNG (High Quality)</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="jpg" id="jpg" />
+                  <Label htmlFor="jpg" className="font-normal cursor-pointer">JPG/JPEG (Compressed)</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="svg" id="svg" />
+                  <Label htmlFor="svg" className="font-normal cursor-pointer">SVG (Vector)</Label>
+                </div>
+              </RadioGroup>
+            </div>
 
-          {/* Export Type Selection */}
-          <div className="grid gap-3">
-            <Label className="text-sm font-medium">Export</Label>
-            <RadioGroup value={exportType} onValueChange={(value) => setExportType(value as 'canvas' | 'artboard')}>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="canvas" id="canvas" />
-                <Label htmlFor="canvas" className="font-normal cursor-pointer">Entire Canvas</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem 
-                  value="artboard" 
-                  id="artboard" 
-                  disabled={getArtboards().length === 0}
-                />
-                <Label 
-                  htmlFor="artboard" 
-                  className={`font-normal cursor-pointer ${getArtboards().length === 0 ? 'opacity-50' : ''}`}
-                >
-                  Artboard {getArtboards().length === 0 && '(No artboard found)'}
-                </Label>
-              </div>
-            </RadioGroup>
+            {/* Export Type Selection */}
+            <div className="grid gap-3">
+              <Label className="text-sm font-medium">Export</Label>
+              <RadioGroup value={exportType} onValueChange={(value) => setExportType(value as 'canvas' | 'artboard')}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="canvas" id="canvas" />
+                  <Label htmlFor="canvas" className="font-normal cursor-pointer">Entire Canvas</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem
+                    value="artboard"
+                    id="artboard"
+                    disabled={getArtboards().length === 0}
+                  />
+                  <Label
+                    htmlFor="artboard"
+                    className={`font-normal cursor-pointer ${getArtboards().length === 0 ? 'opacity-50' : ''}`}
+                  >
+                    Artboard {getArtboards().length === 0 && '(No artboard found)'}
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setIsExportDialogOpen(false)}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleExportConfirm}
-            className="bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 text-white"
-          >
-            Export
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsExportDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleExportConfirm}
+              className="bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 text-white"
+            >
+              Export
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
