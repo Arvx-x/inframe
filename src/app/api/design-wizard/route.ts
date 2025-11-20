@@ -181,7 +181,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, imageUrl });
     }
 
-    // Generate image(s) from a chosen direction using simple generate-image API
+    // Generate image(s) from a chosen direction using Gemini 3 Pro Image Preview
     if (phase === "generateFromDirection") {
       if (!direction || !direction.id) {
         return NextResponse.json({ success: false, error: "Missing direction" }, { status: 400 });
@@ -192,22 +192,121 @@ export async function POST(request: Request) {
 
       const fullPrompt = `${basePrompt}\n\nStyle direction: ${direction.name}\nComposition: ${direction.compositionRules ?? ""}\nMood: ${(direction.moodKeywords || []).join(", ")}\n\nCreate a high-quality, professional image following these guidelines precisely.`;
 
-      const origin = new URL(request.url).origin;
-      const resp = await fetch(`${origin}/api/generate-image`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: fullPrompt }),
+      // Call Gemini 3 Pro Image Preview directly
+      let response: Response | null = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 60000);
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${INFRAME_API_KEY}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: fullPrompt }] }]
+            }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          if (response.ok) break;
+          const text = await response.text().catch(() => "");
+          console.error("Gemini 3 Pro API error:", response.status, text);
+          if (response.status === 429 || response.status >= 500) {
+            await new Promise((r) => setTimeout(r, attempt * 600));
+            continue;
+          }
+          return NextResponse.json({ success: false, error: `Image generation failed: ${response.status}`, details: text }, { status: 502 });
+        } catch (e) {
+          await new Promise((r) => setTimeout(r, attempt * 600));
+        }
+      }
+      if (!response || !response.ok) {
+        return NextResponse.json({ success: false, error: "Image generation failed after retries" }, { status: 502 });
+      }
+
+      const data = await response.json().catch((e) => {
+        console.error("Failed to parse image generation response:", e);
+        return null;
       });
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => "");
-        return NextResponse.json({ success: false, error: `Image generation failed: ${resp.status}`, details: text }, { status: 502 });
+
+      const partsOut: any[] = data?.candidates?.[0]?.content?.parts ?? [];
+      let base64Data: string | null = null;
+      let mime: string | null = null;
+      for (const p of partsOut) {
+        const d1 = p?.inline_data?.data as string | undefined;
+        const d2 = p?.inlineData?.data as string | undefined;
+        if (d1 || d2) {
+          base64Data = d1 || d2 || null;
+          mime = (p?.inline_data?.mime_type as string | undefined) || (p?.inlineData?.mimeType as string | undefined) || "image/png";
+          break;
+        }
       }
-      const data = await resp.json().catch(() => null);
-      const imageUrl = data?.imageUrl || null;
+      const imageUrl = base64Data ? `data:${mime};base64,${base64Data}` : null;
       if (!imageUrl) {
-        return NextResponse.json({ success: false, error: "No image URL returned" }, { status: 502 });
+        return NextResponse.json({ success: false, error: "No image URL in response", raw: data }, { status: 502 });
       }
+
       return NextResponse.json({ success: true, variants: [{ imageUrl }] }, { status: 200 });
+    }
+
+    // Chat Image Generation Phase (Gemini 3 Pro Image Preview)
+    if (phase === "chatImage") {
+      if (!prompt || typeof prompt !== "string") {
+        return NextResponse.json({ success: false, error: "Prompt is required for chat image generation" }, { status: 400 });
+      }
+
+      let response: Response | null = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 60000);
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${INFRAME_API_KEY}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }]
+            }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          if (response.ok) break;
+          const text = await response.text().catch(() => "");
+          console.error("Gemini 3 Pro API error:", response.status, text);
+          if (response.status === 429 || response.status >= 500) {
+            await new Promise((r) => setTimeout(r, attempt * 600));
+            continue;
+          }
+          return NextResponse.json({ success: false, error: `Image generation failed: ${response.status}`, details: text }, { status: 502 });
+        } catch (e) {
+          await new Promise((r) => setTimeout(r, attempt * 600));
+        }
+      }
+      if (!response || !response.ok) {
+        return NextResponse.json({ success: false, error: "Image generation failed after retries" }, { status: 502 });
+      }
+
+      const data = await response.json().catch((e) => {
+        console.error("Failed to parse image generation response:", e);
+        return null;
+      });
+
+      const partsOut: any[] = data?.candidates?.[0]?.content?.parts ?? [];
+      let base64Data: string | null = null;
+      let mime: string | null = null;
+      for (const p of partsOut) {
+        const d1 = p?.inline_data?.data as string | undefined;
+        const d2 = p?.inlineData?.data as string | undefined;
+        if (d1 || d2) {
+          base64Data = d1 || d2 || null;
+          mime = (p?.inline_data?.mime_type as string | undefined) || (p?.inlineData?.mimeType as string | undefined) || "image/png";
+          break;
+        }
+      }
+      const imageUrl = base64Data ? `data:${mime};base64,${base64Data}` : null;
+      if (!imageUrl) {
+        return NextResponse.json({ success: false, error: "No image URL in response", raw: data }, { status: 502 });
+      }
+
+      return NextResponse.json({ success: true, imageUrl });
     }
 
     // Build system prompt and response format depending on phase
@@ -323,7 +422,7 @@ Message count: ${messages?.length || 0}`;
             if (parsed2.shouldGenerate) {
               return NextResponse.json({ success: true, shouldGenerate: true, finalPrompt: parsed2.finalPrompt });
             }
-          } catch {}
+          } catch { }
         }
         // Not JSON, just a regular conversational response
         console.log('AI response is not JSON, continuing conversation');

@@ -33,7 +33,7 @@ const classifyIdea = (idea: string): GenerationCategory => {
 
 const extractKeywords = (idea: string): string[] => {
   const stopwords = new Set([
-    "the","a","an","and","or","of","for","to","with","in","on","at","by","from","is","are","be","make","create","design","image","poster","logo","please","can","you"
+    "the", "a", "an", "and", "or", "of", "for", "to", "with", "in", "on", "at", "by", "from", "is", "are", "be", "make", "create", "design", "image", "poster", "logo", "please", "can", "you"
   ]);
   const words = idea
     .toLowerCase()
@@ -56,15 +56,15 @@ const buildRefinedPrompt = (
   const role = category === "logo" ? "Logo design" : category === "poster" ? "Poster graphic" : "Image";
   const goal = isEdit ? "Refine the existing visual" : "Generate a new visual";
   const kw = keywords.length ? `Keywords: ${keywords.join(", ")}.` : "";
-  
-  const colorGuidance = colors && colors.length > 0 
+
+  const colorGuidance = colors && colors.length > 0
     ? `Preferred color palette: ${colors.join(", ")}.`
     : "";
-  
+
   const exclusions = excludeText && excludeText.trim()
     ? `Avoid including: ${excludeText.trim()}.`
     : "";
-  
+
   return [
     `${role} — ${goal}.`,
     `Idea: ${idea}.`,
@@ -107,7 +107,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
   const [selectedRatio, setSelectedRatio] = useState<string>("1×1");
   const [selectedModel, setSelectedModel] = useState<string>("DALL-E 3");
   const pendingMessageIdsRef = useRef<Set<string>>(new Set());
-  
+
   const generateMessageId = () =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -175,57 +175,57 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
   const extractProjectName = (message: string): string => {
     // Clean the message
     const cleaned = message.trim();
-    
+
     // Extract first few words (max 5 words or 50 chars)
     const words = cleaned.split(/\s+/).slice(0, 5);
     let name = words.join(' ');
-    
+
     // Truncate if too long
     if (name.length > 50) {
       name = name.substring(0, 47) + '...';
     }
-    
+
     // Capitalize first letter
     name = name.charAt(0).toUpperCase() + name.slice(1);
-    
+
     return name || "Untitled Project";
   };
-  
+
   // Handlers for preferences
   const toggleTempColor = (hex: string) => {
     setTempSelectedColors(prev => prev.includes(hex) ? prev.filter(c => c !== hex) : [...prev, hex]);
   };
-  
+
   const handleExcludeOpen = (open: boolean) => {
     setIsExcludeOpen(open);
     if (open) {
       setTempExcludeText(excludeText);
     }
   };
-  
+
   const handleColorOpen = (open: boolean) => {
     setIsColorOpen(open);
     if (open) {
       setTempSelectedColors(selectedColors);
     }
   };
-  
+
   const applyExcludePreferences = () => {
     setExcludeText(tempExcludeText);
     setIsExcludeOpen(false);
   };
-  
+
   const clearExcludePreferences = () => {
     setTempExcludeText("");
     setExcludeText("");
     setIsExcludeOpen(false);
   };
-  
+
   const applyColorPreferences = () => {
     setSelectedColors(tempSelectedColors);
     setIsColorOpen(false);
   };
-  
+
   const clearColorPreferences = () => {
     setTempSelectedColors([]);
     setSelectedColors([]);
@@ -235,11 +235,11 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
-  
+
   // New states for expand/collapse
   const [isExpanded, setIsExpanded] = useState(true);
   const [firstUserMessage, setFirstUserMessage] = useState("");
-  
+
   // Chat mode states
   const [isChatMode, setIsChatMode] = useState(false);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
@@ -263,7 +263,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
   const [guidedConversation, setGuidedConversation] = useState<Message[]>([]);
   const [wizardKeywords, setWizardKeywords] = useState<any | null>(null);
   const [wizardDirections, setWizardDirections] = useState<any[]>([]);
-  
+
   // Use NEXT_PUBLIC_PROJECT_NAME in Next; fall back to document.title if available
   const projectName =
     process.env.NEXT_PUBLIC_PROJECT_NAME ||
@@ -297,35 +297,35 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      
+
       // Check if click is inside composer
       if (composerRef.current && composerRef.current.contains(target)) {
         return;
       }
-      
+
       // Check if click is inside any popover content (Radix UI popovers)
       const clickedElement = event.target as Element;
-      if (clickedElement.closest('[role="dialog"]') || 
-          clickedElement.closest('[data-radix-popper-content-wrapper]') ||
-          clickedElement.closest('[data-state="open"]')) {
+      if (clickedElement.closest('[role="dialog"]') ||
+        clickedElement.closest('[data-radix-popper-content-wrapper]') ||
+        clickedElement.closest('[data-state="open"]')) {
         return;
       }
-      
+
       // Check if any of our preference popovers are open
       if (isExcludeOpen || isColorOpen) {
         return;
       }
-      
+
       // Only collapse if not in chat mode
       if (!isChatMode && mode !== "chat") {
         setIsExpanded(false);
       }
     };
-    
+
     if (isExpanded && !isChatMode && mode !== "chat") {
       document.addEventListener('mousedown', handleClickOutside);
     }
-    
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
@@ -337,7 +337,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
       textareaRef.current.focus();
     }
   }, [isExpanded]);
-  
+
   // Scroll chat messages to bottom when new messages arrive
   useEffect(() => {
     if (isChatMode && bottomRef.current) {
@@ -352,28 +352,28 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
     }
 
     const userMessage: Message = { role: "user", content: input, timestamp: Date.now() };
-    
+
     // Update project name from first message
     if (!hasSetProjectName && onProjectNameUpdate) {
       const projectName = extractProjectName(input);
       onProjectNameUpdate(projectName);
       setHasSetProjectName(true);
     }
-    
+
     // Handle chat mode separately
     if (isChatMode || mode === "chat") {
       setChatMessages((prev) => [...prev, userMessage]);
       if (!firstUserMessage) setFirstUserMessage(input);
       setInput("");
       setIsGenerating(true);
-      
+
       try {
         // Simplified conversational flow
         const res = await fetch('/api/design-wizard', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            phase: 'chat', 
+          body: JSON.stringify({
+            phase: 'chat',
             messages: chatMessages.concat(userMessage),
             preferences: {
               exclude: (excludeText || "").trim() || undefined,
@@ -381,12 +381,12 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
             }
           })
         });
-        
+
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
-        
+
         console.log('Chat API response:', data);
-        
+
         // Check if AI is ready to generate
         if (data.success && data.shouldGenerate) {
           const pendingId = addPendingImageMessage("chat");
@@ -396,34 +396,35 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
             const category = classifyIdea(data.finalPrompt || userMessage.content);
             const keywords = extractKeywords(data.finalPrompt || userMessage.content);
             const refinedPrompt = buildRefinedPrompt(
-              data.finalPrompt || userMessage.content, 
-              category, 
-              keywords, 
+              data.finalPrompt || userMessage.content,
+              category,
+              keywords,
               false,
               excludeText,
               selectedColors
             );
-            
+
             console.log('Generating image with refined prompt:', refinedPrompt);
-            
-            const genRes = await fetch('/api/generate-image', {
+
+            const genRes = await fetch('/api/design-wizard', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
+                phase: 'chatImage',
                 prompt: refinedPrompt
               })
             });
-            
+
             if (!genRes.ok) {
               const errorText = await genRes.text();
               console.error('Image generation failed:', errorText);
               removePendingImageMessage("chat", pendingId);
               throw new Error(errorText);
             }
-            
+
             const genData = await genRes.json();
             console.log('Image generation response:', genData);
-            
+
             if (genData?.imageUrl) {
               resolvePendingImageMessage("chat", pendingId, genData.imageUrl);
               onImageGenerated(genData.imageUrl);
@@ -467,7 +468,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
       }
       return;
     }
-    
+
     // Original non-chat mode logic
     setMessages((prev) => [...prev, userMessage]);
     if (!firstUserMessage) setFirstUserMessage(input); // Save first user message
@@ -488,7 +489,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
         if (!onCanvasCommand) {
           throw new Error("Canvas command handler not available");
         }
-        
+
         const response = await onCanvasCommand(userMessage.content);
         const assistantMessage: Message = {
           role: "assistant",
@@ -594,10 +595,10 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
               let pendingId: string | null = null;
               try {
                 pendingId = addPendingImageMessage("design");
-                const genRes = await fetch('/api/generate-image', {
+                const genRes = await fetch('/api/design-wizard', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ prompt: basePrompt })
+                  body: JSON.stringify({ phase: 'chatImage', prompt: basePrompt })
                 });
                 if (genRes.ok) {
                   const genData = await genRes.json();
@@ -632,10 +633,10 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
               for (const _ of picks) {
                 const pendingId = addPendingImageMessage("design");
                 try {
-                  const genRes = await fetch('/api/generate-image', {
+                  const genRes = await fetch('/api/design-wizard', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: basePrompt })
+                    body: JSON.stringify({ phase: 'chatImage', prompt: basePrompt })
                   });
                   if (genRes.ok) {
                     const genData = await genRes.json();
@@ -825,13 +826,13 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
       <div className="hidden">
         <button onClick={() => setMode("design")}>Design</button>
         <button onClick={() => setMode("canvas")}>Canvas</button>
-        </div>
-        
+      </div>
+
       {/* Chat Mode Message Area - appears above composer */}
       {(isChatMode || mode === "chat") && chatMessages.length > 0 && (
-        <div 
+        <div
           className="absolute bottom-full left-0 right-0 bg-white rounded-t-xl border border-b-0 border-blue-200/50 focus-within:ring-2 focus-within:ring-blue-400/25 transition-all duration-300 ease-in-out flex flex-col"
-          style={{ 
+          style={{
             maxHeight: '300px',
             opacity: 1,
           }}
@@ -868,7 +869,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
               </Button>
             </div>
           </div>
-          
+
           {/* Chat messages area */}
           <ScrollArea className="flex-1 px-4 py-2 border-t border-l border-r border-blue-200/50 focus-within:ring-2 focus-within:ring-blue-400/25 overflow-y-auto">
             <div className="space-y-3">
@@ -911,72 +912,68 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
           </ScrollArea>
         </div>
       )}
-        
+
       {/* Chat header - appears above composer when no messages */}
-      <div 
-        className={`absolute bottom-full left-0 right-0 bg-white rounded-t-xl border border-b-0 border-blue-200/50 focus-within:ring-2 focus-within:ring-blue-400/25 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-          (isChatMode || mode === "chat") && chatMessages.length === 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
-        }`}
+      <div
+        className={`absolute bottom-full left-0 right-0 bg-white rounded-t-xl border border-b-0 border-blue-200/50 focus-within:ring-2 focus-within:ring-blue-400/25 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${(isChatMode || mode === "chat") && chatMessages.length === 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+          }`}
         style={{
           height: (isChatMode || mode === "chat") && chatMessages.length === 0 ? '40px' : '0px',
           overflow: 'hidden'
         }}
-        >
-          <div className="flex items-center justify-between px-4 py-2 flex-shrink-0 h-10 min-h-[40px]">
-            <span className="text-sm font-medium">My Project</span>
-            <div className="flex items-center gap-2">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6"
-                onClick={() => {
-                  setChatMessages([]);
-                  setInput("");
-                  setFirstUserMessage("");
-                  setHasSetProjectName(false);
-                }}
-                title="New chat"
-              >
-                <Plus className="w-3 h-3" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6"
-                onClick={() => {
-                  setIsChatMode(false);
-                  setMode("design");
-                }}
-                title="Close chat mode"
-              >
-                <X className="w-3 h-3" />
-              </Button>
-            </div>
+      >
+        <div className="flex items-center justify-between px-4 py-2 flex-shrink-0 h-10 min-h-[40px]">
+          <span className="text-sm font-medium">My Project</span>
+          <div className="flex items-center gap-2">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={() => {
+                setChatMessages([]);
+                setInput("");
+                setFirstUserMessage("");
+                setHasSetProjectName(false);
+              }}
+              title="New chat"
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={() => {
+                setIsChatMode(false);
+                setMode("design");
+              }}
+              title="Close chat mode"
+            >
+              <X className="w-3 h-3" />
+            </Button>
           </div>
         </div>
+      </div>
 
       {/* Composer */}
-      <div 
+      <div
         ref={composerRef}
-        className={`${isChatMode || mode === "chat" ? 'rounded-b-xl' : 'rounded-xl'} border shadow-[0_4px_8px_rgba(0,0,0,0.12)] hover:shadow-[0_6px_12px_rgba(0,0,0,0.16)] bg-white transition-all duration-300 ease-in-out overflow-hidden ${
-          isExpanded || isChatMode || mode === "chat" ? 'cursor-default' : 'cursor-text'
-        } ${
-          mode === "design"
+        className={`${isChatMode || mode === "chat" ? 'rounded-b-xl' : 'rounded-xl'} border shadow-[0_4px_8px_rgba(0,0,0,0.12)] hover:shadow-[0_6px_12px_rgba(0,0,0,0.16)] bg-white transition-all duration-300 ease-in-out overflow-hidden ${isExpanded || isChatMode || mode === "chat" ? 'cursor-default' : 'cursor-text'
+          } ${mode === "design"
             ? "border-blue-200/50"
             : mode === "canvas"
-            ? "border-blue-300/50"
-            : "border-green-200/50"
-        }`}
-        style={{ 
+              ? "border-blue-300/50"
+              : "border-green-200/50"
+          }`}
+        style={{
           height: (isExpanded || isChatMode || mode === "chat") ? '100px' : '52px'
         }}
       >
         <div className="relative h-full flex flex-col">
-          
+
           {/* Left buttons - always rendered but animated */}
-          <div className={`absolute left-2 bottom-3 flex items-center gap-2 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-            !isExpanded && !isChatMode && mode !== "chat" ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
-          }`}>
+          <div className={`absolute left-2 bottom-3 flex items-center gap-2 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${!isExpanded && !isChatMode && mode !== "chat" ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
+            }`}>
             {/* Mode toggle button */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -987,46 +984,46 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                 >
                   {mode === "design" ? (
                     <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                      <circle cx="8.5" cy="8.5" r="1.5"/>
-                      <polyline points="21,15 16,10 5,21"/>
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21,15 16,10 5,21" />
                     </svg>
                   ) : mode === "canvas" ? (
                     <CanvasIcon className="w-3 h-3" />
                   ) : (
                     <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                     </svg>
                   )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" sideOffset={8} className="rounded-xl border bg-white shadow-lg">
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm"
                   onClick={() => setMode("design")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21,15 16,10 5,21"/>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21,15 16,10 5,21" />
                   </svg>
                   Design Mode
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm"
                   onClick={() => setMode("canvas")}
                 >
                   <CanvasIcon className="w-4 h-4" /> Canvas Mode
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm"
                   onClick={() => {
                     setMode("chat");
                     setIsChatMode(true);
                   }}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                   </svg>
                   Chat Mode
                 </DropdownMenuItem>
@@ -1067,7 +1064,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                       </Button>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <label className="text-xs text-gray-600">What should be avoided in the image?</label>
                     <textarea
@@ -1077,7 +1074,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                       className="w-full h-20 px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
-                  
+
                   {tempExcludeText && (
                     <div className="space-y-2">
                       <p className="text-xs text-gray-600">Preview:</p>
@@ -1099,84 +1096,84 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                   title="Aspect Ratio"
                 >
                   <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="7" height="7"/>
-                    <rect x="14" y="3" width="7" height="7"/>
-                    <rect x="14" y="14" width="7" height="7"/>
-                    <rect x="3" y="14" width="7" height="7"/>
+                    <rect x="3" y="3" width="7" height="7" />
+                    <rect x="14" y="3" width="7" height="7" />
+                    <rect x="14" y="14" width="7" height="7" />
+                    <rect x="3" y="14" width="7" height="7" />
                   </svg>
                   <span className="text-xs font-medium">{selectedRatio}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" sideOffset={8} className="rounded-xl border bg-white shadow-lg">
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm"
                   onClick={() => setSelectedRatio("1×1")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                   </svg>
                   1×1 (Square)
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm"
                   onClick={() => setSelectedRatio("16×9")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="6" width="18" height="12" rx="2" ry="2"/>
+                    <rect x="3" y="6" width="18" height="12" rx="2" ry="2" />
                   </svg>
                   16×9 (Widescreen)
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm"
                   onClick={() => setSelectedRatio("4×3")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="5" width="18" height="14" rx="2" ry="2"/>
+                    <rect x="3" y="5" width="18" height="14" rx="2" ry="2" />
                   </svg>
                   4×3 (Standard)
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm"
                   onClick={() => setSelectedRatio("3×2")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="4" width="18" height="16" rx="2" ry="2"/>
+                    <rect x="3" y="4" width="18" height="16" rx="2" ry="2" />
                   </svg>
                   3×2 (Photo)
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm"
                   onClick={() => setSelectedRatio("9×16")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="6" y="3" width="12" height="18" rx="2" ry="2"/>
+                    <rect x="6" y="3" width="12" height="18" rx="2" ry="2" />
                   </svg>
                   9×16 (Portrait)
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm"
                   onClick={() => setSelectedRatio("2×3")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="5" y="3" width="14" height="18" rx="2" ry="2"/>
+                    <rect x="5" y="3" width="14" height="18" rx="2" ry="2" />
                   </svg>
                   2×3 (Portrait Photo)
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm"
                   onClick={() => setSelectedRatio("21×9")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="2" y="7" width="20" height="10" rx="2" ry="2"/>
+                    <rect x="2" y="7" width="20" height="10" rx="2" ry="2" />
                   </svg>
                   21×9 (Ultrawide)
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm"
                   onClick={() => setSelectedRatio("5×4")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="4" width="18" height="16" rx="2" ry="2"/>
+                    <rect x="3" y="4" width="18" height="16" rx="2" ry="2" />
                   </svg>
                   5×4 (Large Format)
                 </DropdownMenuItem>
@@ -1222,7 +1219,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                       </Button>
                     </div>
                   </div>
-                  
+
                   {/* Color grid */}
                   <div className="grid grid-cols-8 gap-2">
                     {[
@@ -1235,18 +1232,17 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                     ].map((color) => (
                       <button
                         key={color}
-                        className={`w-8 h-8 rounded-lg border-2 transition-all duration-200 hover:scale-110 ${
-                          tempSelectedColors.includes(color) 
-                            ? 'border-gray-800 ring-2 ring-gray-300' 
+                        className={`w-8 h-8 rounded-lg border-2 transition-all duration-200 hover:scale-110 ${tempSelectedColors.includes(color)
+                            ? 'border-gray-800 ring-2 ring-gray-300'
                             : 'border-gray-200 hover:border-gray-400'
-                        }`}
+                          }`}
                         style={{ backgroundColor: color }}
                         onClick={() => toggleTempColor(color)}
                         title={color}
                       />
                     ))}
                   </div>
-                  
+
                   {/* Selected colors preview */}
                   {tempSelectedColors.length > 0 && (
                     <div className="space-y-2">
@@ -1257,7 +1253,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                             key={color}
                             className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-md text-xs"
                           >
-                            <div 
+                            <div
                               className="w-3 h-3 rounded-full border border-gray-300"
                               style={{ backgroundColor: color }}
                             />
@@ -1281,9 +1277,8 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
           </div>
 
           {/* Right button - always rendered but animated */}
-          <div className={`absolute right-3.5 bottom-3 flex items-center gap-1.5 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-            !isExpanded && !isChatMode && mode !== "chat" ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
-          }`}>
+          <div className={`absolute right-3.5 bottom-3 flex items-center gap-1.5 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${!isExpanded && !isChatMode && mode !== "chat" ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
+            }`}>
             {/* Models dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1297,87 +1292,87 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" sideOffset={8} className="rounded-xl border bg-white shadow-lg">
-                <DropdownMenuItem 
-                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   onClick={() => setSelectedModel("DALL-E 3")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                   </svg>
                   DALL-E 3
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   onClick={() => setSelectedModel("DALL-E 2")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                   </svg>
                   DALL-E 2
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   onClick={() => setSelectedModel("Midjourney")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M8 12h8"/>
-                    <path d="M12 8v8"/>
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M8 12h8" />
+                    <path d="M12 8v8" />
                   </svg>
                   Midjourney
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   onClick={() => setSelectedModel("Stable Diffusion")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21,15 16,10 5,21"/>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21,15 16,10 5,21" />
                   </svg>
                   Stable Diffusion
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   onClick={() => setSelectedModel("Imagen")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21,15 16,10 5,21"/>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21,15 16,10 5,21" />
                   </svg>
                   Imagen
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   onClick={() => setSelectedModel("SeaDream")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                    <path d="M2 17l10 5 10-5"/>
-                    <path d="M2 12l10 5 10-5"/>
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                    <path d="M2 17l10 5 10-5" />
+                    <path d="M2 12l10 5 10-5" />
                   </svg>
                   SeaDream
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   onClick={() => setSelectedModel("Nano Banana")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                    <path d="M2 17l10 5 10-5"/>
-                    <path d="M2 12l10 5 10-5"/>
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                    <path d="M2 17l10 5 10-5" />
+                    <path d="M2 12l10 5 10-5" />
                   </svg>
                   Nano Banana
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0" 
+                <DropdownMenuItem
+                  className="gap-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   onClick={() => setSelectedModel("Kandinsky")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M8 12h8"/>
-                    <path d="M12 8v8"/>
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M8 12h8" />
+                    <path d="M12 8v8" />
                   </svg>
                   Kandinsky
                 </DropdownMenuItem>
@@ -1388,9 +1383,8 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
               onClick={handleSend}
               disabled={isGenerating || !input.trim()}
               size="icon"
-              className={`h-7 w-7 p-0 rounded-full shadow-sm transition-all duration-300 focus-visible:ring-0 focus-visible:ring-offset-0 ${
-                mode === "canvas" ? "bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90" : mode === "chat" ? "bg-green-600 hover:bg-green-700" : ""
-              }`}
+              className={`h-7 w-7 p-0 rounded-full shadow-sm transition-all duration-300 focus-visible:ring-0 focus-visible:ring-offset-0 ${mode === "canvas" ? "bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90" : mode === "chat" ? "bg-green-600 hover:bg-green-700" : ""
+                }`}
               title={mode === "design" ? (isGuidedMode ? "Start Wizard" : "Generate Image") : mode === "canvas" ? "Execute Command" : "Send Message"}
             >
               {isGenerating ? (
@@ -1400,10 +1394,10 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
               )}
             </Button>
           </div>
-          
+
           {!isExpanded && !isChatMode && mode !== "chat" ? (
             // Collapsed search-bar mode - without send button
-            <div 
+            <div
               onClick={() => setIsExpanded(true)}
               className="relative h-full flex flex-col justify-start px-4 pt-4 cursor-pointer caret-transparent overflow-hidden"
             >
@@ -1426,10 +1420,10 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                   // Resize immediately on keystroke so height grows before wrapping
                   if (textareaRef.current) resizeTextareaEl(textareaRef.current);
                 }}
-                  onKeyDown={handleKeyPress}
-                  placeholder={
-                    mode === "design" ? "What would you like to create?" : mode === "canvas" ? "Tell the canvas what to do..." : "Start a conversation..."
-                  }
+                onKeyDown={handleKeyPress}
+                placeholder={
+                  mode === "design" ? "What would you like to create?" : mode === "canvas" ? "Tell the canvas what to do..." : "Start a conversation..."
+                }
                 className="min-h-[120px] resize-none bg-transparent border-0 focus-visible:ring-0 pl-4 pr-16 pt-4 pb-8 placeholder:text-muted-foreground/80"
                 disabled={isGenerating}
               />
