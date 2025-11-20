@@ -20,7 +20,7 @@ export async function getProfile(userId: string): Promise<Profile | null> {
         return null;
     }
 
-    return data;
+    return data as Profile | null;
 }
 
 export async function createProfile(profile: ProfileInsert): Promise<Profile | null> {
@@ -37,7 +37,11 @@ export async function createProfile(profile: ProfileInsert): Promise<Profile | n
         throw error;
     }
 
-    return data;
+    if (!data) {
+        throw new Error('Failed to create profile');
+    }
+
+    return data as Profile;
 }
 
 export async function updateProfile(userId: string, updates: ProfileUpdate): Promise<Profile | null> {
@@ -55,7 +59,7 @@ export async function updateProfile(userId: string, updates: ProfileUpdate): Pro
         throw error;
     }
 
-    return data;
+    return data as Profile | null;
 }
 
 export async function uploadAvatar(userId: string, file: File): Promise<string | null> {

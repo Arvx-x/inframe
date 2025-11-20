@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { getProject, createProject, updateProject, saveCanvas } from '@/app/lib/services/projects.service';
+import { uploadDataURL } from '@/app/lib/services/storage.service';
 import PromptSidebar from "@/app/components/PromptSidebar";
 import Canvas from "@/app/components/Canvas";
 import ColorSelector from "@/app/components/ColorSelector";
@@ -14,7 +15,7 @@ import { ProfileDropdown } from "@/app/components/ProfileDropdown";
 import { toast } from 'sonner';
 import Link from 'next/link';
 
-export default function Page() {
+function EditorContent() {
   const searchParams = useSearchParams();
   const projectId = searchParams.get('project');
   const router = useRouter();
@@ -28,48 +29,56 @@ export default function Page() {
   const canvasExportRef = useRef<(() => void) | null>(null);
   const canvasSaveRef = useRef<(() => any) | null>(null);
   const canvasColorRef = useRef<((color: string) => void) | null>(null);
+  const canvasInstanceRef = useRef<(() => string | null) | null>(null);
   const [historyAvailable, setHistoryAvailable] = useState(false);
   const [projectName, setProjectName] = useState("Untitled Project");
   const [canvasColor, setCanvasColor] = useState("#F4F4F6");
   const [canvasData, setCanvasData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load or create project
+  // Load or create project - optimized for instant loading
+  // Allow unsigned users to use canvas without saving
   useEffect(() => {
     async function initProject() {
       if (authLoading) return;
 
+      // Set loading to false immediately to show UI (for both signed in and out users)
+      setIsLoading(false);
+
+      // If user is not signed in, allow them to use canvas without saving
       if (!user) {
-        // Redirect to login if not authenticated (handled by AuthProvider usually, but safe to check)
+        // Just show the canvas with default settings
         return;
       }
 
+      // User is signed in - load or create project
       try {
         if (projectId) {
-          // Load existing
-          const project = await getProject(projectId);
-          if (project) {
-            setProjectName(project.name);
-            setCanvasColor(project.canvas_color || '#F4F4F6');
-            if (project.canvas_data) {
-              setCanvasData(project.canvas_data);
+          // Load existing - fetch in background, update state when ready
+          getProject(projectId).then((project) => {
+            if (project) {
+              setProjectName(project.name);
+              setCanvasColor(project.canvas_color || '#F4F4F6');
+              if (project.canvas_data) {
+                setCanvasData(project.canvas_data);
+              }
+            } else {
+              toast.error('Project not found');
+              // Don't redirect - allow user to continue working
             }
-          } else {
-            toast.error('Project not found');
-            router.push('/');
-          }
+          }).catch((error) => {
+            console.error('Error loading project:', error);
+            toast.error('Failed to load project');
+          });
         } else {
-          // Create new
+          // Create new project only if user is signed in
           const newProject = await createProject(user.id, 'Untitled Project');
           router.replace(`/editor?project=${newProject.id}`);
-          // Defaults are already set
         }
       } catch (error) {
         console.error('Error initializing project:', error);
         toast.error('Failed to load project');
-        router.push('/');
-      } finally {
-        setIsLoading(false);
+        // Don't redirect - allow user to continue working
       }
     }
 
@@ -93,7 +102,8 @@ export default function Page() {
 
   const handleProjectNameUpdate = async (name: string) => {
     setProjectName(name);
-    if (projectId) {
+    // Only save if user is signed in and has a project
+    if (projectId && user) {
       try {
         await updateProject(projectId, { name });
       } catch (error) {
@@ -101,6 +111,7 @@ export default function Page() {
         toast.error('Failed to save project name');
       }
     }
+    // For unsigned users, just update the local state (no saving)
   };
 
   const handleCanvasColorChange = (color: string) => {
@@ -110,24 +121,63 @@ export default function Page() {
     }
   };
 
-  const handleBack = async () => {
-    if (projectId && canvasSaveRef.current) {
-      try {
-        const currentCanvasData = canvasSaveRef.current();
-        if (currentCanvasData) {
-          await saveCanvas(projectId, currentCanvasData, canvasColor);
-          toast.success('Project saved');
-        }
-      } catch (error) {
-        console.error('Failed to save project:', error);
-        // Don't block navigation on error, but show toast
-        toast.error('Failed to save project');
-      }
-    }
+  const handleBack = () => {
+    // Navigate immediately for instant feel
     router.push('/');
+    
+    // Save in background (fire-and-forget)
+    if (projectId && user) {
+      (async () => {
+        try {
+          const currentCanvasData = canvasSaveRef.current?.();
+          
+          // Generate thumbnail if canvas is available
+          let thumbnailUrl: string | undefined = undefined;
+          if (canvasInstanceRef.current) {
+            const thumbnailDataURL = canvasInstanceRef.current();
+            if (thumbnailDataURL && currentCanvasData) {
+              try {
+                const result = await uploadDataURL(
+                  user.id,
+                  projectId,
+                  thumbnailDataURL,
+                  `thumbnail-${Date.now()}.png`,
+                  'images'
+                );
+                thumbnailUrl = result.publicUrl;
+              } catch (thumbError: any) {
+                // Silently fail if bucket doesn't exist or upload fails
+                // This allows the app to work even without storage bucket configured
+                if (thumbError?.message?.includes('Bucket not found') || 
+                    thumbError?.message?.includes('bucket') ||
+                    thumbError?.statusCode === 404) {
+                  // Bucket not configured - skip thumbnail silently
+                } else {
+                  console.error('Failed to upload thumbnail:', thumbError);
+                }
+                // Continue saving even if thumbnail fails
+              }
+            }
+          }
+
+          // Save everything in a single call: name, canvas data, color, and thumbnail
+          await updateProject(projectId, {
+            name: projectName,
+            canvas_data: currentCanvasData || null,
+            canvas_color: canvasColor,
+            ...(thumbnailUrl && { thumbnail_url: thumbnailUrl }),
+          });
+        } catch (error) {
+          console.error('Failed to save project:', error);
+          // Silent fail - user already navigated away
+        }
+      })();
+    }
   };
 
-  if (authLoading || isLoading) {
+  // Only show loading spinner while auth is loading
+  // Once auth state is known, show UI immediately (even for unsigned users)
+  if (authLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-white">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -139,17 +189,19 @@ export default function Page() {
     <div className="relative w-full h-screen overflow-hidden bg-white">
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 h-12 bg-white border-b border-border z-[100] flex items-center px-4">
-        {/* Left: Back Button */}
+        {/* Left: Back Button (only for signed-in users) */}
         <div className="flex-1 flex items-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-2 text-muted-foreground hover:text-foreground"
-            onClick={handleBack}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
+          {user && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-2 text-muted-foreground hover:text-foreground"
+              onClick={handleBack}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+          )}
         </div>
 
         {/* Centered Project Title */}
@@ -197,6 +249,7 @@ export default function Page() {
           onCanvasExportRef={canvasExportRef}
           onCanvasSaveRef={canvasSaveRef}
           onCanvasColorRef={canvasColorRef}
+          onCanvasInstanceRef={canvasInstanceRef}
           initialCanvasColor={canvasColor}
           initialCanvasData={canvasData}
         />
@@ -226,5 +279,17 @@ export default function Page() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-white">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    }>
+      <EditorContent />
+    </Suspense>
   );
 }

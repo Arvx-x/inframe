@@ -39,7 +39,11 @@ export async function createSnapshot(
         throw error;
     }
 
-    return data;
+    if (!data) {
+        throw new Error('Failed to create snapshot');
+    }
+
+    return data as Snapshot;
 }
 
 export async function getProjectSnapshots(
@@ -60,7 +64,7 @@ export async function getProjectSnapshots(
         return [];
     }
 
-    return data || [];
+    return (data || []) as Snapshot[];
 }
 
 export async function getSnapshot(snapshotId: string): Promise<Snapshot | null> {
@@ -77,7 +81,7 @@ export async function getSnapshot(snapshotId: string): Promise<Snapshot | null> 
         return null;
     }
 
-    return data;
+    return data as Snapshot | null;
 }
 
 export async function deleteSnapshot(snapshotId: string): Promise<boolean> {

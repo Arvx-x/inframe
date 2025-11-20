@@ -29,6 +29,7 @@ interface CanvasProps {
   onCanvasExportRef?: React.MutableRefObject<(() => void) | null>;
   onCanvasSaveRef?: React.MutableRefObject<(() => any) | null>;
   onCanvasColorRef?: React.MutableRefObject<((color: string) => void) | null>;
+  onCanvasInstanceRef?: React.MutableRefObject<(() => string | null) | null>;
   initialCanvasColor?: string;
   initialCanvasData?: any;
 }
@@ -200,7 +201,7 @@ const computeImagePlacement = (
   return { left, top };
 };
 
-export default function Canvas({ generatedImageUrl, isImagePending = false, pendingImageRatio = null, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasSaveRef, onCanvasColorRef, initialCanvasColor = "#F4F4F6", initialCanvasData }: CanvasProps) {
+export default function Canvas({ generatedImageUrl, isImagePending = false, pendingImageRatio = null, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasSaveRef, onCanvasColorRef, onCanvasInstanceRef, initialCanvasColor = "#F4F4F6", initialCanvasData }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [selectedImage, setSelectedImage] = useState<FabricImage | null>(null);
@@ -2036,6 +2037,37 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       };
     }
   }, [fabricCanvas, onCanvasSaveRef]);
+
+  // Expose canvas instance for thumbnail generation
+  useEffect(() => {
+    if (onCanvasInstanceRef) {
+      onCanvasInstanceRef.current = () => {
+        if (!fabricCanvas) return null;
+        // Generate thumbnail as data URL
+        try {
+          const originalBg = fabricCanvas.backgroundColor as string | undefined;
+          if (!originalBg || originalBg === 'transparent') {
+            fabricCanvas.backgroundColor = '#ffffff';
+            fabricCanvas.renderAll();
+          }
+          const dataURL = fabricCanvas.toDataURL({
+            format: 'png',
+            quality: 0.8,
+            multiplier: 0.5, // Smaller size for thumbnail
+          });
+          // Restore background
+          if (!originalBg || originalBg === 'transparent') {
+            fabricCanvas.backgroundColor = originalBg || 'transparent';
+            fabricCanvas.renderAll();
+          }
+          return dataURL;
+        } catch (error) {
+          console.error('Error generating thumbnail:', error);
+          return null;
+        }
+      };
+    }
+  }, [fabricCanvas, onCanvasInstanceRef]);
 
   const handleNewProject = () => {
     if (!fabricCanvas) return;

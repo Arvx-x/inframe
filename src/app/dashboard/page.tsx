@@ -130,7 +130,7 @@ export default function DashboardPage() {
             <main className="container px-4 py-8">
                 {/* Create New Project Button */}
                 <div className="mb-6">
-                    <Button onClick={handleCreateProject} size="lg" className="gap-2">
+                    <Button onClick={handleCreateProject} size="lg" className="gap-2 bg-black hover:bg-black/90 text-white">
                         <Plus className="h-5 w-5" />
                         New Project
                     </Button>

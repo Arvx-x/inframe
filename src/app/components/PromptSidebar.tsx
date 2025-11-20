@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/app/components/ui/button";
 import { Textarea } from "@/app/components/ui/textarea";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
@@ -244,7 +244,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
   const [isChatMode, setIsChatMode] = useState(false);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [maxTextareaHeight, setMaxTextareaHeight] = useState<number>(0);
-  const resizeTextareaEl = (el: HTMLTextAreaElement) => {
+  const resizeTextareaEl = useCallback((el: HTMLTextAreaElement) => {
     if (!el) return;
     el.style.height = 'auto';
     const desired = el.scrollHeight;
@@ -255,7 +255,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
     if (desired > clamped) {
       el.scrollTop = el.scrollHeight;
     }
-  };
+  }, [maxTextareaHeight]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Guided wizard state (keeps chat UI unchanged)
   type WizardPhase = "interview" | "directions" | "refinement";
@@ -291,7 +291,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
     // Ensure min-height is enforced before measuring to avoid collapsing due to padding
     el.style.minHeight = '120px';
     resizeTextareaEl(el);
-  }, [input, maxTextareaHeight, mode]);
+  }, [input, maxTextareaHeight, mode, resizeTextareaEl]);
 
   // Click-outside detection to collapse the composer (skip if chat mode is active or clicking in popovers)
   useEffect(() => {

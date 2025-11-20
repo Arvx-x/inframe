@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { Button } from '@/app/components/ui/button';
 import {
@@ -33,13 +33,7 @@ export function ProjectSelector({
     const [loading, setLoading] = useState(false);
     const [open, setOpen] = useState(false);
 
-    useEffect(() => {
-        if (open && user) {
-            loadProjects();
-        }
-    }, [open, user]);
-
-    const loadProjects = async () => {
+    const loadProjects = useCallback(async () => {
         if (!user) return;
 
         setLoading(true);
@@ -52,7 +46,13 @@ export function ProjectSelector({
         } finally {
             setLoading(false);
         }
-    };
+    }, [user]);
+
+    useEffect(() => {
+        if (open && user) {
+            loadProjects();
+        }
+    }, [open, user, loadProjects]);
 
     const handleCreateNew = async () => {
         setOpen(false);

@@ -89,6 +89,16 @@ export async function uploadDataURL(
         });
 
     if (uploadError) {
+        // Check if bucket doesn't exist
+        const errorMessage = uploadError.message || '';
+        const statusCode = (uploadError as any).statusCode;
+        if (errorMessage.includes('Bucket not found') || 
+            errorMessage.includes('bucket') ||
+            statusCode === 404) {
+            const error = new Error('Storage bucket "project-assets" not found. Please create it in Supabase dashboard.');
+            (error as any).statusCode = 404;
+            throw error;
+        }
         console.error('Error uploading data URL:', uploadError);
         throw uploadError;
     }

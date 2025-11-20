@@ -35,7 +35,11 @@ export async function createProject(userId: string, name: string = 'Untitled Pro
         throw error;
     }
 
-    return data;
+    if (!data) {
+        throw new Error('Failed to create project');
+    }
+
+    return data as Project;
 }
 
 export async function getProject(projectId: string): Promise<Project | null> {
@@ -52,7 +56,7 @@ export async function getProject(projectId: string): Promise<Project | null> {
         return null;
     }
 
-    return data;
+    return data as Project | null;
 }
 
 export async function getUserProjects(userId: string): Promise<Project[]> {
@@ -69,7 +73,7 @@ export async function getUserProjects(userId: string): Promise<Project[]> {
         return [];
     }
 
-    return data || [];
+    return (data || []) as Project[];
 }
 
 export async function updateProject(
@@ -95,7 +99,7 @@ export async function updateProject(
         throw error;
     }
 
-    return data;
+    return data as Project | null;
 }
 
 export async function deleteProject(projectId: string): Promise<boolean> {

@@ -21,7 +21,7 @@ export async function logOperation(
 ): Promise<OpsLog> {
     const supabase = getSupabaseBrowserClient();
 
-    const { data, error } = await supabase
+    const result = await supabase
         .from('ops_log')
         .insert({
             project_id: projectId,
@@ -32,12 +32,16 @@ export async function logOperation(
         .select()
         .single();
 
-    if (error) {
-        console.error('Error logging operation:', error);
-        throw error;
+    if (result.error) {
+        console.error('Error logging operation:', result.error);
+        throw result.error;
     }
 
-    return data;
+    if (!result.data || typeof result.data !== 'object' || !('id' in result.data)) {
+        throw new Error('Failed to create operation log entry');
+    }
+
+    return result.data as OpsLog;
 }
 
 export async function getProjectOperations(
@@ -58,7 +62,7 @@ export async function getProjectOperations(
         return [];
     }
 
-    return data || [];
+    return (data || []) as OpsLog[];
 }
 
 export async function getOperationsSince(
@@ -79,7 +83,7 @@ export async function getOperationsSince(
         return [];
     }
 
-    return data || [];
+    return (data || []) as OpsLog[];
 }
 
 export async function clearProjectOperations(projectId: string): Promise<void> {
