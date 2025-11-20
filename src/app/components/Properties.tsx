@@ -8,6 +8,7 @@ import { Button } from "@/app/components/ui/button";
 import { FabricObject, FabricImage, filters } from "fabric";
 import { toast } from "sonner";
 import { EditSpace } from "@/app/components/EditSpace";
+import { SmartEdit } from "@/app/components/SmartEdit";
 
 interface PropertiesData {
   x: number;
@@ -90,7 +91,7 @@ const EditImageSection = ({ imageElement, onEditComplete }: { imageElement: HTML
 
   const handleEdit = async (prompt?: string) => {
     const finalPrompt = prompt || editPrompt;
-    
+
     if (!finalPrompt.trim()) {
       toast.error("Please enter an edit command");
       return;
@@ -110,7 +111,7 @@ const EditImageSection = ({ imageElement, onEditComplete }: { imageElement: HTML
       canvas.height = imageElement.naturalHeight;
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error("Could not get canvas context");
-      
+
       ctx.drawImage(imageElement, 0, 0);
       const currentImageUrl = canvas.toDataURL('image/png');
 
@@ -214,12 +215,12 @@ const EditImageSection = ({ imageElement, onEditComplete }: { imageElement: HTML
   );
 };
 
-export const Properties = ({ 
-  selectedObject, 
-  canvas, 
-  properties, 
-  updateObject, 
-  cropRatio, 
+export const Properties = ({
+  selectedObject,
+  canvas,
+  properties,
+  updateObject,
+  cropRatio,
   handleCropRatioChange,
   activeTab,
   onDelete,
@@ -227,7 +228,7 @@ export const Properties = ({
 }: PropertiesProps) => {
   const [strokeVisible, setStrokeVisible] = useState(true);
   const isImage = selectedObject instanceof FabricImage;
-  
+
   // Effects state
   const [brightness, setBrightness] = useState(0);
   const [contrast, setContrast] = useState(0);
@@ -442,10 +443,10 @@ export const Properties = ({
           editIntent: textIntent?.intent ?? null,
           textEditOptions: textIntent
             ? {
-                allowFontChange: textIntent.allowFontChange,
-                allowSizeChange: textIntent.allowSizeChange,
-                allowPositionChange: textIntent.allowPositionChange,
-              }
+              allowFontChange: textIntent.allowFontChange,
+              allowSizeChange: textIntent.allowSizeChange,
+              allowPositionChange: textIntent.allowPositionChange,
+            }
             : null,
           selectionImageUrl: (() => {
             try {
@@ -564,10 +565,10 @@ export const Properties = ({
   const applyEffects = () => {
     if (!isImage || !selectedObject || !canvas) return;
     const img = selectedObject as FabricImage;
-    
+
     // Don't preserve color picker filters - color picker doesn't apply to images anymore
     img.filters = [];
-    
+
     // Apply effect filters
     if (brightness !== 0) {
       img.filters.push(new filters.Brightness({ brightness }));
@@ -595,7 +596,7 @@ export const Properties = ({
       img.filters.push(new filters.Sepia({ amount: vintage / 200 }));
       img.filters.push(new filters.Noise({ noise: vintage / 100 }));
     }
-    
+
     // Exposure and Vibrance - approximate with brightness/contrast/saturation
     if (exposure !== 0) {
       const brightnessAdjust = (exposure / 100) * 0.5;
@@ -605,7 +606,7 @@ export const Properties = ({
       const saturationAdjust = (vibrance / 100) * 0.3;
       img.filters.push(new filters.Saturation({ saturation: saturationAdjust }));
     }
-    
+
     // Highlights and Shadows - approximate with brightness
     if (highlights !== 0) {
       const brightnessAdjust = (highlights / 100) * 0.3;
@@ -615,7 +616,7 @@ export const Properties = ({
       const brightnessAdjust = (-shadows / 100) * 0.3;
       img.filters.push(new filters.Brightness({ brightness: brightnessAdjust }));
     }
-    
+
     img.applyFilters();
     canvas.renderAll();
   };
@@ -683,13 +684,13 @@ export const Properties = ({
           <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar-track]:hidden [&::-webkit-scrollbar-thumb]:hidden">
             <div className="space-y-2.5">
               {/* Crop Section */}
-            <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+              <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
                 <button
-                onClick={() => setActiveTool(activeTool==='crop'? null : 'crop')}
-                className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                  onClick={() => setActiveTool(activeTool === 'crop' ? null : 'crop')}
+                  className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
                 >
                   <div className="flex items-center gap-2">
-                  <Crop className="w-4 h-4 text-[#3B82F6]" />
+                    <Crop className="w-4 h-4 text-[#3B82F6]" />
                     <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Crop</span>
                   </div>
                   {activeTool === 'crop' ? (
@@ -698,40 +699,40 @@ export const Properties = ({
                     <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
                   )}
                 </button>
-              <div
-                className={`overflow-hidden transition-all ${activeTool === 'crop' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
-                style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
-              >
-                <div className="pt-2 px-3 pb-3 space-y-2">
-                  <div className="text-[11px] text-[#6E6E6E]">Aspect ratio</div>
-                  <div className="flex items-center gap-1.5">
-                    <Select value={cropRatio} onValueChange={handleCropRatioChange}>
-                      <SelectTrigger className="h-7 flex-1 text-[11px] border border-[#E5E5E5] bg-white hover:border-[#D1D1D1] focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded text-[#161616]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="default">Default</SelectItem>
-                        <SelectItem value="1:1">1:1 (Square)</SelectItem>
-                        <SelectItem value="16:9">16:9 (Widescreen)</SelectItem>
-                        <SelectItem value="4:3">4:3 (Standard)</SelectItem>
-                        <SelectItem value="3:2">3:2 (Photo)</SelectItem>
-                      </SelectContent>
-                    </Select>
+                <div
+                  className={`overflow-hidden transition-all ${activeTool === 'crop' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                  style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                >
+                  <div className="pt-2 px-3 pb-3 space-y-2">
+                    <div className="text-[11px] text-[#6E6E6E]">Aspect ratio</div>
+                    <div className="flex items-center gap-1.5">
+                      <Select value={cropRatio} onValueChange={handleCropRatioChange}>
+                        <SelectTrigger className="h-7 flex-1 text-[11px] border border-[#E5E5E5] bg-white hover:border-[#D1D1D1] focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded text-[#161616]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">Default</SelectItem>
+                          <SelectItem value="1:1">1:1 (Square)</SelectItem>
+                          <SelectItem value="16:9">16:9 (Widescreen)</SelectItem>
+                          <SelectItem value="4:3">4:3 (Standard)</SelectItem>
+                          <SelectItem value="3:2">3:2 (Photo)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="text-[10px] text-[#9E9E9E]">Use the crop handles in the workspace to refine the selection.</div>
                   </div>
-                  <div className="text-[10px] text-[#9E9E9E]">Use the crop handles in the workspace to refine the selection.</div>
                 </div>
-              </div>
               </div>
 
               {/* Quick FX Section */}
               {isImage && (
-              <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
                   <button
-                  onClick={() => setActiveTool(activeTool==='quickFx'? null : 'quickFx')}
-                  className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                    onClick={() => setActiveTool(activeTool === 'quickFx' ? null : 'quickFx')}
+                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
                   >
                     <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-[#3B82F6]" />
+                      <Sparkles className="w-4 h-4 text-[#3B82F6]" />
                       <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Quick FX</span>
                     </div>
                     {activeTool === 'quickFx' ? (
@@ -740,44 +741,44 @@ export const Properties = ({
                       <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
                     )}
                   </button>
-                <div
-                  className={`overflow-hidden transition-all ${activeTool === 'quickFx' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
-                  style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
-                >
-                  <div className="pt-2 px-3 pb-3 space-y-2">
-                    <div className="text-[11px] text-[#6E6E6E]">Choose a look</div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <Button variant="outline" size="sm" className="h-8 text-[11px] px-2"
-                        onClick={() => { setBrightness(0); setContrast(0); setSaturation(0); setHighlights(0); setShadows(0); setExposure(0); setVibrance(0); setBlur(0); setNoise(0); setPixelate(0); setSepia(0); setVintage(0); setOpacity(100); }}>
-                        Original
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-8 text-[11px] px-2"
-                        onClick={() => { setBrightness(0.1); setContrast(0.05); setSaturation(0.15); setVibrance(25); setHighlights(10); setShadows(-5); setExposure(10); setBlur(0); setNoise(0); setPixelate(0); setSepia(0); setVintage(0); }}>
-                        Warm Glow
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-8 text-[11px] px-2"
-                        onClick={() => { setBrightness(-0.05); setContrast(0.15); setSaturation(-0.1); setVibrance(-15); setHighlights(-10); setShadows(20); setExposure(-5); setBlur(0); setNoise(100); setPixelate(0); setSepia(20); setVintage(40); }}>
-                        Vintage Fade
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-8 text-[11px] px-2"
-                        onClick={() => { setBrightness(0); setContrast(0.25); setSaturation(0.05); setVibrance(10); setHighlights(5); setShadows(30); setExposure(5); setBlur(0); setNoise(0); setPixelate(0); setSepia(0); setVintage(0); }}>
-                        Dramatic
-                      </Button>
+                  <div
+                    className={`overflow-hidden transition-all ${activeTool === 'quickFx' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                    style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                  >
+                    <div className="pt-2 px-3 pb-3 space-y-2">
+                      <div className="text-[11px] text-[#6E6E6E]">Choose a look</div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <Button variant="outline" size="sm" className="h-8 text-[11px] px-2"
+                          onClick={() => { setBrightness(0); setContrast(0); setSaturation(0); setHighlights(0); setShadows(0); setExposure(0); setVibrance(0); setBlur(0); setNoise(0); setPixelate(0); setSepia(0); setVintage(0); setOpacity(100); }}>
+                          Original
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-8 text-[11px] px-2"
+                          onClick={() => { setBrightness(0.1); setContrast(0.05); setSaturation(0.15); setVibrance(25); setHighlights(10); setShadows(-5); setExposure(10); setBlur(0); setNoise(0); setPixelate(0); setSepia(0); setVintage(0); }}>
+                          Warm Glow
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-8 text-[11px] px-2"
+                          onClick={() => { setBrightness(-0.05); setContrast(0.15); setSaturation(-0.1); setVibrance(-15); setHighlights(-10); setShadows(20); setExposure(-5); setBlur(0); setNoise(100); setPixelate(0); setSepia(20); setVintage(40); }}>
+                          Vintage Fade
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-8 text-[11px] px-2"
+                          onClick={() => { setBrightness(0); setContrast(0.25); setSaturation(0.05); setVibrance(10); setHighlights(5); setShadows(30); setExposure(5); setBlur(0); setNoise(0); setPixelate(0); setSepia(0); setVintage(0); }}>
+                          Dramatic
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
                 </div>
               )}
 
               {/* Adjustments Section */}
               {isImage && (
-              <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
                   <button
-                  onClick={() => setActiveTool(activeTool==='adjustments'? null : 'adjustments')}
-                  className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                    onClick={() => setActiveTool(activeTool === 'adjustments' ? null : 'adjustments')}
+                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
                   >
                     <div className="flex items-center gap-2">
-                    <Sliders className="w-4 h-4 text-[#3B82F6]" />
+                      <Sliders className="w-4 h-4 text-[#3B82F6]" />
                       <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Adjustments</span>
                     </div>
                     {activeTool === 'adjustments' ? (
@@ -786,31 +787,31 @@ export const Properties = ({
                       <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
                     )}
                   </button>
-                <div
-                  className={`overflow-hidden transition-all ${activeTool === 'adjustments' ? 'max-h-[700px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
-                  style={{ transition: 'max-height 280ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 280ms cubic-bezier(0.4,0,0.2,1)' }}
-                >
-                  <div className="pt-2 px-3 pb-3 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <p className="text-[11px] text-[#6E6E6E]">Fine-tune the image.</p>
-                      <button
-                        className="h-7 px-2 text-[11px] border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors"
-                        onClick={() => { setBrightness(0); setContrast(0); setSaturation(0); setHighlights(0); setShadows(0); setExposure(0); setVibrance(0); setOpacity(100); }}>
-                        Reset
-                      </button>
-                    </div>
-                    <div className="space-y-2.5">
-                      <AdjustmentSlider label="Brightness" icon={<Sun className="w-3 h-3 text-[#6E6E6E]" />} valueLabel={`${Math.round(brightness * 100)}%`} min={-1} max={1} step={0.01} value={brightness} onChange={setBrightness} />
-                      <AdjustmentSlider label="Contrast" icon={<Zap className="w-3 h-3 text-[#6E6E6E]" />} valueLabel={`${Math.round(contrast * 100)}%`} min={-1} max={1} step={0.01} value={contrast} onChange={setContrast} />
-                      <AdjustmentSlider label="Saturation" icon={<Droplet className="w-3 h-3 text-[#6E6E6E]" />} valueLabel={`${Math.round(saturation * 100)}%`} min={-1} max={1} step={0.01} value={saturation} onChange={setSaturation} />
-                      <AdjustmentSlider label="Highlights" valueLabel={`${Math.round(highlights)}`} min={-100} max={100} step={1} value={highlights} onChange={setHighlights} />
-                      <AdjustmentSlider label="Shadows" valueLabel={`${Math.round(shadows)}`} min={-100} max={100} step={1} value={shadows} onChange={setShadows} />
-                      <AdjustmentSlider label="Exposure" valueLabel={`${Math.round(exposure)}`} min={-100} max={100} step={1} value={exposure} onChange={setExposure} />
-                      <AdjustmentSlider label="Vibrance" valueLabel={`${Math.round(vibrance)}`} min={-100} max={100} step={1} value={vibrance} onChange={setVibrance} />
-                      <AdjustmentSlider label="Opacity" icon={<Eye className="w-3 h-3 text-[#6E6E6E]" />} valueLabel={`${Math.round(opacity)}%`} min={0} max={100} step={1} value={opacity} onChange={setOpacity} />
+                  <div
+                    className={`overflow-hidden transition-all ${activeTool === 'adjustments' ? 'max-h-[700px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                    style={{ transition: 'max-height 280ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 280ms cubic-bezier(0.4,0,0.2,1)' }}
+                  >
+                    <div className="pt-2 px-3 pb-3 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <p className="text-[11px] text-[#6E6E6E]">Fine-tune the image.</p>
+                        <button
+                          className="h-7 px-2 text-[11px] border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors"
+                          onClick={() => { setBrightness(0); setContrast(0); setSaturation(0); setHighlights(0); setShadows(0); setExposure(0); setVibrance(0); setOpacity(100); }}>
+                          Reset
+                        </button>
+                      </div>
+                      <div className="space-y-2.5">
+                        <AdjustmentSlider label="Brightness" icon={<Sun className="w-3 h-3 text-[#6E6E6E]" />} valueLabel={`${Math.round(brightness * 100)}%`} min={-1} max={1} step={0.01} value={brightness} onChange={setBrightness} />
+                        <AdjustmentSlider label="Contrast" icon={<Zap className="w-3 h-3 text-[#6E6E6E]" />} valueLabel={`${Math.round(contrast * 100)}%`} min={-1} max={1} step={0.01} value={contrast} onChange={setContrast} />
+                        <AdjustmentSlider label="Saturation" icon={<Droplet className="w-3 h-3 text-[#6E6E6E]" />} valueLabel={`${Math.round(saturation * 100)}%`} min={-1} max={1} step={0.01} value={saturation} onChange={setSaturation} />
+                        <AdjustmentSlider label="Highlights" valueLabel={`${Math.round(highlights)}`} min={-100} max={100} step={1} value={highlights} onChange={setHighlights} />
+                        <AdjustmentSlider label="Shadows" valueLabel={`${Math.round(shadows)}`} min={-100} max={100} step={1} value={shadows} onChange={setShadows} />
+                        <AdjustmentSlider label="Exposure" valueLabel={`${Math.round(exposure)}`} min={-100} max={100} step={1} value={exposure} onChange={setExposure} />
+                        <AdjustmentSlider label="Vibrance" valueLabel={`${Math.round(vibrance)}`} min={-100} max={100} step={1} value={vibrance} onChange={setVibrance} />
+                        <AdjustmentSlider label="Opacity" icon={<Eye className="w-3 h-3 text-[#6E6E6E]" />} valueLabel={`${Math.round(opacity)}%`} min={0} max={100} step={1} value={opacity} onChange={setOpacity} />
+                      </div>
                     </div>
                   </div>
-                </div>
                 </div>
               )}
 
@@ -819,13 +820,13 @@ export const Properties = ({
                 <>
                   {/* Smart Edit (moved above Creative Director) */}
                   {onImageEdit && (
-                  <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                    <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
                       <button
-                        onClick={() => setActiveTool(activeTool==='smartEdit'? null : 'smartEdit')}
+                        onClick={() => setActiveTool(activeTool === 'smartEdit' ? null : 'smartEdit')}
                         className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
                       >
                         <div className="flex items-center gap-2">
-                        <Wand2 className="w-4 h-4 text-[#3B82F6]" />
+                          <Wand2 className="w-4 h-4 text-[#3B82F6]" />
                           <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Smart Edit</span>
                         </div>
                         {activeTool === 'smartEdit' ? (
@@ -834,57 +835,27 @@ export const Properties = ({
                           <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
                         )}
                       </button>
-                    <div
-                      className={`overflow-hidden transition-all ${activeTool === 'smartEdit' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
-                      style={{ transition: 'max-height 240ms cubic-bezier(0.4,0,0.2,1), opacity 180ms cubic-bezier(0.4,0,0.2,1), transform 240ms cubic-bezier(0.4,0,0.2,1)' }}
-                    >
-                      <div className="pt-2 px-3 pb-3 space-y-2">
-                        <div>
-                          <p className="text-[11px] text-[#6E6E6E] mb-1.5">Describe your edit</p>
-                          <Textarea
-                            value={smartEditPrompt}
-                            onChange={(e) => setSmartEditPrompt(e.target.value)}
-                            placeholder="e.g., Make the background warmer..."
-                            className="min-h-[96px] pt-3 resize-none text-[11px] border border-[#E5E5E5] bg-white rounded-lg [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar-track]:hidden [&::-webkit-scrollbar-thumb]:hidden focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                            disabled={isAiProcessing}
-                          />
-                        </div>
-                        <Button
-                          onClick={() => {
-                            if (!smartEditSelection) {
-                              toast.error("Draw a selection on the canvas.");
-                              return;
-                            }
-                            runAiEditFromToolbar(smartEditPrompt, smartEditSelection);
-                          }}
-                          disabled={isAiProcessing || !smartEditPrompt.trim()}
-                          className="w-full h-8 text-[11px] rounded-lg gap-1.5"
-                          size="sm"
-                        >
-                          {isAiProcessing ? (
-                            <>
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                              Applying...
-                            </>
-                          ) : (
-                            "Apply Edit"
-                          )}
-                        </Button>
-                        {!smartEditSelection && (
-                          <div className="text-[10px] text-[#9E9E9E]">Tip: Drag on the canvas to select a region.</div>
-                        )}
+                      <div
+                        className={`overflow-hidden transition-all ${activeTool === 'smartEdit' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                        style={{ transition: 'max-height 240ms cubic-bezier(0.4,0,0.2,1), opacity 180ms cubic-bezier(0.4,0,0.2,1), transform 240ms cubic-bezier(0.4,0,0.2,1)' }}
+                      >
+                        <SmartEdit
+                          selectedObject={selectedObject}
+                          onImageEdit={onImageEdit}
+                          smartEditSelection={smartEditSelection}
+                          setSmartEditSelection={setSmartEditSelection}
+                        />
                       </div>
-                    </div>
                     </div>
                   )}
                   {/* Creative Director */}
-                <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                  <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
                     <button
-                    onClick={() => setActiveTool(activeTool==='creativeDirector'? null : 'creativeDirector')}
-                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                      onClick={() => setActiveTool(activeTool === 'creativeDirector' ? null : 'creativeDirector')}
+                      className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
                     >
                       <div className="flex items-center gap-2">
-                      <Brain className="w-4 h-4 text-[#3B82F6]" />
+                        <Brain className="w-4 h-4 text-[#3B82F6]" />
                         <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Creative Director</span>
                       </div>
                       {activeTool === 'creativeDirector' ? (
@@ -893,28 +864,28 @@ export const Properties = ({
                         <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
                       )}
                     </button>
-                  <div
-                    className={`overflow-hidden transition-all ${activeTool === 'creativeDirector' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
-                    style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
-                  >
-                    <div className="pt-2 px-3 pb-3 space-y-2">
-                      <div className="text-[11px] text-[#6E6E6E]">Describe the direction to apply.</div>
-                      <Textarea value={creativePrompt} onChange={(e)=>setCreativePrompt(e.target.value)} placeholder="e.g., cinematic mood, dramatic lighting" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
-                      <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !creativePrompt.trim()} onClick={()=>runAiEditFromToolbar(creativePrompt)}>
-                        {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Processing...</>) : (<><Brain className="w-3 h-3" />Apply Direction</>)}
-                      </Button>
+                    <div
+                      className={`overflow-hidden transition-all ${activeTool === 'creativeDirector' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                      style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                    >
+                      <div className="pt-2 px-3 pb-3 space-y-2">
+                        <div className="text-[11px] text-[#6E6E6E]">Describe the direction to apply.</div>
+                        <Textarea value={creativePrompt} onChange={(e) => setCreativePrompt(e.target.value)} placeholder="e.g., cinematic mood, dramatic lighting" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
+                        <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !creativePrompt.trim()} onClick={() => runAiEditFromToolbar(creativePrompt)}>
+                          {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Processing...</>) : (<><Brain className="w-3 h-3" />Apply Direction</>)}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
                   </div>
 
                   {/* Prompt Remixer */}
-                <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                  <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
                     <button
-                    onClick={() => setActiveTool(activeTool==='promptRemixer'? null : 'promptRemixer')}
-                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                      onClick={() => setActiveTool(activeTool === 'promptRemixer' ? null : 'promptRemixer')}
+                      className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
                     >
                       <div className="flex items-center gap-2">
-                      <Shuffle className="w-4 h-4 text-[#3B82F6]" />
+                        <Shuffle className="w-4 h-4 text-[#3B82F6]" />
                         <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Prompt Remixer</span>
                       </div>
                       {activeTool === 'promptRemixer' ? (
@@ -923,28 +894,28 @@ export const Properties = ({
                         <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
                       )}
                     </button>
-                  <div
-                    className={`overflow-hidden transition-all ${activeTool === 'promptRemixer' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
-                    style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
-                  >
-                    <div className="pt-2 px-3 pb-3 space-y-2">
-                      <div className="text-[11px] text-[#6E6E6E]">Describe how to remix the image.</div>
-                      <Textarea value={remixPrompt} onChange={(e)=>setRemixPrompt(e.target.value)} placeholder="e.g., watercolor look, vintage film" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
-                      <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !remixPrompt.trim()} onClick={()=>runAiEditFromToolbar(remixPrompt)}>
-                        {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Remixing...</>) : (<><Shuffle className="w-3 h-3" />Remix Image</>)}
-                      </Button>
+                    <div
+                      className={`overflow-hidden transition-all ${activeTool === 'promptRemixer' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                      style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                    >
+                      <div className="pt-2 px-3 pb-3 space-y-2">
+                        <div className="text-[11px] text-[#6E6E6E]">Describe how to remix the image.</div>
+                        <Textarea value={remixPrompt} onChange={(e) => setRemixPrompt(e.target.value)} placeholder="e.g., watercolor look, vintage film" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
+                        <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !remixPrompt.trim()} onClick={() => runAiEditFromToolbar(remixPrompt)}>
+                          {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Remixing...</>) : (<><Shuffle className="w-3 h-3" />Remix Image</>)}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
                   </div>
 
                   {/* Style Transfer */}
-                <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                  <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
                     <button
-                    onClick={() => setActiveTool(activeTool==='styleTransfer'? null : 'styleTransfer')}
-                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                      onClick={() => setActiveTool(activeTool === 'styleTransfer' ? null : 'styleTransfer')}
+                      className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
                     >
                       <div className="flex items-center gap-2">
-                      <Paintbrush className="w-4 h-4 text-[#3B82F6]" />
+                        <Paintbrush className="w-4 h-4 text-[#3B82F6]" />
                         <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Style Transfer</span>
                       </div>
                       {activeTool === 'styleTransfer' ? (
@@ -953,28 +924,28 @@ export const Properties = ({
                         <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
                       )}
                     </button>
-                  <div
-                    className={`overflow-hidden transition-all ${activeTool === 'styleTransfer' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
-                    style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
-                  >
-                    <div className="pt-2 px-3 pb-3 space-y-2">
-                      <div className="text-[11px] text-[#6E6E6E]">Describe the artistic style to apply.</div>
-                      <Textarea value={stylePrompt} onChange={(e)=>setStylePrompt(e.target.value)} placeholder="e.g., Van Gogh’s Starry Night" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
-                      <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !stylePrompt.trim()} onClick={()=>runAiEditFromToolbar(stylePrompt)}>
-                        {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Applying...</>) : (<><Paintbrush className="w-3 h-3" />Apply Style</>)}
-                      </Button>
+                    <div
+                      className={`overflow-hidden transition-all ${activeTool === 'styleTransfer' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                      style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                    >
+                      <div className="pt-2 px-3 pb-3 space-y-2">
+                        <div className="text-[11px] text-[#6E6E6E]">Describe the artistic style to apply.</div>
+                        <Textarea value={stylePrompt} onChange={(e) => setStylePrompt(e.target.value)} placeholder="e.g., Van Gogh’s Starry Night" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
+                        <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !stylePrompt.trim()} onClick={() => runAiEditFromToolbar(stylePrompt)}>
+                          {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Applying...</>) : (<><Paintbrush className="w-3 h-3" />Apply Style</>)}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
                   </div>
 
                   {/* Scene Reimagine */}
-                <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                  <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
                     <button
-                    onClick={() => setActiveTool(activeTool==='sceneReimagine'? null : 'sceneReimagine')}
-                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                      onClick={() => setActiveTool(activeTool === 'sceneReimagine' ? null : 'sceneReimagine')}
+                      className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
                     >
                       <div className="flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-[#3B82F6]" />
+                        <Globe className="w-4 h-4 text-[#3B82F6]" />
                         <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Scene Reimagine</span>
                       </div>
                       {activeTool === 'sceneReimagine' ? (
@@ -983,18 +954,18 @@ export const Properties = ({
                         <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
                       )}
                     </button>
-                  <div
-                    className={`overflow-hidden transition-all ${activeTool === 'sceneReimagine' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
-                    style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
-                  >
-                    <div className="pt-2 px-3 pb-3 space-y-2">
-                      <div className="text-[11px] text-[#6E6E6E]">Describe how to reimagine the scene.</div>
-                      <Textarea value={reimaginePrompt} onChange={(e)=>setReimaginePrompt(e.target.value)} placeholder="e.g., golden hour, winter snow" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
-                      <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !reimaginePrompt.trim()} onClick={()=>runAiEditFromToolbar(reimaginePrompt)}>
-                        {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Reimagining...</>) : (<><Globe className="w-3 h-3" />Reimagine Scene</>)}
-                      </Button>
+                    <div
+                      className={`overflow-hidden transition-all ${activeTool === 'sceneReimagine' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                      style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                    >
+                      <div className="pt-2 px-3 pb-3 space-y-2">
+                        <div className="text-[11px] text-[#6E6E6E]">Describe how to reimagine the scene.</div>
+                        <Textarea value={reimaginePrompt} onChange={(e) => setReimaginePrompt(e.target.value)} placeholder="e.g., golden hour, winter snow" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
+                        <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !reimaginePrompt.trim()} onClick={() => runAiEditFromToolbar(reimaginePrompt)}>
+                          {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Reimagining...</>) : (<><Globe className="w-3 h-3" />Reimagine Scene</>)}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
                   </div>
                 </>
               )}
@@ -1005,7 +976,7 @@ export const Properties = ({
               {isImage && (
                 <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
                   <button
-                    onClick={() => setActiveTool(activeTool==='upscale'? null : 'upscale')}
+                    onClick={() => setActiveTool(activeTool === 'upscale' ? null : 'upscale')}
                     className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
                   >
                     <div className="flex items-center gap-2">
@@ -1018,29 +989,29 @@ export const Properties = ({
                       <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
                     )}
                   </button>
-                <div
-                  className={`overflow-hidden transition-all ${activeTool === 'upscale' ? 'max-h-[400px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
-                  style={{ transition: 'max-height 240ms cubic-bezier(0.4,0,0.2,1), opacity 180ms cubic-bezier(0.4,0,0.2,1), transform 240ms cubic-bezier(0.4,0,0.2,1)' }}
-                >
-                  <div className="pt-2 px-3 pb-3 space-y-2">
-                    <p className="text-[11px] text-[#6E6E6E]">Upscale image quality and sharpen details.</p>
-                    <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm">
-                      <Sparkles className="w-3 h-3" />
-                      Upscale Image
-                    </Button>
-                    <div className="space-y-2">
-                      <Button variant="outline" size="sm" className="w-full h-8 text-[11px]">
-                        Sharpen Image
+                  <div
+                    className={`overflow-hidden transition-all ${activeTool === 'upscale' ? 'max-h-[400px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                    style={{ transition: 'max-height 240ms cubic-bezier(0.4,0,0.2,1), opacity 180ms cubic-bezier(0.4,0,0.2,1), transform 240ms cubic-bezier(0.4,0,0.2,1)' }}
+                  >
+                    <div className="pt-2 px-3 pb-3 space-y-2">
+                      <p className="text-[11px] text-[#6E6E6E]">Upscale image quality and sharpen details.</p>
+                      <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm">
+                        <Sparkles className="w-3 h-3" />
+                        Upscale Image
                       </Button>
-                      <Button variant="outline" size="sm" className="w-full h-8 text-[11px]">
-                        Reduce Noise
-                      </Button>
-                      <Button variant="outline" size="sm" className="w-full h-8 text-[11px]">
-                        2× Super-Resolution
-                      </Button>
+                      <div className="space-y-2">
+                        <Button variant="outline" size="sm" className="w-full h-8 text-[11px]">
+                          Sharpen Image
+                        </Button>
+                        <Button variant="outline" size="sm" className="w-full h-8 text-[11px]">
+                          Reduce Noise
+                        </Button>
+                        <Button variant="outline" size="sm" className="w-full h-8 text-[11px]">
+                          2× Super-Resolution
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
                 </div>
               )}
             </div>
@@ -1050,232 +1021,232 @@ export const Properties = ({
         /* Transform Tab Content */
         <div className="flex-1 overflow-y-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar-track]:hidden [&::-webkit-scrollbar-thumb]:hidden">
           <div className="space-y-2.5">
-        {/* Position Section */}
-        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl px-3 py-2.5 space-y-2.5">
-          <div className="flex items-center gap-2">
-            <Move className="w-3.5 h-3.5 text-blue-500" />
-            <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Position</span>
-          </div>
-          
-          {/* Alignment icons - 6 greyed out icons in 2 rows */}
-          <div className="grid grid-cols-3 gap-1.5 mb-2">
-            {/* Align Left */}
-            <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
-              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
-                <path d="M2 4H10M2 8H10M2 12H10" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
-            {/* Align Center Horizontal */}
-            <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
-              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
-                <path d="M3 4H13M3 8H13M3 12H13" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
-            {/* Align Right */}
-            <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
-              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
-                <path d="M6 4H14M6 8H14M6 12H14" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
-            {/* Align Top */}
-            <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
-              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
-                <path d="M4 2V10M8 2V10M12 2V10" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
-            {/* Align Center Vertical */}
-            <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
-              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
-                <path d="M4 3V13M8 3V13M12 3V13" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
-            {/* Align Bottom */}
-            <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
-              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
-                <path d="M4 6V14M8 6V14M12 6V14" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
-          </div>
+            {/* Position Section */}
+            <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl px-3 py-2.5 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <Move className="w-3.5 h-3.5 text-blue-500" />
+                <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Position</span>
+              </div>
 
-          {/* X and Y Position */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
-              <span className="text-[11px] text-[#6E6E6E] px-2 py-1 font-medium">X</span>
-              <Input
-                type="number"
-                value={Math.round(properties.x)}
-                onChange={(e) => updateObject({ x: Number(e.target.value) })}
-                className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
-                style={{ fontSize: '13px' }}
-              />
-            </div>
-            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
-              <span className="text-[11px] text-[#6E6E6E] px-2 py-1 font-medium">Y</span>
-              <Input
-                type="number"
-                value={Math.round(properties.y)}
-                onChange={(e) => updateObject({ y: Number(e.target.value) })}
-                className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
-                style={{ fontSize: '13px' }}
-              />
-            </div>
-          </div>
+              {/* Alignment icons - 6 greyed out icons in 2 rows */}
+              <div className="grid grid-cols-3 gap-1.5 mb-2">
+                {/* Align Left */}
+                <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
+                  <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
+                    <path d="M2 4H10M2 8H10M2 12H10" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+                {/* Align Center Horizontal */}
+                <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
+                  <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
+                    <path d="M3 4H13M3 8H13M3 12H13" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+                {/* Align Right */}
+                <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
+                  <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
+                    <path d="M6 4H14M6 8H14M6 12H14" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+                {/* Align Top */}
+                <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
+                  <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
+                    <path d="M4 2V10M8 2V10M12 2V10" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+                {/* Align Center Vertical */}
+                <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
+                  <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
+                    <path d="M4 3V13M8 3V13M12 3V13" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+                {/* Align Bottom */}
+                <button className="w-8 h-8 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors opacity-40 cursor-not-allowed">
+                  <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
+                    <path d="M4 6V14M8 6V14M12 6V14" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
 
-          {/* Rotation with flip icons */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
-              <RotateCw className="w-3 h-3 text-[#6E6E6E] ml-2" />
-              <Input
-                type="number"
-                value={Math.round(properties.rotation)}
-                onChange={(e) => updateObject({ rotation: Number(e.target.value) })}
-                className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
-                placeholder="0"
-                style={{ fontSize: '13px' }}
-              />
-              <span className="text-[11px] text-[#6E6E6E] pr-2">°</span>
-            </div>
-            <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
-              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
-                <path d="M8 2L2 8L8 14M14 2L8 8L14 14" stroke="currentColor" className="text-[#6E6E6E]" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-            <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
-              <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
-                <path d="M2 8L8 2L14 8M2 8L8 14L14 8" stroke="currentColor" className="text-[#6E6E6E]" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-          </div>
-        </div>
+              {/* X and Y Position */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
+                  <span className="text-[11px] text-[#6E6E6E] px-2 py-1 font-medium">X</span>
+                  <Input
+                    type="number"
+                    value={Math.round(properties.x)}
+                    onChange={(e) => updateObject({ x: Number(e.target.value) })}
+                    className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
+                    style={{ fontSize: '13px' }}
+                  />
+                </div>
+                <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
+                  <span className="text-[11px] text-[#6E6E6E] px-2 py-1 font-medium">Y</span>
+                  <Input
+                    type="number"
+                    value={Math.round(properties.y)}
+                    onChange={(e) => updateObject({ y: Number(e.target.value) })}
+                    className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
+                    style={{ fontSize: '13px' }}
+                  />
+                </div>
+              </div>
 
-        {/* Layout Section */}
-        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl px-3 py-2.5 space-y-2.5">
-          <div className="flex items-center gap-2">
-            <Maximize className="w-3.5 h-3.5 text-blue-500" />
-            <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Layout</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
-              <span className="text-[11px] text-[#6E6E6E] px-2 py-1 font-medium">W</span>
-              <Input
-                type="number"
-                value={Math.round(properties.width)}
-                onChange={(e) => updateObject({ width: Number(e.target.value) })}
-                className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
-                style={{ fontSize: '13px' }}
-              />
+              {/* Rotation with flip icons */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
+                  <RotateCw className="w-3 h-3 text-[#6E6E6E] ml-2" />
+                  <Input
+                    type="number"
+                    value={Math.round(properties.rotation)}
+                    onChange={(e) => updateObject({ rotation: Number(e.target.value) })}
+                    className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
+                    placeholder="0"
+                    style={{ fontSize: '13px' }}
+                  />
+                  <span className="text-[11px] text-[#6E6E6E] pr-2">°</span>
+                </div>
+                <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
+                  <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 2L2 8L8 14M14 2L8 8L14 14" stroke="currentColor" className="text-[#6E6E6E]" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
+                  <svg className="w-4.5 h-4.5" viewBox="0 0 16 16" fill="none">
+                    <path d="M2 8L8 2L14 8M2 8L8 14L14 8" stroke="currentColor" className="text-[#6E6E6E]" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
             </div>
-            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
-              <span className="text-[11px] text-[#6E6E6E] px-2 py-1 font-medium">H</span>
-              <Input
-                type="number"
-                value={Math.round(properties.height)}
-                onChange={(e) => updateObject({ height: Number(e.target.value) })}
-                className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
-                style={{ fontSize: '13px' }}
-              />
-            </div>
-          </div>
-        </div>
 
-        {/* Border Section */}
-        <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl px-3 py-2.5 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Box className="w-3.5 h-3.5 text-blue-500" />
-              <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Border</span>
+            {/* Layout Section */}
+            <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl px-3 py-2.5 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <Maximize className="w-3.5 h-3.5 text-blue-500" />
+                <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Layout</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
+                  <span className="text-[11px] text-[#6E6E6E] px-2 py-1 font-medium">W</span>
+                  <Input
+                    type="number"
+                    value={Math.round(properties.width)}
+                    onChange={(e) => updateObject({ width: Number(e.target.value) })}
+                    className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
+                    style={{ fontSize: '13px' }}
+                  />
+                </div>
+                <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
+                  <span className="text-[11px] text-[#6E6E6E] px-2 py-1 font-medium">H</span>
+                  <Input
+                    type="number"
+                    value={Math.round(properties.height)}
+                    onChange={(e) => updateObject({ height: Number(e.target.value) })}
+                    className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
+                    style={{ fontSize: '13px' }}
+                  />
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              <button className="w-7 h-7 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors">
-                <Grid3x3 className="w-4.5 h-4.5 text-[#6E6E6E]" />
-              </button>
-              <button className="w-7 h-7 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors">
-                <Plus className="w-4.5 h-4.5 text-[#6E6E6E]" />
-              </button>
-            </div>
-          </div>
-          
-          {/* Border Width */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
-              <Minus className="w-4 h-4 text-[#6E6E6E] ml-2" />
-              <Input
-                type="number"
-                value={properties.strokeWidth}
-                onChange={(e) => updateObject({ strokeWidth: Number(e.target.value) })}
-                className="h-7 w-14 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
-                min={0}
-                max={50}
-                style={{ fontSize: '13px' }}
-              />
-            </div>
-            {/* Link icon */}
-            <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
-              <Link className="w-4.5 h-4.5 text-[#6E6E6E]" />
-            </button>
-            {/* Dashed square icon */}
-            <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
-              <svg className="w-4.5 h-4.5" viewBox="0 0 14 14" fill="none">
-                <rect x="2" y="2" width="10" height="10" stroke="currentColor" className="text-[#6E6E6E]" strokeWidth="1" strokeDasharray="2 2"/>
-              </svg>
-            </button>
-          </div>
 
-          {/* Border Position */}
-          <div className="flex items-center gap-2">
-            <Select value={properties.strokePosition} onValueChange={(value) => updateObject({ strokePosition: value })}>
-              <SelectTrigger className="h-7 flex-1 text-[11px] border border-[#E5E5E5] bg-white hover:border-[#D1D1D1] focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded text-[#161616]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="inside">Inside</SelectItem>
-                <SelectItem value="center">Center</SelectItem>
-                <SelectItem value="outside">Outside</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            {/* Border Section */}
+            <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl px-3 py-2.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Box className="w-3.5 h-3.5 text-blue-500" />
+                  <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Border</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button className="w-7 h-7 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors">
+                    <Grid3x3 className="w-4.5 h-4.5 text-[#6E6E6E]" />
+                  </button>
+                  <button className="w-7 h-7 flex items-center justify-center hover:bg-[#F0F0F0] rounded transition-colors">
+                    <Plus className="w-4.5 h-4.5 text-[#6E6E6E]" />
+                  </button>
+                </div>
+              </div>
 
-          {/* Border Color */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white flex-1">
-              <div 
-                className="h-6 w-6 rounded border border-[#D1D1D1] cursor-pointer flex-shrink-0 ml-1"
-                style={{ backgroundColor: properties.stroke }}
-                onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'color';
-                  input.value = properties.stroke;
-                  input.onchange = (e) => {
-                    const target = e.target as HTMLInputElement;
-                    updateObject({ stroke: target.value });
-                  };
-                  input.click();
-                }}
-              />
-              <Input
-                type="text"
-                value={properties.stroke.startsWith('#') ? properties.stroke.toUpperCase() : `#${properties.stroke.toUpperCase()}`}
-                onChange={(e) => {
-                  let value = e.target.value;
-                  value = value.replace('#', '');
-                  updateObject({ stroke: value ? `#${value.toUpperCase()}` : '#000000' });
-                }}
-                className="h-7 text-[11px] bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 flex-1 text-[#161616]"
-                placeholder="#000000"
-              />
-              <span className="text-[11px] text-[#6E6E6E] pr-2">100%</span>
+              {/* Border Width */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
+                  <Minus className="w-4 h-4 text-[#6E6E6E] ml-2" />
+                  <Input
+                    type="number"
+                    value={properties.strokeWidth}
+                    onChange={(e) => updateObject({ strokeWidth: Number(e.target.value) })}
+                    className="h-7 w-14 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
+                    min={0}
+                    max={50}
+                    style={{ fontSize: '13px' }}
+                  />
+                </div>
+                {/* Link icon */}
+                <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
+                  <Link className="w-4.5 h-4.5 text-[#6E6E6E]" />
+                </button>
+                {/* Dashed square icon */}
+                <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
+                  <svg className="w-4.5 h-4.5" viewBox="0 0 14 14" fill="none">
+                    <rect x="2" y="2" width="10" height="10" stroke="currentColor" className="text-[#6E6E6E]" strokeWidth="1" strokeDasharray="2 2" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Border Position */}
+              <div className="flex items-center gap-2">
+                <Select value={properties.strokePosition} onValueChange={(value) => updateObject({ strokePosition: value })}>
+                  <SelectTrigger className="h-7 flex-1 text-[11px] border border-[#E5E5E5] bg-white hover:border-[#D1D1D1] focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded text-[#161616]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inside">Inside</SelectItem>
+                    <SelectItem value="center">Center</SelectItem>
+                    <SelectItem value="outside">Outside</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Border Color */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white flex-1">
+                  <div
+                    className="h-6 w-6 rounded border border-[#D1D1D1] cursor-pointer flex-shrink-0 ml-1"
+                    style={{ backgroundColor: properties.stroke }}
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'color';
+                      input.value = properties.stroke;
+                      input.onchange = (e) => {
+                        const target = e.target as HTMLInputElement;
+                        updateObject({ stroke: target.value });
+                      };
+                      input.click();
+                    }}
+                  />
+                  <Input
+                    type="text"
+                    value={properties.stroke.startsWith('#') ? properties.stroke.toUpperCase() : `#${properties.stroke.toUpperCase()}`}
+                    onChange={(e) => {
+                      let value = e.target.value;
+                      value = value.replace('#', '');
+                      updateObject({ stroke: value ? `#${value.toUpperCase()}` : '#000000' });
+                    }}
+                    className="h-7 text-[11px] bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 flex-1 text-[#161616]"
+                    placeholder="#000000"
+                  />
+                  <span className="text-[11px] text-[#6E6E6E] pr-2">100%</span>
+                </div>
+                <button
+                  className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors"
+                  onClick={() => setStrokeVisible(!strokeVisible)}
+                >
+                  {strokeVisible ? <Eye className="w-4.5 h-4.5 text-[#6E6E6E]" /> : <EyeOff className="w-4.5 h-4.5 text-[#6E6E6E]" />}
+                </button>
+                <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
+                  <X className="w-4.5 h-4.5 text-[#6E6E6E]" />
+                </button>
+              </div>
             </div>
-            <button 
-              className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors"
-              onClick={() => setStrokeVisible(!strokeVisible)}
-            >
-              {strokeVisible ? <Eye className="w-4.5 h-4.5 text-[#6E6E6E]" /> : <EyeOff className="w-4.5 h-4.5 text-[#6E6E6E]" />}
-            </button>
-            <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
-              <X className="w-4.5 h-4.5 text-[#6E6E6E]" />
-            </button>
-          </div>
-        </div>
           </div>
         </div>
       )}
