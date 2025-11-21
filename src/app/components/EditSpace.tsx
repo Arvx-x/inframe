@@ -1,13 +1,18 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { FabricImage, FabricObject, Rect as FabricRect } from "fabric";
 import { Button } from "@/app/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { toast } from "sonner";
+import { Brush, Eraser, Loader2, Check, X } from "lucide-react";
+
+const BRUSH_CURSOR =
+  'url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHZpZXdCb3g9IjAgMCAxOCAxOCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBmaWxsPSJub25lIj48Y2lyY2xlIGN4PSI5IiBjeT0iOSIgcj0iNyIgc3Ryb2tlPSIjMTk2NkZGIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9IiNCMENGRkYiIGZpbGwtb3BhY2l0eT0iMC45Ii8+PC9zdmc+") 4 4, crosshair';
 
 type ToolKey =
   | "crop"
   | "quickFx"
   | "adjustments"
+  | "removeBackground"
   | "creativeDirector"
   | "promptRemixer"
   | "styleTransfer"
@@ -63,6 +68,13 @@ interface EditSpaceProps {
     rect: { x: number; y: number; width: number; height: number };
     normalized: { x: number; y: number; width: number; height: number };
   } | null) => void;
+  removeBgMode?: "quick" | "select";
+  removeBgPreview?: string | null;
+  onApplyRemoveBg?: () => void;
+  onCancelRemoveBg?: () => void;
+  isRemoveBgProcessing?: boolean;
+  removeBgMask?: string | null;
+  onRemoveBgMaskChange?: (mask: string | null) => void;
 }
 
 export function EditSpace({
@@ -74,7 +86,14 @@ export function EditSpace({
   selectedObject,
   canvas,
   onImageEdit,
-  onSmartEditSelectionChange
+  onSmartEditSelectionChange,
+  removeBgMode = "quick",
+  removeBgPreview,
+  onApplyRemoveBg,
+  onCancelRemoveBg,
+  isRemoveBgProcessing = false,
+  removeBgMask,
+  onRemoveBgMaskChange
 }: EditSpaceProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -115,6 +134,56 @@ export function EditSpace({
     return null;
   }, [mounted, selectedObject, canvas]);
 
+  const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const skipMaskSyncRef = useRef(false);
+
+  const clearMaskCanvas = useCallback(
+    (notifyParent: boolean = true) => {
+      const canvasEl = maskCanvasRef.current;
+      if (canvasEl) {
+        const ctx = canvasEl.getContext("2d");
+        ctx?.clearRect(0, 0, canvasEl.width, canvasEl.height);
+      }
+      if (notifyParent) {
+        skipMaskSyncRef.current = true;
+        onRemoveBgMaskChange?.(null);
+      }
+    },
+    [onRemoveBgMaskChange]
+  );
+
+  useEffect(() => {
+    if (removeBgMode !== "select") {
+      clearMaskCanvas(false);
+    }
+  }, [removeBgMode, clearMaskCanvas]);
+
+  useEffect(() => {
+    if (skipMaskSyncRef.current) {
+      skipMaskSyncRef.current = false;
+      return;
+    }
+    if (!removeBgMask) {
+      clearMaskCanvas(false);
+      return;
+    }
+    if (!maskCanvasRef.current) return;
+    const ctx = maskCanvasRef.current.getContext("2d");
+    if (!ctx) return;
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, maskCanvasRef.current!.width, maskCanvasRef.current!.height);
+      ctx.drawImage(img, 0, 0, maskCanvasRef.current!.width, maskCanvasRef.current!.height);
+    };
+    img.src = removeBgMask;
+  }, [removeBgMask, clearMaskCanvas]);
+
+  const commitMaskCanvas = useCallback(() => {
+    if (!maskCanvasRef.current) return;
+    skipMaskSyncRef.current = true;
+    onRemoveBgMaskChange?.(maskCanvasRef.current.toDataURL("image/png"));
+  }, [onRemoveBgMaskChange]);
+
   // Crop preview state
   const [cropPreviewSrc, setCropPreviewSrc] = useState<string>("");
   const cropContainerRef = useRef<HTMLDivElement | null>(null);
@@ -147,6 +216,138 @@ export function EditSpace({
       } catch {}
     }
   }, [tool, onSmartEditSelectionChange]);
+
+  useEffect(() => {
+    if (
+      tool !== "removeBackground" ||
+      removeBgMode !== "select" ||
+      removeBgPreview ||
+      !canvas ||
+      !selectedObject ||
+      !(selectedObject instanceof FabricImage) ||
+      !imgElement
+    ) {
+      return;
+    }
+
+    const imgObj = selectedObject as FabricImage;
+    const naturalWidth = imgElement.naturalWidth || imgObj.width || 0;
+    const naturalHeight = imgElement.naturalHeight || imgObj.height || 0;
+    if (!naturalWidth || !naturalHeight) return;
+
+    if (!maskCanvasRef.current) {
+      maskCanvasRef.current = document.createElement("canvas");
+    }
+    const maskCanvas = maskCanvasRef.current;
+    if (maskCanvas.width !== naturalWidth || maskCanvas.height !== naturalHeight) {
+      maskCanvas.width = naturalWidth;
+      maskCanvas.height = naturalHeight;
+    }
+    const ctx = maskCanvas.getContext("2d");
+    if (!ctx) return;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(37, 99, 235, 0.95)";
+    ctx.lineWidth = Math.max(6, naturalWidth * 0.012);
+    ctx.globalCompositeOperation = "source-over";
+
+    const prevSelection = canvas.selection;
+    const prevSkip = canvas.skipTargetFind;
+    const prevDefaultCursor = canvas.defaultCursor;
+    const prevHoverCursor = canvas.hoverCursor;
+    const prevMoveCursor = (canvas as any).moveCursor;
+
+    canvas.selection = false;
+    canvas.skipTargetFind = true;
+    canvas.defaultCursor = BRUSH_CURSOR;
+    canvas.hoverCursor = BRUSH_CURSOR;
+    (canvas as any).moveCursor = BRUSH_CURSOR;
+
+    let isPainting = false;
+    let lastPoint: { x: number; y: number } | null = null;
+
+    const pointerToImage = (pointer: { x: number; y: number }) => {
+      const bounds = imgObj.getBoundingRect();
+      const within =
+        pointer.x >= bounds.left &&
+        pointer.x <= bounds.left + bounds.width &&
+        pointer.y >= bounds.top &&
+        pointer.y <= bounds.top + bounds.height;
+      if (!within) return null;
+      const normalizedX = (pointer.x - bounds.left) / bounds.width;
+      const normalizedY = (pointer.y - bounds.top) / bounds.height;
+      const cropWidth = imgObj.width || naturalWidth;
+      const cropHeight = imgObj.height || naturalHeight;
+      const cropX = imgObj.cropX || 0;
+      const cropY = imgObj.cropY || 0;
+      const x = Math.max(0, Math.min(naturalWidth, cropX + normalizedX * cropWidth));
+      const y = Math.max(0, Math.min(naturalHeight, cropY + normalizedY * cropHeight));
+      return { x, y };
+    };
+
+    const strokeTo = (point: { x: number; y: number }) => {
+      ctx.beginPath();
+      if (lastPoint) {
+        ctx.moveTo(lastPoint.x, lastPoint.y);
+      } else {
+        ctx.moveTo(point.x, point.y);
+      }
+      ctx.lineTo(point.x, point.y);
+      ctx.stroke();
+      lastPoint = point;
+    };
+
+    const handleMouseDown = (opt: any) => {
+      const pointer = canvas.getPointer(opt.e);
+      const point = pointerToImage(pointer);
+      if (!point) return;
+      isPainting = true;
+      strokeTo(point);
+    };
+
+    const handleMouseMove = (opt: any) => {
+      if (!isPainting) return;
+      const pointer = canvas.getPointer(opt.e);
+      const point = pointerToImage(pointer);
+      if (!point) return;
+      strokeTo(point);
+    };
+
+    const finishStroke = () => {
+      if (!isPainting) return;
+      isPainting = false;
+      lastPoint = null;
+      commitMaskCanvas();
+    };
+
+    const handleMouseUp = () => finishStroke();
+    const handleMouseOut = () => finishStroke();
+
+    canvas.on("mouse:down", handleMouseDown);
+    canvas.on("mouse:move", handleMouseMove);
+    canvas.on("mouse:up", handleMouseUp);
+    canvas.on("mouse:out", handleMouseOut);
+
+    return () => {
+      canvas.off("mouse:down", handleMouseDown);
+      canvas.off("mouse:move", handleMouseMove);
+      canvas.off("mouse:up", handleMouseUp);
+      canvas.off("mouse:out", handleMouseOut);
+      canvas.selection = prevSelection;
+      canvas.skipTargetFind = prevSkip;
+      canvas.defaultCursor = prevDefaultCursor;
+      canvas.hoverCursor = prevHoverCursor;
+      (canvas as any).moveCursor = prevMoveCursor;
+    };
+  }, [
+    tool,
+    removeBgMode,
+    removeBgPreview,
+    canvas,
+    selectedObject,
+    imgElement,
+    commitMaskCanvas
+  ]);
 
   // Smart Edit: attach canvas listeners at top-level (guarded by tool)
   useEffect(() => {
@@ -349,6 +550,108 @@ export function EditSpace({
                 alt="Selected preview"
                 className="absolute inset-0 m-auto max-h-[70%] max-w-[70%] object-contain opacity-90 pointer-events-none"
               />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (tool === "removeBackground") {
+    const displaySrc = removeBgPreview || imgElement?.src || "";
+    return (
+      <div className="sticky top-0 z-10 bg-white border-b border-[#E5E5E5] h-[32vh]">
+        <div className="px-0 py-3 h-full flex flex-col">
+          <div
+            className="relative flex-1 mx-3 rounded-lg border border-[#E5E5E5] bg-[#F8FAFC] overflow-hidden"
+          >
+            {displaySrc ? (
+              <img
+                src={displaySrc}
+                alt="Background removal preview"
+                className="absolute inset-0 w-full h-full object-contain"
+              />
+            ) : (
+              <div className="absolute inset-0 bg-[linear-gradient(135deg,#F8FAFC_25%,#E2E8F0_25%,#E2E8F0_50%,#F8FAFC_50%,#F8FAFC_75%,#E2E8F0_75%,#E2E8F0)] bg-[length:12px_12px]" />
+            )}
+
+            {removeBgMask && !removeBgPreview && (
+              <img
+                src={removeBgMask}
+                alt=""
+                className="absolute inset-0 w-full h-full object-contain pointer-events-none mix-blend-screen opacity-60"
+              />
+            )}
+
+            <div className="absolute top-2 right-2 flex gap-1.5">
+              {removeBgMode === "select" && !removeBgPreview && removeBgMask && (
+                <button
+                  type="button"
+                  onClick={() => clearMaskCanvas()}
+                  className="w-8 h-8 rounded-full bg-white/85 border border-white text-[#1D4ED8] shadow-sm flex items-center justify-center"
+                  aria-label="Clear strokes"
+                  title="Clear strokes"
+                >
+                  <Eraser className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {removeBgMode === "select" && !removeBgPreview && !removeBgMask && (
+                <div className="w-8 h-8 rounded-full bg-white/70 border border-white shadow-sm flex items-center justify-center text-[#1D4ED8]">
+                  <Brush className="w-3.5 h-3.5" />
+                </div>
+              )}
+            </div>
+
+            {isRemoveBgProcessing && (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/75 backdrop-blur-sm z-10">
+                <Loader2 className="w-4 h-4 animate-spin text-[#1D4ED8]" />
+              </div>
+            )}
+          </div>
+
+          <div className="px-3 pt-2 flex justify-end gap-1.5">
+            {removeBgPreview ? (
+              <>
+                <Button
+                  className="h-8 w-8 rounded-full"
+                  size="sm"
+                  onClick={() => {
+                    onApplyRemoveBg?.();
+                    clearMaskCanvas(false);
+                  }}
+                  aria-label="Apply cutout"
+                  title="Apply cutout"
+                >
+                  <Check className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-8 w-8 rounded-full"
+                  size="sm"
+                  onClick={() => {
+                    clearMaskCanvas();
+                    onCancelRemoveBg?.();
+                  }}
+                  aria-label="Cancel preview"
+                  title="Cancel preview"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </>
+            ) : (
+              removeBgMode === "select" &&
+              !removeBgPreview &&
+              removeBgMask && (
+                <button
+                  type="button"
+                  onClick={() => clearMaskCanvas()}
+                  className="h-8 w-8 rounded-full bg-white/85 border border-white text-[#1D4ED8] shadow-sm flex items-center justify-center"
+                  aria-label="Clear strokes"
+                  title="Clear strokes"
+                >
+                  <Eraser className="w-3.5 h-3.5" />
+                </button>
+              )
             )}
           </div>
         </div>

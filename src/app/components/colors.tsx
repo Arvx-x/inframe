@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { FabricObject, Image as FabricImage, Textbox as FabricTextbox, filters, Gradient } from "fabric";
 import { Pipette, Palette, Plus, Trash2, MoveHorizontal, ChevronDown, Droplet, Square, Sparkles, Sliders } from "lucide-react";
+import { useProjectColors } from "@/app/contexts/ProjectColorsContext";
 
 interface ColorsProps {
   selectedObject: FabricObject | null;
@@ -63,6 +64,7 @@ function rgbToHsv(r: number, g: number, b: number) {
 
 // Colors component renders: hue wheel ring and inner SV triangle with live preview
 export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB", onChangeHex }: ColorsProps) {
+  const { projectColors } = useProjectColors();
   const size = 130; // overall size (slightly larger for better visibility)
   const ringWidth = 11; // hue ring
   const wheelCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -81,7 +83,7 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
 
   // Fill type state
   const [fillType, setFillType] = useState<'solid' | 'linear' | 'radial' | 'angular'>('solid');
-  
+
   // Gradient state
   const [gradientStops, setGradientStops] = useState<Array<{ offset: number; color: string }>>([
     { offset: 0, color: '#FF6B6B' },
@@ -149,15 +151,15 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
     // the triangle side length = r * sqrt(3)
     // The distance from center to vertex = r (innerRadius)
     const r = innerRadius;
-    
+
     // Base triangle vertices (unrotated, pointing up with top-right at 0°)
     // Top-right vertex at (r, 0) relative to center - this will point to hue selector
     // Top-left vertex rotated -120° from top-right
     // Bottom vertex rotated -240° from top-right
-    
+
     // Rotate triangle so top-right vertex aligns with hue selector
     const hueRad = (currentHue * Math.PI) / 180;
-    
+
     // Calculate vertices relative to center, then rotate
     const rotatePoint = (x: number, y: number, angle: number) => {
       const cos = Math.cos(angle);
@@ -167,25 +169,25 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
         y: center + x * sin + y * cos
       };
     };
-    
+
     // Top-right vertex (full color) at 0° relative to center, then rotated by hue
     const topRightRel = { x: r, y: 0 };
     // Top-left vertex (white) at -120° relative to center
-    const topLeftRel = { 
-      x: r * Math.cos(-2 * Math.PI / 3), 
-      y: r * Math.sin(-2 * Math.PI / 3) 
+    const topLeftRel = {
+      x: r * Math.cos(-2 * Math.PI / 3),
+      y: r * Math.sin(-2 * Math.PI / 3)
     };
     // Bottom vertex (black) at -240° relative to center
-    const bottomRel = { 
-      x: r * Math.cos(-4 * Math.PI / 3), 
-      y: r * Math.sin(-4 * Math.PI / 3) 
+    const bottomRel = {
+      x: r * Math.cos(-4 * Math.PI / 3),
+      y: r * Math.sin(-4 * Math.PI / 3)
     };
-    
+
     // Rotate all vertices by hue angle
     const topRight = rotatePoint(topRightRel.x, topRightRel.y, hueRad);
     const topLeft = rotatePoint(topLeftRel.x, topLeftRel.y, hueRad);
     const bottom = rotatePoint(bottomRel.x, bottomRel.y, hueRad);
-    
+
     return { topLeft, topRight, bottom };
   }
 
@@ -220,7 +222,7 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
           // topLeft (w1=1): S=0, V=1 (white)
           // topRight (w2=1): S=1, V=1 (full color)
           // bottom (w3=1): V=0 (black)
-          
+
           // Saturation: 0 at topLeft, 1 at topRight
           const s = w2;
           // Value: 1 at top, 0 at bottom
@@ -257,7 +259,7 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
     const w1 = val * (1 - sat); // White component
     const w2 = val * sat; // Full color component
     const w3 = 1 - val; // Black component
-    
+
     const px = topLeft.x * w1 + topRight.x * w2 + bottom.x * w3;
     const py = topLeft.y * w1 + topRight.y * w2 + bottom.y * w3;
 
@@ -292,12 +294,12 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
     const handleMove = (clientX: number, clientY: number) => {
       const coords = getCoordinates(clientX, clientY);
       coords.radius = Math.sqrt(coords.x * coords.x + coords.y * coords.y);
-      
+
       // Expanded hit area for ring - easier to grab (wider tolerance)
       const ringTolerance = 8; // Extra pixels for easier grabbing
       const outer = center + ringTolerance;
       const inner = center - ringWidth - ringTolerance;
-      
+
       // If we're in drag mode, stick to that mode
       if (isDraggingRef.current && dragModeRef.current === 'ring') {
         // Always update hue when dragging ring, regardless of position
@@ -307,21 +309,21 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
         setHue(deg);
         return;
       }
-      
+
       if (isDraggingRef.current && dragModeRef.current === 'triangle') {
         // Always update triangle when dragging triangle
         const px = coords.x + center;
         const py = coords.y + center;
         const currentHue = hueRef.current;
         const { topLeft, topRight, bottom } = triangleVertices(currentHue);
-        
+
         const denom = (topRight.y - bottom.y) * (topLeft.x - bottom.x) + (bottom.x - topRight.x) * (topLeft.y - bottom.y);
         if (Math.abs(denom) < 0.001) return;
-        
+
         const w1 = ((topRight.y - bottom.y) * (px - bottom.x) + (bottom.x - topRight.x) * (py - bottom.y)) / denom;
         const w2 = ((bottom.y - topLeft.y) * (px - bottom.x) + (topLeft.x - bottom.x) * (py - bottom.y)) / denom;
         const w3 = 1 - w1 - w2;
-        
+
         if (w1 >= 0 && w2 >= 0 && w3 >= 0) {
           const vNew = clamp(w1 + w2, 0, 1);
           const sNew = vNew > 0.001 ? clamp(w2 / vNew, 0, 1) : 0;
@@ -340,20 +342,20 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
         setHue(deg);
         return;
       }
-      
+
       // Inside: treat as triangle selection
       const px = coords.x + center;
       const py = coords.y + center;
       const currentHue = hueRef.current;
       const { topLeft, topRight, bottom } = triangleVertices(currentHue);
-      
+
       const denom = (topRight.y - bottom.y) * (topLeft.x - bottom.x) + (bottom.x - topRight.x) * (topLeft.y - bottom.y);
       if (Math.abs(denom) < 0.001) return;
-      
+
       const w1 = ((topRight.y - bottom.y) * (px - bottom.x) + (bottom.x - topRight.x) * (py - bottom.y)) / denom;
       const w2 = ((bottom.y - topLeft.y) * (px - bottom.x) + (topLeft.x - bottom.x) * (py - bottom.y)) / denom;
       const w3 = 1 - w1 - w2;
-      
+
       if (w1 >= 0 && w2 >= 0 && w3 >= 0) {
         const vNew = clamp(w1 + w2, 0, 1);
         const sNew = vNew > 0.001 ? clamp(w2 / vNew, 0, 1) : 0;
@@ -369,12 +371,12 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
       shouldApplyRef.current = true;
       const coords = getCoordinates(e.clientX, e.clientY);
       coords.radius = Math.sqrt(coords.x * coords.x + coords.y * coords.y);
-      
+
       // Determine drag mode based on initial click position
       const ringTolerance = 8;
       const outer = center + ringTolerance;
       const inner = center - ringWidth - ringTolerance;
-      
+
       if (coords.radius >= inner && coords.radius <= outer) {
         isDraggingRef.current = true;
         dragModeRef.current = 'ring';
@@ -450,19 +452,19 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
   // Apply gradient to object
   const applyGradient = useCallback(() => {
     if (!selectedObject || !canvas || selectedObject instanceof FabricImage) return;
-    
+
     const width = selectedObject.width || 100;
     const height = selectedObject.height || 100;
-    
+
     let gradient;
-    
+
     if (fillType === 'linear') {
       const angleRad = (gradientAngle * Math.PI) / 180;
       const x1 = width / 2 + Math.cos(angleRad) * width / 2;
       const y1 = height / 2 + Math.sin(angleRad) * height / 2;
       const x2 = width / 2 - Math.cos(angleRad) * width / 2;
       const y2 = height / 2 - Math.sin(angleRad) * height / 2;
-      
+
       gradient = new Gradient({
         type: 'linear',
         coords: { x1, y1, x2, y2 },
@@ -474,13 +476,13 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
     } else if (fillType === 'radial') {
       gradient = new Gradient({
         type: 'radial',
-        coords: { 
-          x1: width / 2, 
-          y1: height / 2, 
-          x2: width / 2, 
-          y2: height / 2, 
-          r1: 0, 
-          r2: Math.max(width, height) / 2 
+        coords: {
+          x1: width / 2,
+          y1: height / 2,
+          x2: width / 2,
+          y2: height / 2,
+          r1: 0,
+          r2: Math.max(width, height) / 2
         },
         colorStops: gradientStops.map(stop => ({
           offset: stop.offset,
@@ -488,7 +490,7 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
         }))
       });
     }
-    
+
     if (gradient) {
       selectedObject.set({ fill: gradient });
       canvas.renderAll();
@@ -544,28 +546,28 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
     const compHue = (hue + 180) % 360;
     const comp = hsvToRgb(compHue, sat, val);
     suggestions.push({ color: rgbToHex(comp.r, comp.g, comp.b), label: "Complementary" });
-    
+
     // Analogous colors
     const analog1 = hsvToRgb((hue + 30) % 360, sat, val);
     suggestions.push({ color: rgbToHex(analog1.r, analog1.g, analog1.b), label: "Analogous" });
-    
+
     const analog2 = hsvToRgb((hue - 30 + 360) % 360, sat, val);
     suggestions.push({ color: rgbToHex(analog2.r, analog2.g, analog2.b), label: "Analogous" });
-    
+
     // Triadic colors
     const triad1 = hsvToRgb((hue + 120) % 360, sat, val);
     suggestions.push({ color: rgbToHex(triad1.r, triad1.g, triad1.b), label: "Triadic" });
-    
+
     const triad2 = hsvToRgb((hue + 240) % 360, sat, val);
     suggestions.push({ color: rgbToHex(triad2.r, triad2.g, triad2.b), label: "Triadic" });
-    
+
     // Lighter and darker variations
     const lighter = hsvToRgb(hue, Math.max(0, sat - 0.2), Math.min(1, val + 0.2));
     suggestions.push({ color: rgbToHex(lighter.r, lighter.g, lighter.b), label: "Lighter" });
-    
+
     const darker = hsvToRgb(hue, Math.min(1, sat + 0.1), Math.max(0, val - 0.2));
     suggestions.push({ color: rgbToHex(darker.r, darker.g, darker.b), label: "Darker" });
-    
+
     return suggestions;
   };
 
@@ -577,11 +579,11 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
       <div className="flex items-center justify-between mb-2.5">
         {/* Small current color preview - left side */}
         <div className="flex items-center gap-2">
-          <div 
-            className="w-7 h-7 rounded border border-slate-300 transition-all duration-200 hover:scale-110 cursor-pointer" 
-            style={{ 
+          <div
+            className="w-7 h-7 rounded border border-slate-300 transition-all duration-200 hover:scale-110 cursor-pointer"
+            style={{
               backgroundColor: fillType === 'solid' ? hex : undefined,
-              backgroundImage: fillType !== 'solid' 
+              backgroundImage: fillType !== 'solid'
                 ? `linear-gradient(${gradientAngle}deg, ${gradientStops.map(s => `${s.color} ${s.offset * 100}%`).join(', ')})`
                 : undefined
             }}
@@ -598,7 +600,7 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
             )}
           </div>
         </div>
-        
+
         {/* Eyedropper button - right side */}
         <button className="p-2 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50 transition-colors">
           <Pipette className="w-4 h-4 text-slate-600" />
@@ -612,7 +614,7 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
           <Droplet className="w-3.5 h-3.5 text-blue-500" />
           <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Color Picker</span>
         </div>
-        
+
         {/* Color wheel */}
         <div className="flex justify-center">
           <div ref={containerRef} className="relative" style={{ width: size, height: size }}>
@@ -627,9 +629,9 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
           <div className="flex items-center gap-2 px-2.5 py-1.5 bg-white rounded border border-slate-300 hover:border-slate-400 transition-colors focus-within:border-blue-500">
             <span className="text-[11px] font-mono text-slate-500">#</span>
             <input
-              value={hex.replace('#','').toUpperCase()}
+              value={hex.replace('#', '').toUpperCase()}
               onChange={(e) => {
-                const v = `#${e.target.value.replace(/[^0-9A-Fa-f]/g,'').slice(0,6)}`;
+                const v = `#${e.target.value.replace(/[^0-9A-Fa-f]/g, '').slice(0, 6)}`;
                 const rgb = hexToRgb(v);
                 if (!rgb) return;
                 const { h, s, v: vv } = rgbToHsv(rgb.r, rgb.g, rgb.b);
@@ -671,18 +673,18 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
         </div>
       </div>
 
-      {/* AI-generated color suggestions - card */}
+      {/* Project Colors - card */}
       <div className="mb-2.5 p-2.5 bg-[#F4F4F6] rounded-lg border border-[#E5E5E5]">
         <div className="flex items-center gap-2 mb-2">
           <Palette className="w-3.5 h-3.5 text-blue-500" />
           <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Project Colors</span>
         </div>
         <div className="grid grid-cols-7 gap-2">
-          {colorSuggestions.map((suggestion, idx) => (
+          {projectColors.map((color, idx) => (
             <button
               key={idx}
               onClick={() => {
-                const rgb = hexToRgb(suggestion.color);
+                const rgb = hexToRgb(color);
                 if (!rgb) return;
                 const { h, s, v: vv } = rgbToHsv(rgb.r, rgb.g, rgb.b);
                 setHue(h);
@@ -691,8 +693,8 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
                 shouldApplyRef.current = true;
               }}
               className="aspect-square rounded border border-slate-300 hover:border-slate-400 transition-all hover:scale-105"
-              style={{ backgroundColor: suggestion.color }}
-              title={suggestion.label}
+              style={{ backgroundColor: color }}
+              title={color}
             />
           ))}
         </div>
@@ -714,11 +716,10 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
                   applyGradient();
                 }
               }}
-              className={`px-2 py-1.5 text-[10px] font-medium rounded border transition-colors ${
-                fillType === type
-                  ? 'bg-blue-500 text-white border-blue-600'
-                  : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
-              }`}
+              className={`px-2 py-1.5 text-[10px] font-medium rounded border transition-colors ${fillType === type
+                ? 'bg-blue-500 text-white border-blue-600'
+                : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+                }`}
             >
               {type.charAt(0).toUpperCase() + type.slice(1)}
             </button>
@@ -736,8 +737,8 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
             </div>
             <button
               onClick={() => {
-                const newOffset = gradientStops.length > 0 
-                  ? (gradientStops[gradientStops.length - 1].offset + 0.5) / 1.5 
+                const newOffset = gradientStops.length > 0
+                  ? (gradientStops[gradientStops.length - 1].offset + 0.5) / 1.5
                   : 0.5;
                 setGradientStops([...gradientStops, { offset: Math.min(newOffset, 1), color: hex }]);
               }}
@@ -753,7 +754,7 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
             <div
               className="absolute inset-0"
               style={{
-              backgroundImage: `linear-gradient(to right, ${gradientStops
+                backgroundImage: `linear-gradient(to right, ${gradientStops
                   .sort((a, b) => a.offset - b.offset)
                   .map(s => `${s.color} ${s.offset * 100}%`)
                   .join(', ')})`
@@ -763,15 +764,14 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
             {gradientStops.map((stop, idx) => (
               <div
                 key={idx}
-                className={`absolute top-0 w-2 h-full cursor-pointer ${
-                  selectedStop === idx ? 'bg-blue-500' : 'bg-white'
-                } border-x border-slate-400 opacity-80 hover:opacity-100`}
+                className={`absolute top-0 w-2 h-full cursor-pointer ${selectedStop === idx ? 'bg-blue-500' : 'bg-white'
+                  } border-x border-slate-400 opacity-80 hover:opacity-100`}
                 style={{ left: `calc(${stop.offset * 100}% - 4px)` }}
                 onClick={() => setSelectedStop(idx)}
               />
             ))}
           </div>
-          
+
           {/* Gradient angle slider for linear */}
           {fillType === 'linear' && (
             <div className="mb-2.5">
@@ -798,9 +798,8 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
             {gradientStops.map((stop, idx) => (
               <div key={idx} className="flex items-center gap-2">
                 <div
-                  className={`w-6 h-6 rounded border-2 cursor-pointer ${
-                    selectedStop === idx ? 'border-blue-500' : 'border-slate-300'
-                  }`}
+                  className={`w-6 h-6 rounded border-2 cursor-pointer ${selectedStop === idx ? 'border-blue-500' : 'border-slate-300'
+                    }`}
                   style={{ backgroundColor: stop.color }}
                   onClick={() => setSelectedStop(idx)}
                 />
@@ -859,7 +858,7 @@ export default function Colors({ selectedObject, canvas, initialColor = "#18A0FB
           <Sliders className="w-3.5 h-3.5 text-blue-500" />
           <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Color Adjustments</span>
         </div>
-        
+
         {/* Brightness */}
         <div className="mb-2">
           <div className="flex items-center justify-between mb-1">

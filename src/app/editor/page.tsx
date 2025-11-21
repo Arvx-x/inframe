@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { getProject, createProject, updateProject, saveCanvas } from '@/app/lib/services/projects.service';
 import { uploadDataURL } from '@/app/lib/services/storage.service';
+import { ProjectColorsProvider } from '@/app/contexts/ProjectColorsContext';
 import PromptSidebar from "@/app/components/PromptSidebar";
 import Canvas from "@/app/components/Canvas";
 import ColorSelector from "@/app/components/ColorSelector";
@@ -124,13 +125,13 @@ function EditorContent() {
   const handleBack = () => {
     // Navigate immediately for instant feel
     router.push('/');
-    
+
     // Save in background (fire-and-forget)
     if (projectId && user) {
       (async () => {
         try {
           const currentCanvasData = canvasSaveRef.current?.();
-          
+
           // Generate thumbnail if canvas is available
           let thumbnailUrl: string | undefined = undefined;
           if (canvasInstanceRef.current) {
@@ -148,9 +149,9 @@ function EditorContent() {
               } catch (thumbError: any) {
                 // Silently fail if bucket doesn't exist or upload fails
                 // This allows the app to work even without storage bucket configured
-                if (thumbError?.message?.includes('Bucket not found') || 
-                    thumbError?.message?.includes('bucket') ||
-                    thumbError?.statusCode === 404) {
+                if (thumbError?.message?.includes('Bucket not found') ||
+                  thumbError?.message?.includes('bucket') ||
+                  thumbError?.statusCode === 404) {
                   // Bucket not configured - skip thumbnail silently
                 } else {
                   console.error('Failed to upload thumbnail:', thumbError);
@@ -289,7 +290,9 @@ export default function Page() {
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
       </div>
     }>
-      <EditorContent />
+      <ProjectColorsProvider>
+        <EditorContent />
+      </ProjectColorsProvider>
     </Suspense>
   );
 }

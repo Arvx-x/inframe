@@ -2,6 +2,8 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { FabricObject, Rect as FabricRect, Pattern } from "fabric";
 import { Button } from "@/app/components/ui/button";
 import { toast } from "sonner";
+import { createFabricObjects } from "@/app/utils/createFabricObject";
+import { Plus, ChevronDown } from "lucide-react";
 
 type ToolKey =
   | "backgroundGenerator"
@@ -33,6 +35,7 @@ export function ArtboardEditSpace({
   const [compositePreviewSrc, setCompositePreviewSrc] = useState<string>("");
   const [objectCount, setObjectCount] = useState(0);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [currentElementIndex, setCurrentElementIndex] = useState(0);
   const previewUpdateRef = useRef<number>(0);
 
   useEffect(() => {
@@ -234,38 +237,18 @@ export function ArtboardEditSpace({
         ctx.scale(scale, scale);
         ctx.translate(-bounds.left, -bounds.top);
 
-        // 1. Clone Artboard and apply modifications
-        // We can't easily clone Fabric objects with full fidelity in a lightweight way without async
-        // So we will try to modify the rendering context or use a temporary invisible canvas?
-        // Actually, we can just use the existing objects but override their properties during render?
-        // No, render() uses internal state.
-        // Best approach: Clone objects, apply mods, render, then dispose.
-
         // Helper to find modification for an object
         const getMod = (id: string) => designDnaResult.modifications?.find((m: any) => m.id === id);
 
         // Render Artboard (Background)
-        // Check if artboard has mods
-        // We need to know the artboard's ID or assume it's the container
-        // For now, let's assume artboard modifications might be passed with a special ID or we check if any mod matches artboard properties?
-        // The API returns mods by ID. We assigned IDs to objects sent.
-        // If we didn't assign ID to artboard, we might miss it.
-        // Let's just render artboard as is for now, or try to apply fill if we can match it.
-
-        // Render Artboard
         artboard.render(ctx);
 
         // Render Contained Objects with Modifications
         for (const obj of containedObjects) {
-          const mod = getMod((obj as any).id); // Assuming we have IDs
+          const mod = getMod((obj as any).id);
 
           if (mod) {
-            // Clone and modify
-            // This is expensive. 
-            // Alternative: Save state, modify, render, restore.
-            const originalState = obj.toObject(); // simplified state save
-            // Actually, toObject is heavy.
-            // Let's just save the specific props we modify.
+            // Save original properties
             const savedProps: any = {};
             Object.keys(mod).forEach(key => {
               if (key !== 'id') savedProps[key] = (obj as any)[key];
@@ -274,22 +257,30 @@ export function ArtboardEditSpace({
             obj.set(mod);
             obj.render(ctx);
 
-            // Restore
+            // Restore original properties
             obj.set(savedProps);
           } else {
             obj.render(ctx);
           }
         }
 
-        // Render Additions
-        // We need to create new Fabric objects for additions
-        if (designDnaResult.additions) {
-          for (const add of designDnaResult.additions) {
-            // Create object based on type
-            // This requires importing Fabric classes or using a factory
-            // Since we can't easily import everything here dynamically, 
-            // we might skip additions for this preview or support basic shapes.
-            // For now, let's skip additions to avoid complexity or use simple placeholder drawing.
+        // Render Additions - NEW FUNCTIONALITY
+        if (designDnaResult.additions && Array.isArray(designDnaResult.additions)) {
+          try {
+            const newObjects = createFabricObjects(designDnaResult.additions);
+
+            // Render each new object
+            newObjects.forEach((obj) => {
+              try {
+                obj.render(ctx);
+              } catch (e) {
+                console.warn('Error rendering addition:', e);
+              }
+            });
+
+            console.log(`Preview: Rendered ${newObjects.length} addition(s)`);
+          } catch (e) {
+            console.error('Error creating additions for preview:', e);
           }
         }
 
@@ -539,37 +530,164 @@ export function ArtboardEditSpace({
 
   // Design DNA tool
   if (tool === "designDna") {
+    const elements = designDnaResult?.elements || [];
+    const currentElement = elements[currentElementIndex];
+
+    const handleAddToCanvas = () => {
+      if (!currentElement || !canvas) return;
+
+      try {
+        const newObj = createFabricObjects([{
+          ...currentElement,
+          id: `elem-${Date.now()}`,
+          // Position at canvas center
+          left: (canvas.width || 800) / 2 - (currentElement.width || 100) / 2,
+          top: (canvas.height || 600) / 2 - (currentElement.height || 100) / 2,
+          ...currentElement.properties
+        }])[0];
+
+        if (newObj) {
+          canvas.add(newObj);
+          newObj.setCoords();
+          canvas.renderAll();
+          toast.success(`Added "${currentElement.name}" to canvas!`);
+        }
+      } catch (error) {
+        console.error('Error adding element:', error);
+        toast.error("Failed to add element");
+      }
+    };
+
     return (
       <div className="sticky top-0 z-10 bg-white border-b border-[#E5E5E5] h-[38vh]">
         <div className="px-0 py-3 h-full flex flex-col">
-          <div className="text-[11px] text-[#9E9E9E] px-3 mb-2">Design DNA — Preview</div>
-          <div className="relative flex-1 mx-3 rounded-lg border border-[#E5E5E5]
-                          bg-[length:16px_16px]
-                          bg-[linear-gradient(to_right,#EDEDED_1px,transparent_1px),linear-gradient(to_bottom,#EDEDED_1px,transparent_1px)]">
-            {mounted && compositePreviewSrc ? (
-              <img
-                src={compositePreviewSrc}
-                alt="Design DNA preview"
-                className="absolute inset-0 m-auto max-h-[80%] max-w-[80%] object-contain opacity-90 pointer-events-none"
-              />
-            ) : mounted && previewSrc ? (
-              <img
-                src={previewSrc}
-                alt="Artboard preview"
-                className="absolute inset-0 m-auto max-h-[80%] max-w-[80%] object-contain opacity-90 pointer-events-none"
-              />
+          <div className="text-[11px] text-[#9E9E9E] px-3 mb-2">Design DNA — Elements</div>
+          <div className="relative flex-1 mx-3 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] overflow-hidden py-4 px-2">
+            {elements.length > 0 ? (
+              <div className="h-full flex flex-col">
+                {/* Element Preview with Side Navigation */}
+                <div className="flex-1 flex items-center relative">
+                  {/* Left Arrow */}
+                  <button
+                    onClick={() => setCurrentElementIndex(Math.max(0, currentElementIndex - 1))}
+                    disabled={currentElementIndex === 0}
+                    className="absolute left-0 top-[62%] -translate-y-1/2 z-10 p-1.5 rounded-full bg-white shadow-md border border-[#E5E5E5] hover:bg-[#F5F5F5] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <ChevronDown className="w-4 h-4 rotate-90" />
+                  </button>
+
+                  {/* Card Content */}
+                  <div className="flex-1 flex flex-col items-center justify-start p-2.5 gap-1.5 -mt-1.5">
+                    <div className="text-center w-full max-w-[200px]">
+                      {/* Render element preview */}
+                      <div className="mb-1.5 flex items-center justify-center min-h-[105px] max-h-[130px] bg-white rounded-xl border border-[#E5E5E5] shadow-sm p-3.5 relative overflow-hidden group">
+                        <div className="absolute inset-0 bg-[radial-gradient(#E5E5E5_1px,transparent_1px)] [background-size:8px_8px] opacity-30" />
+
+                        <div className="relative z-10 flex items-center justify-center">
+                          {currentElement.type === 'circle' && (
+                            <div
+                              style={{
+                                width: Math.min(currentElement.properties.radius * 2 || 80, 100),
+                                height: Math.min(currentElement.properties.radius * 2 || 80, 100),
+                                borderRadius: '50%',
+                                backgroundColor: currentElement.properties.fill || '#000',
+                                border: currentElement.properties.stroke ? `${currentElement.properties.strokeWidth || 1}px solid ${currentElement.properties.stroke}` : 'none',
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                              }}
+                            />
+                          )}
+                          {currentElement.type === 'ellipse' && (
+                            <div
+                              style={{
+                                width: Math.min(currentElement.properties.rx * 2 || 100, 120),
+                                height: Math.min(currentElement.properties.ry * 2 || 60, 80),
+                                borderRadius: '50%',
+                                backgroundColor: currentElement.properties.fill || '#000',
+                                border: currentElement.properties.stroke ? `${currentElement.properties.strokeWidth || 1}px solid ${currentElement.properties.stroke}` : 'none',
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                              }}
+                            />
+                          )}
+                          {currentElement.type === 'rect' && (
+                            <div
+                              style={{
+                                width: Math.min(currentElement.width || 100, 100),
+                                height: Math.min(currentElement.height || 80, 80),
+                                borderRadius: currentElement.properties.rx || currentElement.properties.ry || 0,
+                                backgroundColor: currentElement.properties.fill || '#000',
+                                border: currentElement.properties.stroke ? `${currentElement.properties.strokeWidth || 1}px solid ${currentElement.properties.stroke}` : 'none',
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                              }}
+                            />
+                          )}
+                          {currentElement.type === 'triangle' && (
+                            <div
+                              style={{
+                                width: 0,
+                                height: 0,
+                                borderLeft: '40px solid transparent',
+                                borderRight: '40px solid transparent',
+                                borderBottom: `80px solid ${currentElement.properties.fill || '#000'}`,
+                                filter: 'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1))'
+                              }}
+                            />
+                          )}
+                          {(currentElement.type === 'text' || currentElement.type === 'textbox') && (
+                            <div
+                              style={{
+                                fontSize: Math.min(currentElement.properties.fontSize || 16, 24),
+                                fontFamily: currentElement.properties.fontFamily || 'sans-serif',
+                                fontWeight: currentElement.properties.fontWeight || 'normal',
+                                color: currentElement.properties.fill || '#000',
+                                textAlign: currentElement.properties.textAlign || 'center',
+                                maxWidth: '100%',
+                                wordBreak: 'break-word'
+                              }}
+                            >
+                              {currentElement.properties.text || 'Sample Text'}
+                            </div>
+                          )}
+                          {/* Fallback for other shapes (polygon, path, etc) */}
+                          {['polygon', 'path', 'line'].includes(currentElement.type) && (
+                            <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center text-gray-400">
+                              <div className="w-8 h-8 border-2 border-current rounded-sm transform rotate-45" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-[12px] font-medium text-[#161616] mb-0.5 truncate">{currentElement.name}</div>
+                      <div className="text-[10px] text-[#6E6E6E] mb-3 capitalize flex items-center justify-center gap-1">
+                        {currentElement.type} • <span className="font-mono">{currentElementIndex + 1}/{elements.length}</span>
+                      </div>
+
+                      <Button
+                        onClick={handleAddToCanvas}
+                        className="w-full h-8 text-[11px] rounded-lg gap-1.5 shadow-sm"
+                        size="sm"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add to Canvas
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Right Arrow */}
+                  <button
+                    onClick={() => setCurrentElementIndex(Math.min(elements.length - 1, currentElementIndex + 1))}
+                    disabled={currentElementIndex === elements.length - 1}
+                    className="absolute right-0 top-[62%] -translate-y-1/2 z-10 p-1.5 rounded-full bg-white shadow-md border border-[#E5E5E5] hover:bg-[#F5F5F5] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <ChevronDown className="w-4 h-4 -rotate-90" />
+                  </button>
+                </div>
+              </div>
             ) : (
-              <div className="absolute inset-0 m-auto h-full w-full flex items-center justify-center text-[11px] text-[#9E9E9E]">
-                Upload an image to extract design DNA
+              <div className="absolute inset-0 m-auto h-full w-full flex items-center justify-center text-[11px] text-[#9E9E9E] text-center px-4">
+                Extract design DNA to see<br />reusable elements
               </div>
             )}
           </div>
-          {mounted && (compositePreviewSrc || previewSrc) && (
-            <div className="mx-3 mt-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded text-center">
-              {dimensions.width} × {dimensions.height}
-              {compositePreviewSrc ? " • Preview with Design DNA" : ""}
-            </div>
-          )}
         </div>
       </div>
     );

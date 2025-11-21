@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import { Mountain, Square, RotateCw, Maximize, Droplet, Minus, Layers, Palette, Lock, ChevronDown, ChevronUp, Eye, EyeOff, Plus, HelpCircle, Grid3x3, X, Link, Sun, Zap, Wand2, Trash2, Sparkles, Loader2, Move, Type, Box, Sliders, Crop, Brain, Shuffle, Paintbrush, Globe } from "lucide-react";
+import { Mountain, Square, RotateCw, Maximize, Droplet, Minus, Layers, Palette, Lock, ChevronDown, ChevronUp, Eye, EyeOff, Plus, HelpCircle, Grid3x3, X, Link, Sun, Zap, Wand2, Trash2, Sparkles, Loader2, Move, Type, Box, Sliders, Crop, Brain, Shuffle, Paintbrush, Globe, Scissors } from "lucide-react";
 import { Input } from "@/app/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { Textarea } from "@/app/components/ui/textarea";
@@ -243,7 +243,7 @@ export const Properties = ({
   const [pixelate, setPixelate] = useState(0);
   const [sepia, setSepia] = useState(0);
   const [vintage, setVintage] = useState(0);
-  const [activeTool, setActiveTool] = useState<"crop" | "quickFx" | "adjustments" | "creativeDirector" | "promptRemixer" | "styleTransfer" | "sceneReimagine" | "smartEdit" | "upscale" | null>(null);
+  const [activeTool, setActiveTool] = useState<"crop" | "quickFx" | "adjustments" | "removeBackground" | "creativeDirector" | "promptRemixer" | "styleTransfer" | "sceneReimagine" | "smartEdit" | "upscale" | null>(null);
   // Prompt states for AI tools in toolbar dropdowns
   const [creativePrompt, setCreativePrompt] = useState("");
   const [remixPrompt, setRemixPrompt] = useState("");
@@ -257,6 +257,22 @@ export const Properties = ({
     rect: { x: number; y: number; width: number; height: number };
     normalized: { x: number; y: number; width: number; height: number };
   } | null>(null);
+  const [removeBgMode, setRemoveBgMode] = useState<"quick" | "select">("quick");
+  const [removeBgMask, setRemoveBgMask] = useState<string | null>(null);
+  const [removeBgPreview, setRemoveBgPreview] = useState<string | null>(null);
+  const [isRemoveBgProcessing, setIsRemoveBgProcessing] = useState(false);
+
+  useEffect(() => {
+    setRemoveBgPreview(null);
+    setRemoveBgMask(null);
+    setIsRemoveBgProcessing(false);
+  }, [selectedObject]);
+
+  useEffect(() => {
+    if (removeBgMode !== "select") {
+      setRemoveBgMask(null);
+    }
+  }, [removeBgMode]);
 
   const runAiEditFromToolbar = async (prompt: string, selection?: any) => {
     if (!onImageEdit) return;
@@ -542,6 +558,118 @@ export const Properties = ({
     }
   };
 
+  const handleRemoveBackground = async () => {
+    if (!isImage || !selectedObject || !(selectedObject instanceof FabricImage)) {
+      toast.error("Select an image to remove the background.");
+      return;
+    }
+    if (!onImageEdit) {
+      toast.error("Image editing is unavailable in this context.");
+      return;
+    }
+    if (removeBgMode === "select" && !removeBgMask) {
+      toast.error("Use the brush in the preview to mark what to keep.");
+      return;
+    }
+
+    const imgElement = (selectedObject as FabricImage).getElement() as HTMLImageElement | undefined;
+    if (!imgElement) {
+      toast.error("Unable to read the selected image.");
+      return;
+    }
+
+    const width = imgElement.naturalWidth || imgElement.width;
+    const height = imgElement.naturalHeight || imgElement.height;
+    if (!width || !height) {
+      toast.error("Image dimensions unavailable.");
+      return;
+    }
+
+    const baseCanvas = document.createElement("canvas");
+    baseCanvas.width = width;
+    baseCanvas.height = height;
+    const ctx = baseCanvas.getContext("2d");
+    if (!ctx) {
+      toast.error("Failed to prepare the source image.");
+      return;
+    }
+    ctx.drawImage(imgElement, 0, 0, width, height);
+    const baseImageUrl = baseCanvas.toDataURL("image/png");
+
+    let normalizedMask: string | null = null;
+    if (removeBgMode === "select" && removeBgMask) {
+      try {
+        const maskBitmap = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("Failed to read selection mask"));
+          img.src = removeBgMask;
+        });
+        const maskCanvas = document.createElement("canvas");
+        maskCanvas.width = width;
+        maskCanvas.height = height;
+        const maskCtx = maskCanvas.getContext("2d");
+        if (maskCtx) {
+          maskCtx.drawImage(maskBitmap, 0, 0, width, height);
+          normalizedMask = maskCanvas.toDataURL("image/png");
+        }
+      } catch (error) {
+        console.error("Mask conversion error:", error);
+        toast.error("Could not process the selection mask. Clear it and try again.");
+        return;
+      }
+    }
+
+    const approxWidth = Math.round(selectedObject.getScaledWidth?.() ?? selectedObject.width ?? width);
+    const approxHeight = Math.round(selectedObject.getScaledHeight?.() ?? selectedObject.height ?? height);
+    const objectContext = `Foreground target approx ${approxWidth}x${approxHeight}px positioned near (${Math.round(selectedObject.left ?? 0)}, ${Math.round(selectedObject.top ?? 0)}). Keep the subject (${removeBgMode === "select" ? "mask included" : "auto-detect"}) and output a transparent PNG with clean edges.`;
+
+    setIsRemoveBgProcessing(true);
+    setRemoveBgPreview(null);
+    try {
+      const res = await fetch("/api/remove-background", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: baseImageUrl,
+          mode: removeBgMode,
+          mask: normalizedMask,
+          context: objectContext
+        })
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to remove background");
+      }
+
+      const data = await res.json();
+      if (!data?.success || !data?.imageUrl) {
+        throw new Error(data?.error || "No preview returned");
+      }
+
+      setRemoveBgPreview(data.imageUrl);
+      toast.success("Background removed! Preview the cutout above.");
+    } catch (error) {
+      console.error("Remove background error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to remove background");
+    } finally {
+      setIsRemoveBgProcessing(false);
+    }
+  };
+
+  const handleApplyRemoveBg = () => {
+    if (!removeBgPreview || !onImageEdit) return;
+    onImageEdit(removeBgPreview);
+    setRemoveBgPreview(null);
+    setRemoveBgMask(null);
+    toast.success("Background removal applied to the canvas.");
+  };
+
+  const handleCancelRemoveBg = () => {
+    setRemoveBgPreview(null);
+  };
+
   // Initialize effects from object
   useEffect(() => {
     if (isImage && selectedObject) {
@@ -679,6 +807,13 @@ export const Properties = ({
             selectedObject={selectedObject}
             canvas={canvas}
             onImageEdit={onImageEdit}
+            removeBgMode={removeBgMode}
+            removeBgPreview={removeBgPreview}
+            onApplyRemoveBg={handleApplyRemoveBg}
+            onCancelRemoveBg={handleCancelRemoveBg}
+            isRemoveBgProcessing={isRemoveBgProcessing}
+            removeBgMask={removeBgMask}
+            onRemoveBgMaskChange={setRemoveBgMask}
           />
           {/* Scrollable Tools Section Below */}
           <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar-track]:hidden [&::-webkit-scrollbar-thumb]:hidden">
@@ -765,6 +900,80 @@ export const Properties = ({
                           Dramatic
                         </Button>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {isImage && onImageEdit && (
+                <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
+                  <button
+                    onClick={() => setActiveTool(activeTool === 'removeBackground' ? null : 'removeBackground')}
+                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Scissors className="w-4 h-4 text-[#3B82F6]" />
+                      <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Remove Background</span>
+                    </div>
+                    {activeTool === 'removeBackground' ? (
+                      <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
+                    )}
+                  </button>
+                  <div
+                    className={`overflow-hidden transition-all ${activeTool === 'removeBackground' ? 'max-h-[360px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
+                    style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                  >
+                    <div className="pt-2 px-3 pb-3 space-y-2">
+                      <div className="space-y-1">
+                        <span className="text-[11px] text-[#6E6E6E]">Mode</span>
+                        <Select value={removeBgMode} onValueChange={(value) => setRemoveBgMode(value as "quick" | "select")}>
+                          <SelectTrigger className="h-7 text-[11px] border border-[#E5E5E5] bg-white hover:border-[#D1D1D1] focus:ring-0 focus:ring-offset-0 rounded text-[#161616]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="quick">Quick mode (auto)</SelectItem>
+                            <SelectItem value="select">Select mode (brush)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <p className="text-[10px] text-[#6E6E6E]">
+                        {removeBgMode === "quick"
+                          ? "Automatically keeps the most prominent subject and drops the rest to transparency."
+                          : "Use the brush in the preview above to paint the area you want to keep, then run the tool."}
+                      </p>
+                      {removeBgMode === "select" && !removeBgMask && (
+                        <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded px-2 py-1">
+                          Paint the keep-area in the preview before running Select mode.
+                        </div>
+                      )}
+                      <Button
+                        className="w-full h-8 text-[11px] rounded-lg gap-1.5"
+                        size="sm"
+                        disabled={
+                          isRemoveBgProcessing ||
+                          (removeBgMode === "select" && !removeBgMask)
+                        }
+                        onClick={handleRemoveBackground}
+                      >
+                        {isRemoveBgProcessing ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <Scissors className="w-3 h-3" />
+                            Remove background
+                          </>
+                        )}
+                      </Button>
+                      {removeBgPreview && (
+                        <div className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-100 rounded px-2 py-1">
+                          Preview ready in the editor above — apply or cancel there.
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

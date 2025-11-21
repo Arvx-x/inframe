@@ -10,6 +10,8 @@ import { Button } from "@/app/components/ui/button";
 import { FabricObject, Rect as FabricRect, Pattern } from "fabric";
 import { toast } from "sonner";
 import { ArtboardEditSpace } from "@/app/components/ArtboardEditSpace";
+import { createFabricObjects } from "@/app/utils/createFabricObject";
+import { useProjectColors } from "@/app/contexts/ProjectColorsContext";
 
 interface ArtboardPropertiesData {
   x: number;
@@ -40,6 +42,7 @@ export const ArtboardProperties = ({
   onDelete,
   onCanvasCommand
 }: ArtboardPropertiesProps) => {
+  const { addColors } = useProjectColors();
   const [activeTool, setActiveTool] = useState<"backgroundGenerator" | "layoutAssistant" | "designDna" | null>(null);
   const [backgroundPrompt, setBackgroundPrompt] = useState("");
   const [layoutPrompt, setLayoutPrompt] = useState("");
@@ -216,16 +219,51 @@ export const ArtboardProperties = ({
   };
 
   // Handle Design DNA
+  type ArtboardWithDesignDna = FabricRect & {
+    isArtboard?: boolean;
+    designDnaImage?: string | null;
+    designDnaResult?: any;
+  };
+
+  const getCurrentArtboard = (): ArtboardWithDesignDna | null => {
+    if (selectedObject instanceof FabricRect && (selectedObject as any).isArtboard) {
+      return selectedObject as ArtboardWithDesignDna;
+    }
+    return null;
+  };
+
+  const currentArtboard = getCurrentArtboard();
+
+  const persistDesignDnaState = (image: string | null, result: any) => {
+    if (currentArtboard) {
+      currentArtboard.designDnaImage = image;
+      currentArtboard.designDnaResult = result;
+    }
+  };
+
   const [designImage, setDesignImage] = useState<string | null>(null);
   const [designDnaResult, setDesignDnaResult] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  useEffect(() => {
+    if (!currentArtboard) {
+      setDesignImage(null);
+      setDesignDnaResult(null);
+      return;
+    }
+
+    setDesignImage(currentArtboard.designDnaImage || null);
+    setDesignDnaResult(currentArtboard.designDnaResult || null);
+  }, [currentArtboard]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setDesignImage(e.target?.result as string);
+        const uploadedImage = e.target?.result as string;
+        setDesignImage(uploadedImage);
+        persistDesignDnaState(uploadedImage, designDnaResult);
       };
       reader.readAsDataURL(file);
     }
@@ -282,7 +320,13 @@ export const ArtboardProperties = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           image: designImage,
-          artboardObjects: containedObjects
+          artboardObjects: containedObjects,
+          artboardDimensions: {
+            width: Math.round(artboard.getScaledWidth()),
+            height: Math.round(artboard.getScaledHeight()),
+            left: artboardBounds.left,
+            top: artboardBounds.top
+          }
         })
       });
 
@@ -293,6 +337,7 @@ export const ArtboardProperties = ({
       const data = await res.json();
       if (data.success) {
         setDesignDnaResult(data.data);
+        persistDesignDnaState(designImage, data.data);
         toast.success("Design DNA extracted! Previewing changes...");
       } else {
         throw new Error(data.error || "Failed to analyze");
@@ -305,32 +350,7 @@ export const ArtboardProperties = ({
     }
   };
 
-  const handleApplyDesign = () => {
-    if (!designDnaResult || !canvas) return;
 
-    try {
-      const allObjects = canvas.getObjects();
-
-      // Apply modifications
-      if (designDnaResult.modifications) {
-        designDnaResult.modifications.forEach((mod: any) => {
-          const obj = allObjects.find((o: any) => o.id === mod.id);
-          if (obj) {
-            const { id, ...props } = mod;
-            obj.set(props);
-          }
-        });
-      }
-
-      canvas.renderAll();
-      toast.success("Design applied!");
-      setDesignDnaResult(null);
-      setDesignImage(null);
-    } catch (error) {
-      console.error('Error applying design:', error);
-      toast.error("Failed to apply design");
-    }
-  };
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-white">
@@ -342,7 +362,6 @@ export const ArtboardProperties = ({
               tool={activeTool}
               selectedObject={selectedObject}
               canvas={canvas}
-              onBackgroundGenerated={handleApplyDesign} // Reusing for now, or add new prop
               generatedBackgroundUrl={generatedBackgroundUrl}
               designDnaResult={designDnaResult}
             />
@@ -484,6 +503,7 @@ export const ArtboardProperties = ({
                               onClick={() => {
                                 setDesignImage(null);
                                 setDesignDnaResult(null);
+                                persistDesignDnaState(null, null);
                               }}
                               className="absolute top-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                             >
@@ -492,22 +512,98 @@ export const ArtboardProperties = ({
                           </div>
 
                           {designDnaResult ? (
-                            <div className="flex gap-1.5">
-                              <Button
-                                onClick={handleApplyDesign}
-                                className="flex-1 h-8 text-[11px] rounded-lg"
-                                size="sm"
-                              >
-                                Apply Design
-                              </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => setDesignDnaResult(null)}
-                                className="h-8 text-[11px] rounded-lg"
-                                size="sm"
-                              >
-                                Cancel
-                              </Button>
+                            <div className="space-y-3">
+                              {/* Color Palette Section */}
+                              {designDnaResult.colors && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-medium text-[#161616]">Color Palette</span>
+                                    <Button
+                                      onClick={() => {
+                                        if (designDnaResult.colors?.palette) {
+                                          addColors(designDnaResult.colors.palette);
+                                          toast.success(`Added ${designDnaResult.colors.palette.length} colors to project palette!`);
+                                        }
+                                      }}
+                                      size="sm"
+                                      className="h-6 text-[10px] px-2"
+                                    >
+                                      Apply
+                                    </Button>
+                                  </div>
+                                  <div className="grid grid-cols-4 gap-1.5">
+                                    {designDnaResult.colors.palette?.slice(0, 8).map((color: string, index: number) => (
+                                      <div key={index} className="flex flex-col items-center gap-1">
+                                        <div
+                                          className="w-full aspect-square rounded border border-[#E5E5E5]"
+                                          style={{ backgroundColor: color }}
+                                          title={color}
+                                        />
+                                        <span className="text-[9px] text-[#6E6E6E] font-mono">{color}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {designDnaResult.colors.primary && (
+                                    <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="w-4 h-4 rounded border border-[#E5E5E5]" style={{ backgroundColor: designDnaResult.colors.primary }} />
+                                        <span className="text-[#6E6E6E]">Primary</span>
+                                      </div>
+                                      {designDnaResult.colors.secondary && (
+                                        <div className="flex items-center gap-1.5">
+                                          <div className="w-4 h-4 rounded border border-[#E5E5E5]" style={{ backgroundColor: designDnaResult.colors.secondary }} />
+                                          <span className="text-[#6E6E6E]">Secondary</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Typography Section */}
+                              {designDnaResult.typography && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-medium text-[#161616]">Typography</span>
+                                    <Button
+                                      onClick={() => {
+                                        // TODO: Apply typography
+                                        toast.success("Typography applied!");
+                                      }}
+                                      size="sm"
+                                      className="h-6 text-[10px] px-2"
+                                    >
+                                      Apply
+                                    </Button>
+                                  </div>
+                                  <div className="space-y-1">
+                                    {designDnaResult.typography.fonts?.slice(0, 3).map((font: any, index: number) => (
+                                      <div key={index} className="flex items-center justify-between px-2 py-1.5 bg-white rounded border border-[#E5E5E5]">
+                                        <div className="flex flex-col">
+                                          <span className="text-[11px] font-medium text-[#161616]">{font.family}</span>
+                                          <span className="text-[9px] text-[#6E6E6E]">{font.usage} • {font.weight}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Action buttons */}
+                              <div className="flex gap-1.5 pt-1">
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setDesignDnaResult(null);
+                                    setDesignImage(null);
+                                    persistDesignDnaState(null, null);
+                                  }}
+                                  className="flex-1 h-7 text-[10px] rounded-lg"
+                                  size="sm"
+                                >
+                                  Clear
+                                </Button>
+                              </div>
                             </div>
                           ) : (
                             <Button
@@ -519,19 +615,19 @@ export const ArtboardProperties = ({
                               {isAnalyzing ? (
                                 <>
                                   <Loader2 className="w-3 h-3 animate-spin" />
-                                  Analyzing DNA...
+                                  Extracting DNA...
                                 </>
                               ) : (
                                 <>
                                   <Sparkles className="w-3 h-3" />
-                                  Analyze & Apply
+                                  Extract Design DNA
                                 </>
                               )}
                             </Button>
                           )}
                           {designDnaResult?.isPhotorealistic && (
                             <div className="text-[10px] text-amber-600 bg-amber-50 px-2 py-1.5 rounded border border-amber-100">
-                              Warning: This image looks photorealistic. Design extraction might be less accurate for UI elements.
+                              Note: Photorealistic image detected. Extraction may vary.
                             </div>
                           )}
                         </div>

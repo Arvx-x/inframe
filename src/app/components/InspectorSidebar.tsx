@@ -185,12 +185,12 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
 
     if (updates.x !== undefined) selectedObject.set({ left: updates.x });
     if (updates.y !== undefined) selectedObject.set({ top: updates.y });
-    
+
     if (updates.width !== undefined) {
       const currentWidth = selectedObject.getScaledWidth();
       const scale = updates.width / (selectedObject.width || 1);
       selectedObject.set({ scaleX: scale });
-      
+
       if (lockAspectRatio) {
         const newHeight = updates.width / aspectRatio;
         const scaleY = newHeight / (selectedObject.height || 1);
@@ -198,12 +198,12 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         setProperties(prev => ({ ...prev, height: Math.round(newHeight) }));
       }
     }
-    
+
     if (updates.height !== undefined && !lockAspectRatio) {
       const scale = updates.height / (selectedObject.height || 1);
       selectedObject.set({ scaleY: scale });
     }
-    
+
     if (updates.rotation !== undefined) selectedObject.set({ angle: updates.rotation });
     if (updates.opacity !== undefined) selectedObject.set({ opacity: updates.opacity / 100 });
     if (updates.fill !== undefined) selectedObject.set({ fill: updates.fill });
@@ -213,12 +213,12 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     if (updates.cornerRadius !== undefined && (selectedObject instanceof FabricRect)) {
       selectedObject.set({ rx: updates.cornerRadius, ry: updates.cornerRadius });
     }
-    
+
     if (updates.radius !== undefined && (selectedObject instanceof FabricCircle)) {
       const scale = updates.radius / ((selectedObject as FabricCircle).radius || 1);
       selectedObject.set({ scaleX: scale, scaleY: scale });
     }
-    
+
     if (selectedObject instanceof FabricTextbox) {
       if (updates.fontSize !== undefined) selectedObject.set({ fontSize: updates.fontSize });
       if (updates.fontFamily !== undefined) selectedObject.set({ fontFamily: updates.fontFamily });
@@ -278,15 +278,15 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
       // Parse ratio and apply aspect ratio constraint
       const [widthRatio, heightRatio] = ratio.split(':').map(Number);
       const targetRatio = widthRatio / heightRatio;
-      
+
       // Calculate new dimensions maintaining aspect ratio
       const currentWidth = selectedObject.getScaledWidth();
       const currentHeight = selectedObject.getScaledHeight();
       const currentRatio = currentWidth / currentHeight;
-      
+
       let newWidth = currentWidth;
       let newHeight = currentHeight;
-      
+
       if (currentRatio > targetRatio) {
         // Current is wider than target, adjust width
         newWidth = currentHeight * targetRatio;
@@ -294,21 +294,21 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         // Current is taller than target, adjust height
         newHeight = currentWidth / targetRatio;
       }
-      
+
       // Apply the new dimensions
       const scaleX = newWidth / (selectedObject.width || 1);
       const scaleY = newHeight / (selectedObject.height || 1);
-      
-      selectedObject.set({ 
-        scaleX, 
+
+      selectedObject.set({
+        scaleX,
         scaleY,
-        lockUniScaling: true 
+        lockUniScaling: true
       });
-      
+
       setLockAspectRatio(true);
       setAspectRatio(targetRatio);
     }
-    
+
     canvas.renderAll();
   };
 
@@ -321,7 +321,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
   const isShape = isRect || isCircle || isLine;
   const isText = selectedObject instanceof FabricTextbox;
   const isArtboard = isRect && (selectedObject as any).isArtboard;
-  
+
   if (!selectedObject || (!isImage && !isShape && !isText && !isPath && !isArtboard)) return null;
 
   return (
@@ -331,7 +331,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         "fixed top-12 right-0 bg-white border-l border-[#E5E5E5] z-50 flex flex-col transition-all duration-300 ease-in-out shadow-lg",
         isResizing && "transition-none"
       )}
-      style={{ 
+      style={{
         height: 'calc(100vh - 48px)',
         width: `${sidebarWidth}px`,
         transform: 'translateX(0)',
@@ -346,7 +346,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
           setIsResizing(true);
         }}
       />
-      
+
       {/* Tabs Header at the very top */}
       <div className="flex items-center justify-between border-b border-[#E5E5E5] bg-white shrink-0">
         <div className="flex">
@@ -397,18 +397,18 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
 
       {/* Scrollable Content Area */}
       <div className={cn(
-        "flex-1 overflow-y-auto overflow-x-hidden",
-        activeTab === "color" 
+        "flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar]:bg-transparent [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[#d4d4d8] [&::-webkit-scrollbar-thumb]:rounded-full",
+        activeTab === "color"
           ? "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           : ""
       )}>
         {/* Color Tab - Shows Colors Component */}
         {activeTab === "color" && (
-          <Colors 
-            selectedObject={selectedObject} 
-            canvas={canvas} 
-            initialColor={properties.fill} 
-            onChangeHex={(hex) => updateObject({ fill: hex })} 
+          <Colors
+            selectedObject={selectedObject}
+            canvas={canvas}
+            initialColor={properties.fill}
+            onChangeHex={(hex) => updateObject({ fill: hex })}
           />
         )}
 
@@ -416,7 +416,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
         {activeTab !== "color" && (
           <>
             {isArtboard ? (
-              <ArtboardProperties 
+              <ArtboardProperties
                 selectedObject={selectedObject}
                 canvas={canvas}
                 properties={properties}
@@ -426,7 +426,7 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
                 onCanvasCommand={onCanvasCommand}
               />
             ) : isImage ? (
-              <Properties 
+              <Properties
                 selectedObject={selectedObject}
                 canvas={canvas}
                 properties={properties}

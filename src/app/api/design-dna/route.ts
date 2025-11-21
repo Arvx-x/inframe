@@ -9,7 +9,7 @@ if (!INFRAME_API_KEY) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { image, artboardObjects } = body;
+        const { image, artboardObjects, artboardDimensions } = body;
 
         if (!image) {
             return NextResponse.json({ success: false, error: "Image is required" }, { status: 400 });
@@ -19,40 +19,89 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: "Artboard objects are required" }, { status: 400 });
         }
 
-        // System prompt for Design DNA extraction and application
-        const systemPrompt = `You are an expert Design Director AI. Analyze the uploaded design image (which could be a UI, logo, poster, or graphic design) to extract its 'Design DNA'. This includes the color palette, typography style (serif/sans/display), layout structure, visual hierarchy, spacing, and decorative elements.
+        // NEW: Extract design system and reusable elements
+        const systemPrompt = `You are an expert Design Director AI that extracts reusable design systems and elements from reference images.
 
-Then, apply this Design DNA to the provided list of artboard objects.
+Your task is to analyze an uploaded design image and extract:
+1. **Color Palette**: All significant colors used
+2. **Typography**: Font families, weights, and usage patterns
+3. **Reusable Elements**: Shapes, text styles, and decorative objects that can be reused
 
-- For Logos: Focus on shape simplification, bold typography, and iconic color usage.
-- For Posters: Focus on strong hierarchy, dramatic typography, and balanced composition.
-- For UI: Focus on consistency, readability, and grid alignment.
+DO NOT try to modify existing artboard objects. Instead, extract standalone, reusable design elements.
 
-Input Data:
-- Image: The visual reference.
-- Artboard Objects: A JSON list of current objects on the canvas (rectangles, text, etc.) with their properties.
+RESPONSE FORMAT (JSON only, no markdown):
+{
+  "designType": "poster|logo|ui|card|banner|illustration|document|other",
+  "isPhotorealistic": boolean,
+  "colors": {
+    "palette": ["#hex1", "#hex2", ...],  // All significant colors (max 8)
+    "primary": "#hex",
+    "secondary": "#hex", 
+    "background": "#hex",
+    "text": "#hex"
+  },
+  "typography": {
+    "fonts": [
+      {"family": "Arial|Helvetica|Georgia|serif|sans-serif|monospace", "weight": "normal|bold|600|700", "usage": "heading|body|caption"},
+      ...
+    ],
+    "primaryFont": "FontName",
+    "secondaryFont": "FontName"
+  },
+  "elements": [
+    {
+      "id": "elem-1",
+      "name": "Descriptive name (e.g., 'Large Circle Badge', 'Heading Text Style')",
+      "type": "rect|circle|ellipse|triangle|line|text|polygon",
+      "width": number,
+      "height": number,
+      "properties": {
+        // For shapes: fill, stroke, strokeWidth, radius, borderRadius, opacity
+        // For text: text, fontSize, fontFamily, fontWeight, fill, textAlign
+        // All properties needed to recreate this element
+      }
+    }
+  ]
+}
 
-Your Task:
-1. Analyze the image style.
-2. Map this style to the provided artboard objects.
-3. Return a JSON object with:
-   - modifications: An array of updates for existing objects. Each update must include the 'id' of the object and the properties to change (e.g., fill, stroke, fontFamily, fontSize, left, top, width, height, opacity).
-   - additions: An array of new objects to add to complete the design (e.g., decorative shapes, background elements). Each addition should have a 'type' (rect, text, circle, etc.) and all necessary properties including 'id' (generate a new unique id).
-   - isPhotorealistic: Boolean, true if the image is a raw photo (e.g. nature, people) rather than a design artifact.
-   - designSystem: Object describing the extracted style (colors, fonts, mood).
+ELEMENT EXTRACTION GUIDELINES:
+- Extract 5-10 reusable elements from the design
+- PRIORITIZE: Vector paths, geometric shapes, and distinctive text styles
+- Include a mix of:
+  * Basic shapes (circles, rects, triangles)
+  * Complex shapes (polygons, stars)
+  * Text styles (headings, quotes)
+  * Decorative elements (lines, dividers, badges)
+- Each element should be standalone and reusable
+- Include exact properties needed to recreate the element
+- For text elements, use representative sample text like "Headline" or "Body Text"
+- Make elements canvas-ready (100-300px in size typically)
 
-IMPORTANT:
-- Do not change the 'id' of existing objects.
-- Ensure text is readable against the background.
-- Maintain the relative content of text objects unless it's clearly placeholder.
-- Return ONLY valid JSON.
+COLOR EXTRACTION:
+- Extract main colors (not every single color)
+- Identify primary (most prominent), secondary, background, and text colors
+- Return hex format only (#RRGGBB)
+
+TYPOGRAPHY EXTRACTION:
+- Identify font categories (serif, sans-serif, monospace, display)
+- Note weight and typical usage (heading vs body)
+- If you can identify specific fonts (Arial, Helvetica, Georgia), include them
+
+CRITICAL:
+- Return ONLY valid JSON
+- No markdown, no code blocks, no explanations
+- All elements must be self-contained and reusable
 `;
 
         const prompt = `
-Artboard Objects:
-${JSON.stringify(artboardObjects, null, 2)}
+Analyze this reference image and extract:
+1. The color palette (primary, secondary, background, text colors)
+2. Typography system (fonts and their usage)
+3. 5-10 reusable design elements (focus on vector paths, shapes, and text styles)
 
-Analyze the image and apply its design DNA to these objects.
+Each element should be a standalone, reusable component that a designer can add to their canvas.
+
+Return the JSON response with colors, typography, and elements arrays.
 `;
 
         // Call Gemini API (gemini-3-pro-preview)
