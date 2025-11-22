@@ -1,8 +1,9 @@
 import { getSupabaseServerClient } from '@/app/lib/supabase-server';
+import { getURL } from '@/app/lib/url-helpers';
 import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {
-    const { searchParams, origin } = new URL(request.url);
+    const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
     const next = searchParams.get('next') ?? '/';
 
@@ -11,19 +12,13 @@ export async function GET(request: Request) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
 
         if (!error) {
-            const forwardedHost = request.headers.get('x-forwarded-host');
-            const isLocalEnv = process.env.NODE_ENV === 'development';
-
-            if (isLocalEnv) {
-                return NextResponse.redirect(`${origin}${next}`);
-            } else if (forwardedHost) {
-                return NextResponse.redirect(`https://${forwardedHost}${next}`);
-            } else {
-                return NextResponse.redirect(`${origin}${next}`);
-            }
+            // Use getURL() to get the correct base URL for the environment
+            const baseUrl = getURL().replace(/\/$/, ''); // Remove trailing slash
+            return NextResponse.redirect(`${baseUrl}${next}`);
         }
     }
 
     // Return the user to an error page with some instructions
-    return NextResponse.redirect(`${origin}/auth/auth-code-error`);
+    const baseUrl = getURL().replace(/\/$/, ''); // Remove trailing slash
+    return NextResponse.redirect(`${baseUrl}/auth/auth-code-error`);
 }

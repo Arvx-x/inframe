@@ -1,6 +1,7 @@
 // Authentication helper functions
 import { getSupabaseBrowserClient } from './supabase-client';
 import type { Provider } from '@supabase/supabase-js';
+import { getCallbackURL, getURL } from './url-helpers';
 
 export interface SignUpData {
     email: string;
@@ -54,7 +55,7 @@ export async function signInWithProvider(provider: Provider) {
     const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-            redirectTo: `${window.location.origin}/auth/callback`,
+            redirectTo: getCallbackURL(),
         },
     });
 
@@ -103,7 +104,7 @@ export async function resetPassword(email: string) {
     const supabase = getSupabaseBrowserClient();
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+        redirectTo: `${getURL()}auth/reset-password`,
     });
 
     if (error) {

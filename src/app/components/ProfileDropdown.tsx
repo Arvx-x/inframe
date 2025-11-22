@@ -70,7 +70,7 @@ export function ProfileDropdown() {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                    <Link href="/dashboard" className="cursor-pointer">
+                    <Link href="/" className="cursor-pointer">
                         <FolderOpen className="mr-2 h-4 w-4" />
                         <span>My Projects</span>
                     </Link>
