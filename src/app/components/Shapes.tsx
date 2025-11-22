@@ -3,7 +3,7 @@ import {
   Square, Circle, Minus, RotateCw, Droplet, 
   AlignCenter, Lock, Eye, EyeOff, Plus, 
   HelpCircle, ChevronDown, FlipHorizontal, FlipVertical,
-  Link, Grid3x3, X, Layers, Sparkles, Trash2, Move, Maximize, Box
+  Link, Grid3x3, X, Layers, Sparkles, Trash2, Move, Maximize, Box, CornerDownRight
 } from "lucide-react";
 import { Input } from "@/app/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
@@ -175,7 +175,7 @@ export const Shapes = ({
             </div>
           </div>
 
-          {/* Rotation with flip icons */}
+          {/* Rotation with corner radius */}
           <div className="flex items-center gap-2">
             <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
               <RotateCw className="w-3 h-3 text-[#6E6E6E] ml-2" />
@@ -183,18 +183,27 @@ export const Shapes = ({
                 type="number"
                 value={Math.round(properties.rotation)}
                 onChange={(e) => updateObject({ rotation: Number(e.target.value) })}
-                className="h-7 w-16 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
+                className="h-7 w-14 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
                 placeholder="0"
                 style={{ fontSize: '13px' }}
               />
               <span className="text-[11px] text-[#6E6E6E] pr-2">°</span>
             </div>
-            <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
-              <FlipHorizontal className="w-4.5 h-4.5 text-[#6E6E6E]" />
-            </button>
-            <button className="w-8 h-8 flex items-center justify-center border border-[#E5E5E5] rounded hover:bg-[#F0F0F0] transition-colors">
-              <FlipVertical className="w-4.5 h-4.5 text-[#6E6E6E]" />
-            </button>
+            {isRect && (
+              <div className="flex items-center border border-[#E5E5E5] rounded hover:border-[#D1D1D1] focus-within:border-[#18A0FB] transition-colors bg-white">
+                <CornerDownRight className="w-3 h-3 text-[#6E6E6E] ml-2" />
+                <Input
+                  type="number"
+                  value={Math.round(properties.cornerRadius || 0)}
+                  onChange={(e) => updateObject({ cornerRadius: Number(e.target.value) })}
+                  className="h-7 w-12 bg-transparent border-0 focus:border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono px-1.5 py-0.5 text-[#161616]"
+                  placeholder="0"
+                  min={0}
+                  style={{ fontSize: '13px' }}
+                />
+                <span className="text-[11px] text-[#6E6E6E] pr-2">px</span>
+              </div>
+            )}
           </div>
         </div>
 
