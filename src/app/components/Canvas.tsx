@@ -317,7 +317,8 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'png' | 'jpg' | 'svg'>('png');
-  const [exportType, setExportType] = useState<'canvas' | 'artboard'>('canvas');
+  const [exportType, setExportType] = useState<'canvas' | 'artboard' | 'selected'>('canvas');
+  const [exportPreview, setExportPreview] = useState<string | null>(null);
   const isDrawingShapeRef = useRef(false);
   const isDrawingTextRef = useRef(false);
   const isDrawingArtboardRef = useRef(false);
@@ -1788,13 +1789,216 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     });
   };
 
-  const handleExport = (format: 'png' | 'jpg' | 'svg', exportType: 'canvas' | 'artboard') => {
+  const handleExport = (format: 'png' | 'jpg' | 'svg', exportType: 'canvas' | 'artboard' | 'selected') => {
     if (!fabricCanvas) return;
 
     let dataURL: string;
     let filename: string;
     const timestamp = Date.now();
     const multiplier = 4; // Ultra high quality export (4x resolution)
+
+    // Handle selected image or artboard export
+    if (exportType === 'selected') {
+      if (!selectedObject) {
+        toast.error("No object selected");
+        return;
+      }
+
+      const isSelectedImage = selectedObject instanceof FabricImage;
+      const isSelectedArtboard = selectedObject instanceof FabricRect && (selectedObject as any).isArtboard;
+
+      if (!isSelectedImage && !isSelectedArtboard) {
+        toast.error("Selected object is not an image or artboard");
+        return;
+      }
+
+      // Export selected image
+      if (isSelectedImage) {
+        try {
+          const image = selectedObject as FabricImage;
+          const bounds = image.getBoundingRect();
+          
+          if (format === 'svg') {
+            // Export image as SVG
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = bounds.width;
+            tempCanvas.height = bounds.height;
+            const tempFabricCanvas = new FabricCanvas(tempCanvas, {
+              width: bounds.width,
+              height: bounds.height,
+              backgroundColor: '#ffffff',
+            });
+
+            // Clone the image and position it
+            image.clone().then((cloned: any) => {
+              cloned.set({
+                left: 0,
+                top: 0,
+              });
+              cloned.setCoords();
+              tempFabricCanvas.add(cloned);
+              tempFabricCanvas.renderAll();
+
+              const svgString = tempFabricCanvas.toSVG();
+              filename = `image-export-${timestamp}.svg`;
+              const blob = new Blob([svgString], { type: 'image/svg+xml' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.download = filename;
+              link.href = url;
+              link.click();
+              URL.revokeObjectURL(url);
+
+              tempFabricCanvas.dispose();
+              toast.success("Image exported!");
+            }).catch((error) => {
+              console.error("Error during SVG export:", error);
+              toast.error("Failed to export image. Please try again.");
+              tempFabricCanvas.dispose();
+            });
+          } else {
+            // Store original background
+            const originalBg = fabricCanvas.backgroundColor as string | undefined;
+            
+            // Temporarily set white background if needed
+            if (!originalBg || originalBg === 'transparent') {
+              fabricCanvas.backgroundColor = '#ffffff';
+              fabricCanvas.renderAll();
+            }
+
+            // Export with high quality
+            dataURL = fabricCanvas.toDataURL({
+              format: format === 'jpg' ? 'jpeg' : 'png',
+              quality: 1,
+              multiplier: multiplier,
+              left: bounds.left,
+              top: bounds.top,
+              width: bounds.width,
+              height: bounds.height,
+            });
+
+            filename = `image-export-${timestamp}.${format === 'jpg' ? 'jpg' : 'png'}`;
+
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = dataURL;
+            link.click();
+
+            // Restore original background
+            fabricCanvas.backgroundColor = originalBg || 'transparent';
+            fabricCanvas.renderAll();
+
+            toast.success("Image exported!");
+          }
+        } catch (error) {
+          console.error("Error during image export:", error);
+          toast.error("Failed to export image. Please try again.");
+        }
+        return;
+      }
+
+      // Export selected artboard
+      if (isSelectedArtboard) {
+        const artboard = selectedObject as FabricRect;
+        const artboardBounds = artboard.getBoundingRect();
+
+        try {
+          // Create a temporary canvas with exact artboard dimensions
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = artboardBounds.width * multiplier;
+          tempCanvas.height = artboardBounds.height * multiplier;
+          const tempCtx = tempCanvas.getContext('2d');
+          
+          if (!tempCtx) {
+            toast.error("Failed to create export canvas");
+            return;
+          }
+
+          // Set background (use artboard fill if available, otherwise white)
+          const artboardFill = (artboard as any).fill;
+          if (artboardFill && typeof artboardFill === 'string') {
+            tempCtx.fillStyle = artboardFill;
+          } else {
+            tempCtx.fillStyle = '#ffffff';
+          }
+          tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+          // Get all objects that are within or overlap the artboard
+          const allObjects = fabricCanvas.getObjects();
+          const objectsInArtboard = allObjects.filter((obj: any) => {
+            if (obj === artboard) return false; // Skip the artboard itself
+            const objBounds = obj.getBoundingRect();
+            // Check if object overlaps with artboard bounds
+            return !(objBounds.left + objBounds.width < artboardBounds.left ||
+              objBounds.left > artboardBounds.left + artboardBounds.width ||
+              objBounds.top + objBounds.height < artboardBounds.top ||
+              objBounds.top > artboardBounds.top + artboardBounds.height);
+          });
+
+          // Create a temporary fabric canvas for rendering
+          const tempFabricCanvas = new FabricCanvas(tempCanvas, {
+            width: artboardBounds.width,
+            height: artboardBounds.height,
+            backgroundColor: artboardFill && typeof artboardFill === 'string' ? artboardFill : '#ffffff',
+          });
+
+          // Clone and position objects relative to artboard
+          const clonePromises = objectsInArtboard.map((obj: any) => {
+            return obj.clone().then((cloned: any) => {
+              cloned.set({
+                left: (cloned.left || 0) - artboardBounds.left,
+                top: (cloned.top || 0) - artboardBounds.top,
+              });
+              cloned.setCoords();
+              return cloned;
+            });
+          });
+
+          // Capture format in a const to preserve type in nested callbacks
+          const exportFormat: 'png' | 'jpg' | 'svg' = format;
+          Promise.all(clonePromises).then((clones) => {
+            clones.forEach((clone) => tempFabricCanvas.add(clone));
+            tempFabricCanvas.renderAll();
+
+            // Export with high quality
+            if (exportFormat === 'svg') {
+              const svgString = tempFabricCanvas.toSVG();
+              filename = `artboard-export-${timestamp}.svg`;
+              const blob = new Blob([svgString], { type: 'image/svg+xml' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.download = filename;
+              link.href = url;
+              link.click();
+              URL.revokeObjectURL(url);
+            } else {
+              dataURL = tempFabricCanvas.toDataURL({
+                format: exportFormat === 'jpg' ? 'jpeg' : 'png',
+                quality: 1,
+                multiplier: multiplier,
+              });
+              filename = `artboard-export-${timestamp}.${exportFormat === 'jpg' ? 'jpg' : 'png'}`;
+              const link = document.createElement('a');
+              link.download = filename;
+              link.href = dataURL;
+              link.click();
+            }
+
+            // Clean up
+            tempFabricCanvas.dispose();
+            toast.success("Artboard exported!");
+          }).catch((error) => {
+            console.error("Error during artboard export:", error);
+            toast.error("Failed to export artboard. Please try again.");
+            tempFabricCanvas.dispose();
+          });
+        } catch (error) {
+          console.error("Error during artboard export:", error);
+          toast.error("Failed to export artboard. Please try again.");
+        }
+        return;
+      }
+    }
 
     // Handle SVG export
     if (format === 'svg') {
@@ -1832,10 +2036,11 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           const tempCanvas = document.createElement('canvas');
           tempCanvas.width = artboardBounds.width;
           tempCanvas.height = artboardBounds.height;
+          const artboardFill = (artboard as any).fill;
           const tempFabricCanvas = new FabricCanvas(tempCanvas, {
             width: artboardBounds.width,
             height: artboardBounds.height,
-            backgroundColor: fabricCanvas.backgroundColor || '#ffffff',
+            backgroundColor: artboardFill && typeof artboardFill === 'string' ? artboardFill : (fabricCanvas.backgroundColor || '#ffffff'),
           });
 
           // Clone and position objects relative to artboard
@@ -1903,6 +2108,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
 
     if (exportType === 'artboard') {
       // Export artboard with all objects on it
+      // Note: SVG export for artboards is handled earlier in the function
       const artboards = getArtboards();
       if (artboards.length === 0) {
         toast.error("No artboard found on canvas");
@@ -1915,45 +2121,87 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         selectedObject instanceof FabricImage
       );
       const artboard = selectedIsArtboard ? selectedObject : artboards[0];
-
-      // Get artboard bounding box
       const artboardBounds = artboard.getBoundingRect();
 
-      // Use Fabric's built-in cropping to export just the artboard region
-      // This includes everything rendered within that region
       try {
-        // Store original background
-        const originalBg = fabricCanvas.backgroundColor as string | undefined;
-
-        // Temporarily set white background if needed
-        if (!originalBg || originalBg === 'transparent') {
-          fabricCanvas.backgroundColor = '#ffffff';
-          fabricCanvas.renderAll();
+        // Create a temporary canvas with exact artboard dimensions
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = artboardBounds.width * multiplier;
+        tempCanvas.height = artboardBounds.height * multiplier;
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        if (!tempCtx) {
+          toast.error("Failed to create export canvas");
+          return;
         }
 
-        // Export the cropped region with ultra high quality
-        dataURL = fabricCanvas.toDataURL({
-          format: format === 'jpg' ? 'jpeg' : 'png',
-          quality: 1, // Maximum quality for both PNG and JPG
-          multiplier: multiplier, // 4x resolution
-          left: artboardBounds.left,
-          top: artboardBounds.top,
-          width: artboardBounds.width,
-          height: artboardBounds.height,
+        // Set background (use artboard fill if available, otherwise white)
+        const artboardFill = (artboard as any).fill;
+        if (artboardFill && typeof artboardFill === 'string') {
+          tempCtx.fillStyle = artboardFill;
+        } else {
+          tempCtx.fillStyle = '#ffffff';
+        }
+        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+        // Get all objects that are within or overlap the artboard
+        const allObjects = fabricCanvas.getObjects();
+        const objectsInArtboard = allObjects.filter((obj: any) => {
+          if (obj === artboard) return false; // Skip the artboard itself
+          const objBounds = obj.getBoundingRect();
+          // Check if object overlaps with artboard bounds
+          return !(objBounds.left + objBounds.width < artboardBounds.left ||
+            objBounds.left > artboardBounds.left + artboardBounds.width ||
+            objBounds.top + objBounds.height < artboardBounds.top ||
+            objBounds.top > artboardBounds.top + artboardBounds.height);
         });
 
-        filename = `artboard-export-${timestamp}.${format === 'jpg' ? 'jpg' : 'png'}`;
+        // Create a temporary fabric canvas for rendering
+        const tempFabricCanvas = new FabricCanvas(tempCanvas, {
+          width: artboardBounds.width,
+          height: artboardBounds.height,
+          backgroundColor: artboardFill && typeof artboardFill === 'string' ? artboardFill : '#ffffff',
+        });
 
-        const link = document.createElement('a');
-        link.download = filename;
-        link.href = dataURL;
-        link.click();
+        // Clone and position objects relative to artboard
+        const clonePromises = objectsInArtboard.map((obj: any) => {
+          return obj.clone().then((cloned: any) => {
+            cloned.set({
+              left: (cloned.left || 0) - artboardBounds.left,
+              top: (cloned.top || 0) - artboardBounds.top,
+            });
+            cloned.setCoords();
+            return cloned;
+          });
+        });
 
-        // Restore original background
-        fabricCanvas.backgroundColor = originalBg || 'transparent';
-        fabricCanvas.renderAll();
+        // Capture format in a const to preserve type in nested callbacks
+        // At this point, format can only be 'png' | 'jpg' because SVG is handled earlier
+        const exportFormat: 'png' | 'jpg' = format as 'png' | 'jpg';
+        Promise.all(clonePromises).then((clones) => {
+          clones.forEach((clone) => tempFabricCanvas.add(clone));
+          tempFabricCanvas.renderAll();
 
-        toast.success("Artboard exported!");
+          // Export with high quality (PNG or JPG only, SVG handled earlier)
+          dataURL = tempFabricCanvas.toDataURL({
+            format: exportFormat === 'jpg' ? 'jpeg' : 'png',
+            quality: 1,
+            multiplier: multiplier,
+          });
+          filename = `artboard-export-${timestamp}.${exportFormat === 'jpg' ? 'jpg' : 'png'}`;
+          const link = document.createElement('a');
+          link.download = filename;
+          link.href = dataURL;
+          link.click();
+
+          // Clean up
+          tempFabricCanvas.dispose();
+          toast.success("Artboard exported!");
+        }).catch((error) => {
+          console.error("Error during artboard export:", error);
+          toast.error("Failed to export artboard. Please try again.");
+          tempFabricCanvas.dispose();
+        });
       } catch (error) {
         console.error("Error during artboard export:", error);
         toast.error("Failed to export artboard. Please try again.");
@@ -1988,13 +2236,63 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     }
   };
 
+  // Generate preview for selected image/artboard
+  const generateExportPreview = () => {
+    if (!fabricCanvas) {
+      setExportPreview(null);
+      return;
+    }
+
+    // Check if there's a selected image or artboard
+    const isSelectedImage = selectedObject instanceof FabricImage;
+    const isSelectedArtboard = selectedObject instanceof FabricRect && (selectedObject as any).isArtboard;
+    
+    if (isSelectedImage || isSelectedArtboard) {
+      try {
+        const bounds = selectedObject.getBoundingRect();
+        const previewMultiplier = 2; // Lower multiplier for preview to keep it fast
+        
+        // Generate preview
+        const previewDataURL = fabricCanvas.toDataURL({
+          format: 'png',
+          quality: 0.9,
+          multiplier: previewMultiplier,
+          left: bounds.left,
+          top: bounds.top,
+          width: bounds.width,
+          height: bounds.height,
+        });
+        
+        setExportPreview(previewDataURL);
+      } catch (error) {
+        console.error("Error generating preview:", error);
+        setExportPreview(null);
+      }
+    } else {
+      setExportPreview(null);
+    }
+  };
+
   const handleExportClick = () => {
+    // Determine export type based on selection
+    const isSelectedImage = selectedObject instanceof FabricImage;
+    const isSelectedArtboard = selectedObject instanceof FabricRect && (selectedObject as any).isArtboard;
+    
+    if (isSelectedImage || isSelectedArtboard) {
+      setExportType('selected');
+      generateExportPreview();
+    } else {
+      setExportType('canvas');
+      setExportPreview(null);
+    }
+    
     setIsExportDialogOpen(true);
   };
 
   const handleExportConfirm = () => {
     handleExport(exportFormat, exportType);
     setIsExportDialogOpen(false);
+    setExportPreview(null);
   };
 
   const handleEditComplete = (newImageUrl: string) => {
@@ -2824,8 +3122,13 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       )}
 
       {/* Export Dialog */}
-      <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+      <Dialog open={isExportDialogOpen} onOpenChange={(open) => {
+        setIsExportDialogOpen(open);
+        if (!open) {
+          setExportPreview(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Export</DialogTitle>
             <DialogDescription>
@@ -2833,6 +3136,20 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-6 py-4">
+            {/* Preview */}
+            {exportPreview && (
+              <div className="grid gap-2">
+                <Label className="text-sm font-medium">Preview</Label>
+                <div className="border rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center" style={{ minHeight: '200px', maxHeight: '300px' }}>
+                  <img 
+                    src={exportPreview} 
+                    alt="Export preview" 
+                    className="max-w-full max-h-[300px] object-contain"
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Format Selection */}
             <div className="grid gap-3">
               <Label className="text-sm font-medium">Format</Label>
@@ -2855,7 +3172,15 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             {/* Export Type Selection */}
             <div className="grid gap-3">
               <Label className="text-sm font-medium">Export</Label>
-              <RadioGroup value={exportType} onValueChange={(value) => setExportType(value as 'canvas' | 'artboard')}>
+              <RadioGroup value={exportType} onValueChange={(value) => {
+                const newType = value as 'canvas' | 'artboard' | 'selected';
+                setExportType(newType);
+                if (newType === 'selected') {
+                  generateExportPreview();
+                } else {
+                  setExportPreview(null);
+                }
+              }}>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="canvas" id="canvas" />
                   <Label htmlFor="canvas" className="font-normal cursor-pointer">Entire Canvas</Label>
@@ -2873,11 +3198,22 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
                     Artboard {getArtboards().length === 0 && '(No artboard found)'}
                   </Label>
                 </div>
+                {(selectedObject instanceof FabricImage || (selectedObject instanceof FabricRect && (selectedObject as any).isArtboard)) && (
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="selected" id="selected" />
+                    <Label htmlFor="selected" className="font-normal cursor-pointer">
+                      Selected {selectedObject instanceof FabricImage ? 'Image' : 'Artboard'}
+                    </Label>
+                  </div>
+                )}
               </RadioGroup>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsExportDialogOpen(false)}>
+            <Button variant="outline" onClick={() => {
+              setIsExportDialogOpen(false);
+              setExportPreview(null);
+            }}>
               Cancel
             </Button>
             <Button
