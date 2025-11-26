@@ -10,7 +10,7 @@ import PromptSidebar from "@/app/components/PromptSidebar";
 import Canvas from "@/app/components/Canvas";
 import ColorSelector from "@/app/components/ColorSelector";
 import { Button } from "@/app/components/ui/button";
-import { Share, ArrowLeft } from "lucide-react";
+import { Share, ArrowLeft, PenTool, Image as ImageIcon, Layout } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { ProfileDropdown } from "@/app/components/ProfileDropdown";
 import { toast } from 'sonner';
@@ -36,6 +36,7 @@ function EditorContent() {
   const [canvasColor, setCanvasColor] = useState("#F4F4F6");
   const [canvasData, setCanvasData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeMode, setActiveMode] = useState<'vector' | 'pixel' | 'layout'>('vector');
 
   // Load or create project - optimized for instant loading
   // Allow unsigned users to use canvas without saving
@@ -191,7 +192,7 @@ function EditorContent() {
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 h-12 bg-white border-b border-border z-[100] flex items-center px-4">
         {/* Left: Back Button (only for signed-in users) */}
-        <div className="flex-1 flex items-center">
+        <div className="flex-1 flex items-center gap-4">
           {user && (
             <Button
               variant="ghost"
@@ -203,10 +204,44 @@ function EditorContent() {
               Back
             </Button>
           )}
+
+          {/* Mode Selector */}
+          <div className="flex items-center bg-gray-100 p-1 rounded-full">
+            <button
+              onClick={() => setActiveMode('vector')}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeMode === 'vector'
+                  ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+                }`}
+            >
+              <PenTool className="w-3.5 h-3.5" />
+              Vector
+            </button>
+            <button
+              onClick={() => setActiveMode('pixel')}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeMode === 'pixel'
+                  ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+                }`}
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              Pixel
+            </button>
+            <button
+              onClick={() => setActiveMode('layout')}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeMode === 'layout'
+                  ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+                }`}
+            >
+              <Layout className="w-3.5 h-3.5" />
+              Layout
+            </button>
+          </div>
         </div>
 
         {/* Centered Project Title */}
-        <h1 className="text-sm font-medium text-foreground">{projectName}</h1>
+        <h1 className="text-sm font-medium text-foreground absolute left-1/2 -translate-x-1/2">{projectName}</h1>
 
         {/* Right side controls */}
         <div className="flex-1 flex justify-end gap-2">
