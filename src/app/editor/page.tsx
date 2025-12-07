@@ -6,11 +6,11 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import { getProject, createProject, updateProject, saveCanvas } from '@/app/lib/services/projects.service';
 import { uploadDataURL } from '@/app/lib/services/storage.service';
 import { ProjectColorsProvider } from '@/app/contexts/ProjectColorsContext';
-import PromptSidebar from "@/app/components/PromptSidebar";
+import ChatSidebar from "@/app/components/ChatSidebar";
 import Canvas from "@/app/components/Canvas";
 import ColorSelector from "@/app/components/ColorSelector";
 import { Button } from "@/app/components/ui/button";
-import { Share, ArrowLeft, PenTool, Image as ImageIcon, Layout } from "lucide-react";
+import { Share, ArrowLeft, PenTool, Image as ImageIcon, Layout, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { ProfileDropdown } from "@/app/components/ProfileDropdown";
 import { toast } from 'sonner';
@@ -37,6 +37,12 @@ function EditorContent() {
   const [canvasData, setCanvasData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeMode, setActiveMode] = useState<'vector' | 'pixel' | 'layout'>('vector');
+  const [selectedObject, setSelectedObject] = useState<any>(null);
+  const [fabricCanvasInstance, setFabricCanvasInstance] = useState<any>(null);
+
+  // New layout state
+  const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(300);
 
   // Load or create project - optimized for instant loading
   // Allow unsigned users to use canvas without saving
@@ -191,8 +197,23 @@ function EditorContent() {
     <div className="relative w-full h-screen overflow-hidden bg-white">
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 h-12 bg-white border-b border-border z-[100] flex items-center px-4">
-        {/* Left: Back Button (only for signed-in users) */}
-        <div className="flex-1 flex items-center gap-4">
+        {/* Left: Back Button and Layers Toggle */}
+        <div className="flex-1 flex items-center gap-2">
+          {/* Layers Panel Toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            onClick={() => setIsLeftPanelOpen(!isLeftPanelOpen)}
+            title={isLeftPanelOpen ? "Hide Layers" : "Show Layers"}
+          >
+            {isLeftPanelOpen ? (
+              <PanelLeftClose className="h-4 w-4" />
+            ) : (
+              <PanelLeft className="h-4 w-4" />
+            )}
+          </Button>
+
           {user && (
             <Button
               variant="ghost"
@@ -206,12 +227,12 @@ function EditorContent() {
           )}
 
           {/* Mode Selector */}
-          <div className="flex items-center bg-gray-100 p-1 rounded-full">
+          <div className="flex items-center bg-gray-100 p-1 rounded-full ml-2">
             <button
               onClick={() => setActiveMode('vector')}
               className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeMode === 'vector'
-                  ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
               <PenTool className="w-3.5 h-3.5" />
@@ -220,8 +241,8 @@ function EditorContent() {
             <button
               onClick={() => setActiveMode('pixel')}
               className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeMode === 'pixel'
-                  ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
               <ImageIcon className="w-3.5 h-3.5" />
@@ -230,8 +251,8 @@ function EditorContent() {
             <button
               onClick={() => setActiveMode('layout')}
               className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeMode === 'layout'
-                  ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
               <Layout className="w-3.5 h-3.5" />
@@ -272,51 +293,59 @@ function EditorContent() {
           <ProfileDropdown />
         </div>
       </div>
-      {/* Canvas fills the background below header */}
-      <div className="absolute top-12 left-0 right-0 bottom-0">
-        <Canvas
-          generatedImageUrl={generatedImageUrl}
-          isImagePending={isImagePending}
-          pendingImageRatio={pendingRatio}
-          onClear={handleClear}
-          onCanvasCommandRef={canvasCommandRef}
-          onCanvasHistoryRef={canvasHistoryRef}
-          onHistoryAvailableChange={setHistoryAvailable}
-          onCanvasExportRef={canvasExportRef}
-          onCanvasSaveRef={canvasSaveRef}
-          onCanvasColorRef={canvasColorRef}
-          onCanvasInstanceRef={canvasInstanceRef}
-          initialCanvasColor={canvasColor}
-          initialCanvasData={canvasData}
-        />
-      </div>
 
-      {/* Floating Chat Composer overlay at center-bottom */}
-      <div className="pointer-events-none fixed inset-0 z-10 overflow-visible">
-        <div className="pointer-events-auto fixed bottom-4 left-1/2 -translate-x-1/2 w-[40%] max-w-[600px] overflow-visible">
-          <PromptSidebar
-            onImageGenerated={handleImageGenerated}
-            onImageGenerationPending={(pending, options) => {
-              setIsImagePending(pending);
-              if (pending && options?.ratio) {
-                setPendingRatio(options.ratio);
-              }
-              if (!pending) {
-                setPendingRatio(null);
-              }
-            }}
-            currentImageUrl={generatedImageUrl}
-            onCanvasCommand={handleCanvasCommand}
-            onCanvasUndo={() => canvasHistoryRef.current?.undo()}
-            onCanvasRedo={() => canvasHistoryRef.current?.redo()}
-            showHistoryControls={historyAvailable}
-            onProjectNameUpdate={handleProjectNameUpdate}
+      {/* Main Content Area - below header */}
+      <div className="absolute top-12 left-0 right-0 bottom-0 flex">
+        {/* Canvas Area - takes remaining space */}
+        <div className="flex-1 relative">
+          <Canvas
+            generatedImageUrl={generatedImageUrl}
+            isImagePending={isImagePending}
+            pendingImageRatio={pendingRatio}
+            onClear={handleClear}
+            onCanvasCommandRef={canvasCommandRef}
+            onCanvasHistoryRef={canvasHistoryRef}
+            onHistoryAvailableChange={setHistoryAvailable}
+            onCanvasExportRef={canvasExportRef}
+            onCanvasSaveRef={canvasSaveRef}
+            onCanvasColorRef={canvasColorRef}
+            onCanvasInstanceRef={canvasInstanceRef}
+            initialCanvasColor={canvasColor}
+            initialCanvasData={canvasData}
+            isLayersOpen={isLeftPanelOpen}
+            onLayersOpenChange={setIsLeftPanelOpen}
+            onSelectedObjectChange={setSelectedObject}
+            onCanvasInstanceChange={setFabricCanvasInstance}
           />
+        </div>
+
+        {/* Right Sidebar - Chat */}
+        <div className="absolute right-0 top-14 -bottom-12">
+        <ChatSidebar
+          width={rightSidebarWidth}
+          onWidthChange={setRightSidebarWidth}
+          onImageGenerated={handleImageGenerated}
+          onImageGenerationPending={(pending, options) => {
+            setIsImagePending(pending);
+            if (pending && options?.ratio) {
+              setPendingRatio(options.ratio);
+            }
+            if (!pending) {
+              setPendingRatio(null);
+            }
+          }}
+          currentImageUrl={generatedImageUrl}
+          onCanvasCommand={handleCanvasCommand}
+          onProjectNameUpdate={handleProjectNameUpdate}
+          selectedObject={selectedObject}
+          fabricCanvas={fabricCanvasInstance}
+        />
         </div>
       </div>
     </div>
   );
 }
+
 
 export default function Page() {
   return (

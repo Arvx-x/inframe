@@ -32,6 +32,10 @@ interface CanvasProps {
   onCanvasInstanceRef?: React.MutableRefObject<(() => string | null) | null>;
   initialCanvasColor?: string;
   initialCanvasData?: any;
+  isLayersOpen?: boolean;
+  onLayersOpenChange?: (open: boolean) => void;
+  onSelectedObjectChange?: (object: any) => void;
+  onCanvasInstanceChange?: (canvas: any) => void;
 }
 
 // SVG Path utility functions
@@ -201,7 +205,7 @@ const computeImagePlacement = (
   return { left, top };
 };
 
-export default function Canvas({ generatedImageUrl, isImagePending = false, pendingImageRatio = null, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasSaveRef, onCanvasColorRef, onCanvasInstanceRef, initialCanvasColor = "#F4F4F6", initialCanvasData }: CanvasProps) {
+export default function Canvas({ generatedImageUrl, isImagePending = false, pendingImageRatio = null, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasSaveRef, onCanvasColorRef, onCanvasInstanceRef, initialCanvasColor = "#F4F4F6", initialCanvasData, isLayersOpen: isLayersOpenProp, onLayersOpenChange, onSelectedObjectChange, onCanvasInstanceChange }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [selectedImage, setSelectedImage] = useState<FabricImage | null>(null);
@@ -350,7 +354,16 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [editingPathPoints, setEditingPathPoints] = useState<PathPoint[]>([]);
 
-  const [isLayersOpen, setIsLayersOpen] = useState(false);
+  // Use controlled layers state if provided, otherwise use internal state
+  const [internalLayersOpen, setInternalLayersOpen] = useState(true);
+  const isLayersOpen = isLayersOpenProp !== undefined ? isLayersOpenProp : internalLayersOpen;
+  const setIsLayersOpen = (open: boolean) => {
+    if (onLayersOpenChange) {
+      onLayersOpenChange(open);
+    } else {
+      setInternalLayersOpen(open);
+    }
+  };
   const setHistoryAvailability = () => {
     if (onHistoryAvailableChange) {
       onHistoryAvailableChange((undoStackRef.current?.length || 0) > 0);
@@ -1301,11 +1314,18 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         setIsSidebarClosing(true);
         setTimeout(() => {
           setSelectedObject(null);
+          if (onSelectedObjectChange) {
+            onSelectedObjectChange(null);
+          }
           setSelectedImage(null);
           setIsSidebarClosing(false);
         }, 300); // Match animation duration
       } else {
-        setSelectedObject(active || null);
+        const newSelected = active || null;
+        setSelectedObject(newSelected);
+        if (onSelectedObjectChange) {
+          onSelectedObjectChange(newSelected);
+        }
         if (active && active instanceof FabricImage) {
           setSelectedImage(active);
         } else if (!active || !(active instanceof FabricImage)) {
@@ -1364,6 +1384,9 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
 
 
     setFabricCanvas(canvas);
+    if (onCanvasInstanceChange) {
+      onCanvasInstanceChange(canvas);
+    }
 
     const handleResize = () => {
       const parent = canvasRef.current?.parentElement;
@@ -1817,7 +1840,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         try {
           const image = selectedObject as FabricImage;
           const bounds = image.getBoundingRect();
-          
+
           if (format === 'svg') {
             // Export image as SVG
             const tempCanvas = document.createElement('canvas');
@@ -1859,7 +1882,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           } else {
             // Store original background
             const originalBg = fabricCanvas.backgroundColor as string | undefined;
-            
+
             // Temporarily set white background if needed
             if (!originalBg || originalBg === 'transparent') {
               fabricCanvas.backgroundColor = '#ffffff';
@@ -1908,7 +1931,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           tempCanvas.width = artboardBounds.width * multiplier;
           tempCanvas.height = artboardBounds.height * multiplier;
           const tempCtx = tempCanvas.getContext('2d');
-          
+
           if (!tempCtx) {
             toast.error("Failed to create export canvas");
             return;
@@ -2129,7 +2152,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         tempCanvas.width = artboardBounds.width * multiplier;
         tempCanvas.height = artboardBounds.height * multiplier;
         const tempCtx = tempCanvas.getContext('2d');
-        
+
         if (!tempCtx) {
           toast.error("Failed to create export canvas");
           return;
@@ -2246,12 +2269,12 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     // Check if there's a selected image or artboard
     const isSelectedImage = selectedObject instanceof FabricImage;
     const isSelectedArtboard = selectedObject instanceof FabricRect && (selectedObject as any).isArtboard;
-    
+
     if (isSelectedImage || isSelectedArtboard) {
       try {
         const bounds = selectedObject.getBoundingRect();
         const previewMultiplier = 2; // Lower multiplier for preview to keep it fast
-        
+
         // Generate preview
         const previewDataURL = fabricCanvas.toDataURL({
           format: 'png',
@@ -2262,7 +2285,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           width: bounds.width,
           height: bounds.height,
         });
-        
+
         setExportPreview(previewDataURL);
       } catch (error) {
         console.error("Error generating preview:", error);
@@ -2277,7 +2300,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     // Determine export type based on selection
     const isSelectedImage = selectedObject instanceof FabricImage;
     const isSelectedArtboard = selectedObject instanceof FabricRect && (selectedObject as any).isArtboard;
-    
+
     if (isSelectedImage || isSelectedArtboard) {
       setExportType('selected');
       generateExportPreview();
@@ -2285,7 +2308,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       setExportType('canvas');
       setExportPreview(null);
     }
-    
+
     setIsExportDialogOpen(true);
   };
 
@@ -2859,7 +2882,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               aria-label="Upload image"
             />
 
-            {/* Left Toolbar (Vertical layout) */}
+            {/* Bottom Center Toolbar (Horizontal layout) */}
             <Toolbar
               activeTool={activeTool}
               setActiveTool={setActiveTool}
@@ -2873,24 +2896,12 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               fileInputRef={fileInputRef}
               onFileChange={handleFileChange}
               onUploadClick={handleUploadClick}
-              leftOffset={isLayersOpen ? 272 : 8}
               penSubTool={penSubTool}
               setPenSubTool={setPenSubTool}
+              layout="horizontal"
             />
 
-            {/* Layers floating button */}
-            <div className="pointer-events-auto fixed bottom-4 left-2 z-[60]">
-              <button
-                type="button"
-                onClick={() => setIsLayersOpen((o) => !o)}
-                aria-label="Layers"
-                className="w-12 h-12 rounded-full bg-white text-[#111827] shadow-lg border border-[#E5E7EB] hover:bg-[#F9FAFB] flex items-center justify-center transition-colors"
-              >
-                <LayersIcon className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Layers sidebar (always mounted for slide animation) */}
+            {/* Layers sidebar (controlled by isLayersOpen state) */}
             {fabricCanvas && (
               <LayersPanel
                 canvas={fabricCanvas}
@@ -3060,8 +3071,8 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
-      {/* Inspector Sidebar (shows when any object is selected) */}
-      {selectedObject && (
+      {/* Inspector Sidebar - Hidden when object is selected (shown in ChatSidebar Styles tab instead) */}
+      {false && selectedObject && (
         <InspectorSidebar
           selectedObject={selectedObject}
           canvas={fabricCanvas}
@@ -3141,9 +3152,9 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               <div className="grid gap-2">
                 <Label className="text-sm font-medium">Preview</Label>
                 <div className="border rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center" style={{ minHeight: '200px', maxHeight: '300px' }}>
-                  <img 
-                    src={exportPreview} 
-                    alt="Export preview" 
+                  <img
+                    src={exportPreview}
+                    alt="Export preview"
                     className="max-w-full max-h-[300px] object-contain"
                   />
                 </div>

@@ -425,7 +425,7 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
   ];
 
   return (
-    <div className={`fixed top-12 left-0 bottom-0 z-[80] w-[256px] border-r border-[#E5E7EB] bg-white shadow-lg flex flex-col transform transition-transform duration-300 ${translateClass}`}>
+    <div className={`fixed top-14 left-0 bottom-0 z-[80] w-[256px] border-r border-[#E5E7EB] bg-white shadow-lg flex flex-col transform transition-transform duration-300 rounded-t-xl rounded-bl-xl overflow-hidden ${translateClass}`}>
       <div className="border-b border-[#E5E7EB]">
         <div className="h-10 px-3 flex items-center justify-between">
           <div className="flex items-center gap-0 h-full">

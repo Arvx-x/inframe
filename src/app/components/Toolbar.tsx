@@ -5,9 +5,9 @@ import type { SVGProps } from "react";
 import { Button } from "@/app/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
-import { 
-  Type, Square, Circle as CircleIcon, Minus, Pencil, Plus, 
-  MousePointer, Hand, ChevronDown, PenTool, Frame, Pipette, 
+import {
+  Type, Square, Circle as CircleIcon, Minus, Pencil, Plus,
+  MousePointer, Hand, ChevronDown, PenTool, Frame, Pipette,
   Paintbrush, Move, Layers, Grid, Ruler, Eraser, Image as ImageIcon
 } from "lucide-react";
 
@@ -32,6 +32,7 @@ interface ToolbarProps {
   leftOffset?: number;
   penSubTool: PenSubTool;
   setPenSubTool: (tool: PenSubTool) => void;
+  layout?: 'vertical' | 'horizontal';
 }
 
 export function Toolbar({
@@ -50,12 +51,20 @@ export function Toolbar({
   leftOffset = 8,
   penSubTool,
   setPenSubTool,
+  layout = 'vertical',
 }: ToolbarProps) {
+  const isHorizontal = layout === 'horizontal';
+
+  // Tooltip position based on layout
+  const tooltipSide = isHorizontal ? 'top' : 'right';
+
   return (
     <TooltipProvider>
       <div
-        className="absolute flex flex-col gap-2.5 bg-white px-1.5 py-3 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-border/60 ring-1 ring-black/5 z-50 transition-all duration-200 ease-out"
-        style={{
+        className={`${isHorizontal
+          ? 'fixed bottom-4 left-1/2 -translate-x-1/2 flex flex-row gap-2.5 bg-white px-4 py-2 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.12)] border border-border/60 ring-1 ring-black/5 z-50'
+          : 'absolute flex flex-col gap-2.5 bg-white px-1.5 py-3 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-border/60 ring-1 ring-black/5 z-50 transition-all duration-200 ease-out'}`}
+        style={isHorizontal ? {} : {
           left: `${leftOffset}px`,
           top: 'calc((100vh - 76px) / 2 - 20px)',
           transform: 'translateY(-50%)',
@@ -83,7 +92,7 @@ export function Toolbar({
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={12} className="z-[60]">{activeTool === 'hand' ? 'Hand' : 'Pointer'}</TooltipContent>
+            <TooltipContent side={tooltipSide} sideOffset={12} className="z-[60]">{activeTool === 'hand' ? 'Hand' : 'Pointer'}</TooltipContent>
           </Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -109,7 +118,7 @@ export function Toolbar({
               <Type />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={12} className="z-[60]">Add Text</TooltipContent>
+          <TooltipContent side={tooltipSide} sideOffset={12} className="z-[60]">Add Text</TooltipContent>
         </Tooltip>
 
         {/* Shapes (split button with dropdown chevron) */}
@@ -122,7 +131,7 @@ export function Toolbar({
                 {activeShape === 'line' && <Minus />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={12} className="z-[60]">
+            <TooltipContent side={tooltipSide} sideOffset={12} className="z-[60]">
               {activeShape === 'rect' ? 'Add Rectangle' : activeShape === 'circle' ? 'Add Circle' : 'Add Line'}
             </TooltipContent>
           </Tooltip>
@@ -153,7 +162,7 @@ export function Toolbar({
               <Frame />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={12} className="z-[60]">Artboard</TooltipContent>
+          <TooltipContent side={tooltipSide} sideOffset={12} className="z-[60]">Artboard</TooltipContent>
         </Tooltip>
 
         {/* Pen Tool */}
@@ -163,19 +172,19 @@ export function Toolbar({
               <PenTool />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={12} className="z-[60]">Pen Tool</TooltipContent>
+          <TooltipContent side={tooltipSide} sideOffset={12} className="z-[60]">Pen Tool</TooltipContent>
         </Tooltip>
 
         {/* Upload Image Button */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button 
-              onClick={() => { 
+            <Button
+              onClick={() => {
                 setActiveToolbarButton('upload');
                 onUploadClick();
-              }} 
-              variant="ghost" 
-              className="h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none text-foreground/80 hover:text-foreground hover:bg-foreground/5" 
+              }}
+              variant="ghost"
+              className="h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none text-foreground/80 hover:text-foreground hover:bg-foreground/5"
               aria-label="Upload Image"
             >
               <div className="relative w-[32px] h-[32px] bg-gray-700 rounded-lg flex items-center justify-center">
@@ -183,12 +192,12 @@ export function Toolbar({
               </div>
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={12} className="z-[60]">Upload Image</TooltipContent>
+          <TooltipContent side={tooltipSide} sideOffset={12} className="z-[60]">Upload Image</TooltipContent>
         </Tooltip>
       </div>
 
-      {/* Pen Sub-toolbar - appears when pen tool is active */}
-      {activeToolbarButton === 'pen' && (
+      {/* Pen Sub-toolbar - appears when pen tool is active (only in vertical layout) */}
+      {activeToolbarButton === 'pen' && !isHorizontal && (
         <div
           className="absolute flex flex-col gap-2.5 bg-white px-1.5 py-3 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-border/60 ring-1 ring-black/5 z-50 transition-all duration-200 ease-out"
           style={{
@@ -201,10 +210,10 @@ export function Toolbar({
           {/* Move Button */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button 
-                onClick={() => { setPenSubTool('pointer'); }} 
-                variant="ghost" 
-                className={`h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${penSubTool === 'pointer' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} 
+              <Button
+                onClick={() => { setPenSubTool('pointer'); }}
+                variant="ghost"
+                className={`h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${penSubTool === 'pointer' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`}
                 aria-label="Move"
               >
                 <MousePointer />
@@ -216,10 +225,10 @@ export function Toolbar({
           {/* Curve Button */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button 
-                onClick={() => { setPenSubTool('curve'); }} 
-                variant="ghost" 
-                className={`h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${penSubTool === 'curve' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`} 
+              <Button
+                onClick={() => { setPenSubTool('curve'); }}
+                variant="ghost"
+                className={`h-9 w-9 p-0 rounded-lg focus-visible:ring-0 focus-visible:outline-none [&_svg]:!w-[17px] [&_svg]:!h-[17px] ${penSubTool === 'curve' ? 'text-[hsl(var(--sidebar-ring))] bg-[hsl(var(--sidebar-ring)/0.12)]' : 'text-foreground/80 hover:text-foreground hover:bg-foreground/5'}`}
                 aria-label="Curve"
               >
                 <svg
