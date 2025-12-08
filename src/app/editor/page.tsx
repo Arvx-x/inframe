@@ -7,14 +7,18 @@ import { getProject, createProject, updateProject, saveCanvas } from '@/app/lib/
 import { uploadDataURL } from '@/app/lib/services/storage.service';
 import { ProjectColorsProvider } from '@/app/contexts/ProjectColorsContext';
 import ChatSidebar from "@/app/components/ChatSidebar";
+import PromptSidebar from "@/app/components/PromptSidebar";
 import Canvas from "@/app/components/Canvas";
+import { InspectorSidebar } from "@/app/components/InspectorSidebar";
 import ColorSelector from "@/app/components/ColorSelector";
 import { Button } from "@/app/components/ui/button";
-import { Share, ArrowLeft, PenTool, Image as ImageIcon, Layout, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Share, ArrowLeft, PenTool, Image as ImageIcon, Layout, PanelLeftClose, PanelLeft, Menu, Palette, Monitor } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { ProfileDropdown } from "@/app/components/ProfileDropdown";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { FabricImage } from 'fabric';
 
 function EditorContent() {
   const searchParams = useSearchParams();
@@ -36,12 +40,48 @@ function EditorContent() {
   const [canvasColor, setCanvasColor] = useState("#F4F4F6");
   const [canvasData, setCanvasData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeMode, setActiveMode] = useState<'vector' | 'pixel' | 'layout'>('vector');
+  
+  // Studio management
+  type StudioType = 'vector' | 'pixel' | 'layout' | 'color' | 'screen';
+  const allStudios: { type: StudioType; label: string; icon: any }[] = [
+    { type: 'vector', label: 'Vector', icon: PenTool },
+    { type: 'pixel', label: 'Pixel', icon: ImageIcon },
+    { type: 'layout', label: 'Layout', icon: Layout },
+    { type: 'color', label: 'Color', icon: Palette },
+    { type: 'screen', label: 'Screen', icon: Monitor },
+  ];
+  
+  const [visibleStudios, setVisibleStudios] = useState<StudioType[]>(['vector', 'pixel', 'layout']);
+  const [activeStudio, setActiveStudio] = useState<StudioType>('vector');
+  
+  const availableStudios = allStudios.filter(studio => !visibleStudios.includes(studio.type));
+  
+  const handleStudioSwap = (studioToAdd: StudioType, studioToRemove: StudioType) => {
+    setVisibleStudios(prev => {
+      const newVisible = prev.filter(s => s !== studioToRemove);
+      newVisible.push(studioToAdd);
+      return newVisible;
+    });
+    // If we're removing the active studio, switch to the newly added one
+    if (activeStudio === studioToRemove) {
+      setActiveStudio(studioToAdd);
+    }
+  };
+  
   const [selectedObject, setSelectedObject] = useState<any>(null);
   const [fabricCanvasInstance, setFabricCanvasInstance] = useState<any>(null);
 
-  // New layout state
-  const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
+  // New layout state - layers panel closed by default for non-screen modes
+  const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(false);
+  
+  // Update layers panel state when studio changes
+  useEffect(() => {
+    if (activeStudio === 'screen') {
+      setIsLeftPanelOpen(true);
+    } else {
+      setIsLeftPanelOpen(false);
+    }
+  }, [activeStudio]);
   const [rightSidebarWidth, setRightSidebarWidth] = useState(300);
 
   // Load or create project - optimized for instant loading
@@ -129,6 +169,42 @@ function EditorContent() {
     }
   };
 
+  const handleImageEdit = (newImageUrl: string) => {
+    if (!fabricCanvasInstance || !selectedObject) return;
+
+    // Only handle image editing if the selected object is an image
+    if (!(selectedObject instanceof FabricImage)) return;
+
+    const originalImage = selectedObject as FabricImage;
+
+    FabricImage.fromURL(newImageUrl, {
+      crossOrigin: 'anonymous'
+    }).then((img) => {
+      // Preserve position, scale, and other properties from the original image
+      img.set({
+        left: originalImage.left,
+        top: originalImage.top,
+        scaleX: originalImage.scaleX,
+        scaleY: originalImage.scaleY,
+        angle: originalImage.angle,
+        opacity: originalImage.opacity,
+        selectable: true,
+      });
+
+      // Remove old image and add new one
+      fabricCanvasInstance.remove(originalImage);
+      fabricCanvasInstance.add(img);
+      fabricCanvasInstance.setActiveObject(img);
+      fabricCanvasInstance.renderAll();
+
+      // Update selected object so sidebar stays open
+      setSelectedObject(img);
+    }).catch((error) => {
+      console.error("Error loading edited image:", error);
+      toast.error("Failed to load edited image");
+    });
+  };
+
   const handleBack = () => {
     // Navigate immediately for instant feel
     router.push('/');
@@ -193,9 +269,234 @@ function EditorContent() {
     );
   }
 
+  // Render different layouts based on active studio
+  const isScreenMode = activeStudio === 'screen';
+
+  // Old layout for non-screen studios
+  if (!isScreenMode) {
+    return (
+      <div className="relative w-full h-screen overflow-hidden bg-white">
+        {/* Header - Old Layout (with studio selector) */}
+        <div className="fixed top-0 left-0 right-0 h-12 bg-white border-b border-border z-[100] flex items-center px-4">
+          {/* Left: Back Button and Layers Toggle */}
+          <div className="flex-1 flex items-center gap-2">
+            {/* Layers Panel Toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => setIsLeftPanelOpen(!isLeftPanelOpen)}
+              title={isLeftPanelOpen ? "Hide Layers" : "Show Layers"}
+            >
+              {isLeftPanelOpen ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeft className="h-4 w-4" />
+              )}
+            </Button>
+
+            {user && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2 text-muted-foreground hover:text-foreground"
+                onClick={handleBack}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Button>
+            )}
+
+            {/* Studio Selector */}
+            <div className="flex items-center bg-gray-100 p-1 rounded-full ml-2">
+              {visibleStudios.map((studioType) => {
+                const studio = allStudios.find(s => s.type === studioType);
+                if (!studio) return null;
+                const Icon = studio.icon;
+                return (
+                  <button
+                    key={studioType}
+                    onClick={() => setActiveStudio(studioType)}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeStudio === studioType
+                      ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {studio.label}
+                  </button>
+                );
+              })}
+              
+              {/* Hamburger Menu Button for Studio Management */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="flex items-center justify-center w-8 h-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-gray-200 transition-all ml-1"
+                    aria-label="Manage studios"
+                  >
+                    <Menu className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-48">
+                  {availableStudios.length > 0 ? (
+                    // Show available studios to add
+                    availableStudios.map((studio) => {
+                      const Icon = studio.icon;
+                      return (
+                        <DropdownMenuItem
+                          key={studio.type}
+                          className="flex items-center gap-2"
+                          onSelect={(e) => {
+                            e.preventDefault();
+                            // Replace the first non-active studio
+                            const studioToRemove = visibleStudios.find(s => s !== activeStudio) || visibleStudios[0];
+                            handleStudioSwap(studio.type, studioToRemove);
+                          }}
+                        >
+                          <Icon className="w-4 h-4" />
+                          <span>Add {studio.label}</span>
+                        </DropdownMenuItem>
+                      );
+                    })
+                  ) : (
+                    // Show visible studios to remove (when all studios are visible)
+                    visibleStudios.map((studioType) => {
+                      const studio = allStudios.find(s => s.type === studioType);
+                      if (!studio) return null;
+                      const Icon = studio.icon;
+                      return (
+                        <DropdownMenuItem
+                          key={studioType}
+                          className="flex items-center gap-2"
+                          onSelect={(e) => {
+                            e.preventDefault();
+                            // Remove this studio and add the first available one
+                            const allAvailable = allStudios.filter(s => !visibleStudios.includes(s.type));
+                            if (allAvailable.length > 0) {
+                              handleStudioSwap(allAvailable[0].type, studioType);
+                            }
+                          }}
+                        >
+                          <Icon className="w-4 h-4" />
+                          <span>Remove {studio.label}</span>
+                        </DropdownMenuItem>
+                      );
+                    })
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          {/* Centered Project Title */}
+          <h1 className="text-sm font-medium text-foreground absolute left-1/2 -translate-x-1/2">{projectName}</h1>
+
+          {/* Right side controls */}
+          <div className="flex-1 flex justify-end gap-2">
+            {/* Canvas Color Selector */}
+            <ColorSelector
+              canvasColor={canvasColor}
+              onColorChange={handleCanvasColorChange}
+            />
+
+            {/* Export Button */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => canvasExportRef.current?.()}
+                    className="h-9 px-3 rounded-lg flex items-center gap-2 text-white bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 transition-colors"
+                    aria-label="Export"
+                  >
+                    <Share className="w-4 h-4" />
+                    <span className="text-sm font-normal">Export</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Export Canvas</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            {/* Profile Dropdown */}
+            <ProfileDropdown />
+          </div>
+        </div>
+
+        {/* Main Content Area - below header */}
+        <div className="absolute top-12 left-0 right-0 bottom-0 flex">
+          {/* Canvas Area - takes remaining space */}
+          <div className="flex-1 relative">
+            <Canvas
+              generatedImageUrl={generatedImageUrl}
+              isImagePending={isImagePending}
+              pendingImageRatio={pendingRatio}
+              onClear={handleClear}
+              onCanvasCommandRef={canvasCommandRef}
+              onCanvasHistoryRef={canvasHistoryRef}
+              onHistoryAvailableChange={setHistoryAvailable}
+              onCanvasExportRef={canvasExportRef}
+              onCanvasSaveRef={canvasSaveRef}
+              onCanvasColorRef={canvasColorRef}
+              onCanvasInstanceRef={canvasInstanceRef}
+              initialCanvasColor={canvasColor}
+              initialCanvasData={canvasData}
+              isLayersOpen={isLeftPanelOpen}
+              onLayersOpenChange={setIsLeftPanelOpen}
+              onSelectedObjectChange={setSelectedObject}
+              onCanvasInstanceChange={setFabricCanvasInstance}
+              toolbarLayout="vertical"
+            />
+          </div>
+
+          {/* PromptSidebar at bottom center - Old Layout */}
+          <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[560px] px-4 pb-4 z-50 pointer-events-none">
+            <div className="pointer-events-auto">
+            <PromptSidebar
+              onImageGenerated={handleImageGenerated}
+              onImageGenerationPending={(pending, options) => {
+                setIsImagePending(pending);
+                if (pending && options?.ratio) {
+                  setPendingRatio(options.ratio);
+                }
+                if (!pending) {
+                  setPendingRatio(null);
+                }
+              }}
+              currentImageUrl={generatedImageUrl}
+              onCanvasCommand={handleCanvasCommand}
+              onProjectNameUpdate={handleProjectNameUpdate}
+            />
+            </div>
+          </div>
+
+          {/* Right Sidebar - Properties/Styles (only shows when object is selected) */}
+          {selectedObject && fabricCanvasInstance && (
+            <InspectorSidebar
+              selectedObject={selectedObject}
+              canvas={fabricCanvasInstance}
+              onClose={() => {
+                if (fabricCanvasInstance) {
+                  fabricCanvasInstance.discardActiveObject();
+                  fabricCanvasInstance.requestRenderAll();
+                }
+                setSelectedObject(null);
+              }}
+              isClosing={false}
+              onImageEdit={handleImageEdit}
+              onEnterPathEditMode={() => {}}
+              onExitPathEditMode={() => {}}
+              onCanvasCommand={handleCanvasCommand}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Current layout for screen mode (with studio selector)
   return (
     <div className="relative w-full h-screen overflow-hidden bg-white">
-      {/* Header */}
+      {/* Header - Current Layout (with studio selector) */}
       <div className="fixed top-0 left-0 right-0 h-12 bg-white border-b border-border z-[100] flex items-center px-4">
         {/* Left: Back Button and Layers Toggle */}
         <div className="flex-1 flex items-center gap-2">
@@ -226,38 +527,85 @@ function EditorContent() {
             </Button>
           )}
 
-          {/* Mode Selector */}
+          {/* Studio Selector */}
           <div className="flex items-center bg-gray-100 p-1 rounded-full ml-2">
-            <button
-              onClick={() => setActiveMode('vector')}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeMode === 'vector'
-                ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              <PenTool className="w-3.5 h-3.5" />
-              Vector
-            </button>
-            <button
-              onClick={() => setActiveMode('pixel')}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeMode === 'pixel'
-                ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              <ImageIcon className="w-3.5 h-3.5" />
-              Pixel
-            </button>
-            <button
-              onClick={() => setActiveMode('layout')}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeMode === 'layout'
-                ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              <Layout className="w-3.5 h-3.5" />
-              Layout
-            </button>
+            {visibleStudios.map((studioType) => {
+              const studio = allStudios.find(s => s.type === studioType);
+              if (!studio) return null;
+              const Icon = studio.icon;
+              return (
+                <button
+                  key={studioType}
+                  onClick={() => setActiveStudio(studioType)}
+                  className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeStudio === studioType
+                    ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {studio.label}
+                </button>
+              );
+            })}
+            
+            {/* Hamburger Menu Button for Studio Management */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="flex items-center justify-center w-8 h-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-gray-200 transition-all ml-1"
+                  aria-label="Manage studios"
+                >
+                  <Menu className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                {availableStudios.length > 0 ? (
+                  // Show available studios to add
+                  availableStudios.map((studio) => {
+                    const Icon = studio.icon;
+                    return (
+                      <DropdownMenuItem
+                        key={studio.type}
+                        className="flex items-center gap-2"
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          // Replace the first non-active studio
+                          const studioToRemove = visibleStudios.find(s => s !== activeStudio) || visibleStudios[0];
+                          handleStudioSwap(studio.type, studioToRemove);
+                        }}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>Add {studio.label}</span>
+                      </DropdownMenuItem>
+                    );
+                  })
+                ) : (
+                  // Show visible studios to remove (when all studios are visible)
+                  visibleStudios.map((studioType) => {
+                    const studio = allStudios.find(s => s.type === studioType);
+                    if (!studio) return null;
+                    const Icon = studio.icon;
+                    return (
+                      <DropdownMenuItem
+                        key={studioType}
+                        className="flex items-center gap-2"
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          // Remove this studio and add the first available one
+                          const allAvailable = allStudios.filter(s => !visibleStudios.includes(s.type));
+                          if (allAvailable.length > 0) {
+                            handleStudioSwap(allAvailable[0].type, studioType);
+                          }
+                        }}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>Remove {studio.label}</span>
+                      </DropdownMenuItem>
+                    );
+                  })
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -316,30 +664,31 @@ function EditorContent() {
             onLayersOpenChange={setIsLeftPanelOpen}
             onSelectedObjectChange={setSelectedObject}
             onCanvasInstanceChange={setFabricCanvasInstance}
+            toolbarLayout="horizontal"
           />
         </div>
 
         {/* Right Sidebar - Chat */}
         <div className="absolute right-0 top-14 -bottom-12">
-        <ChatSidebar
-          width={rightSidebarWidth}
-          onWidthChange={setRightSidebarWidth}
-          onImageGenerated={handleImageGenerated}
-          onImageGenerationPending={(pending, options) => {
-            setIsImagePending(pending);
-            if (pending && options?.ratio) {
-              setPendingRatio(options.ratio);
-            }
-            if (!pending) {
-              setPendingRatio(null);
-            }
-          }}
-          currentImageUrl={generatedImageUrl}
-          onCanvasCommand={handleCanvasCommand}
-          onProjectNameUpdate={handleProjectNameUpdate}
-          selectedObject={selectedObject}
-          fabricCanvas={fabricCanvasInstance}
-        />
+          <ChatSidebar
+            width={rightSidebarWidth}
+            onWidthChange={setRightSidebarWidth}
+            onImageGenerated={handleImageGenerated}
+            onImageGenerationPending={(pending, options) => {
+              setIsImagePending(pending);
+              if (pending && options?.ratio) {
+                setPendingRatio(options.ratio);
+              }
+              if (!pending) {
+                setPendingRatio(null);
+              }
+            }}
+            currentImageUrl={generatedImageUrl}
+            onCanvasCommand={handleCanvasCommand}
+            onProjectNameUpdate={handleProjectNameUpdate}
+            selectedObject={selectedObject}
+            fabricCanvas={fabricCanvasInstance}
+          />
         </div>
       </div>
     </div>

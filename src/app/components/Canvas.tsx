@@ -36,6 +36,7 @@ interface CanvasProps {
   onLayersOpenChange?: (open: boolean) => void;
   onSelectedObjectChange?: (object: any) => void;
   onCanvasInstanceChange?: (canvas: any) => void;
+  toolbarLayout?: 'vertical' | 'horizontal';
 }
 
 // SVG Path utility functions
@@ -205,7 +206,7 @@ const computeImagePlacement = (
   return { left, top };
 };
 
-export default function Canvas({ generatedImageUrl, isImagePending = false, pendingImageRatio = null, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasSaveRef, onCanvasColorRef, onCanvasInstanceRef, initialCanvasColor = "#F4F4F6", initialCanvasData, isLayersOpen: isLayersOpenProp, onLayersOpenChange, onSelectedObjectChange, onCanvasInstanceChange }: CanvasProps) {
+export default function Canvas({ generatedImageUrl, isImagePending = false, pendingImageRatio = null, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasSaveRef, onCanvasColorRef, onCanvasInstanceRef, initialCanvasColor = "#F4F4F6", initialCanvasData, isLayersOpen: isLayersOpenProp, onLayersOpenChange, onSelectedObjectChange, onCanvasInstanceChange, toolbarLayout = 'horizontal' }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [selectedImage, setSelectedImage] = useState<FabricImage | null>(null);
@@ -2882,7 +2883,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               aria-label="Upload image"
             />
 
-            {/* Bottom Center Toolbar (Horizontal layout) */}
+            {/* Toolbar (Vertical on left for old layout, Horizontal at bottom for screen mode) */}
             <Toolbar
               activeTool={activeTool}
               setActiveTool={setActiveTool}
@@ -2898,7 +2899,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               onUploadClick={handleUploadClick}
               penSubTool={penSubTool}
               setPenSubTool={setPenSubTool}
-              layout="horizontal"
+              layout={toolbarLayout}
             />
 
             {/* Layers sidebar (controlled by isLayersOpen state) */}

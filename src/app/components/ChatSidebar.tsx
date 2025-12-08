@@ -11,7 +11,6 @@ import {
     Copy, MessageSquare, Palette, GripVertical, PenTool
 } from "lucide-react";
 import { toast } from "sonner";
-import { InspectorSidebar } from "@/app/components/InspectorSidebar";
 
 interface Message {
     role: "user" | "assistant";
@@ -663,35 +662,15 @@ export default function ChatSidebar({
                 </>
             ) : (
                 <div className="flex-1 overflow-hidden relative">
-                    {selectedObject && fabricCanvas ? (
-                        <div className="h-full overflow-y-auto [&>*]:!fixed [&>*]:!top-auto [&>*]:!right-auto [&>*]:!left-auto [&>*]:!bottom-auto [&>*]:!relative [&>*]:!w-full [&>*]:!h-full [&>*]:!shadow-none [&>*]:!border-0">
-                            <InspectorSidebar
-                                selectedObject={selectedObject}
-                                canvas={fabricCanvas}
-                                onClose={() => {
-                                    if (fabricCanvas) {
-                                        fabricCanvas.discardActiveObject();
-                                        fabricCanvas.requestRenderAll();
-                                    }
-                                }}
-                                isClosing={false}
-                                onImageEdit={() => {}}
-                                onEnterPathEditMode={() => {}}
-                                onExitPathEditMode={() => {}}
-                                onCanvasCommand={onCanvasCommand || (async () => "")}
-                            />
-                        </div>
-                    ) : (
-                        <div className="flex items-center justify-center h-full p-4">
-                            <div className="text-center">
-                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-100 to-purple-50 flex items-center justify-center mb-4 mx-auto">
-                                    <Palette className="w-5 h-5 text-purple-600/60" />
-                                </div>
-                                <p className="text-sm font-medium text-gray-900 mb-1">Select an object to edit styles</p>
-                                <p className="text-xs text-gray-500">Click on any object on the canvas</p>
+                    <div className="flex items-center justify-center h-full p-4">
+                        <div className="text-center">
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-100 to-purple-50 flex items-center justify-center mb-4 mx-auto">
+                                <Palette className="w-5 h-5 text-purple-600/60" />
                             </div>
+                            <p className="text-sm font-medium text-gray-900 mb-1">Styles tab</p>
+                            <p className="text-xs text-gray-500">Styles editing is not available in screen studio</p>
                         </div>
-                    )}
+                    </div>
                 </div>
             )}
         </div>
