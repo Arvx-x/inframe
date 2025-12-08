@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Skeleton } from "@/app/components/ui/skeleton";
 import {
     Sparkles, Loader2, ArrowUp, Plus, RotateCcw, ChevronDown,
-    Copy, MessageSquare, Palette, GripVertical
+    Copy, MessageSquare, Palette, GripVertical, PenTool
 } from "lucide-react";
 import { toast } from "sonner";
 import { InspectorSidebar } from "@/app/components/InspectorSidebar";
@@ -112,6 +112,7 @@ export default function ChatSidebar({
     const [selectedModel, setSelectedModel] = useState<string>("DALL-E 3");
     const [excludeText, setExcludeText] = useState<string>("");
     const [selectedColors, setSelectedColors] = useState<string[]>([]);
+    const [displayedText, setDisplayedText] = useState<Record<string, string>>({});
 
     // Resize state
     const [isResizing, setIsResizing] = useState(false);
@@ -121,6 +122,7 @@ export default function ChatSidebar({
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const pendingMessageIdsRef = useRef<Set<string>>(new Set());
+    const typingTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
 
     const generateMessageId = () =>
         typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -179,7 +181,80 @@ export default function ChatSidebar({
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages, displayedText]);
+
+    // Typing animation effect - initialize new messages
+    useEffect(() => {
+        messages.forEach((message) => {
+            if (message.role === "assistant" && message.content && !message.pendingImage) {
+                const messageId = message.id || `${message.timestamp}-${message.role}`;
+                
+                // Initialize if not started
+                if (displayedText[messageId] === undefined) {
+                    setDisplayedText((prev) => ({
+                        ...prev,
+                        [messageId]: "",
+                    }));
+                }
+            }
+        });
     }, [messages]);
+
+    // Typing animation effect - continue animation (word-by-word like Cursor)
+    useEffect(() => {
+        const animateMessages = () => {
+            messages.forEach((message) => {
+                if (message.role === "assistant" && message.content && !message.pendingImage) {
+                    const messageId = message.id || `${message.timestamp}-${message.role}`;
+                    const fullText = message.content;
+                    const currentDisplayed = displayedText[messageId] || "";
+                    
+                    if (currentDisplayed.length < fullText.length) {
+                        // Clear any existing timer for this message
+                        if (typingTimersRef.current[messageId]) {
+                            clearTimeout(typingTimersRef.current[messageId]);
+                        }
+
+                        // Find the next word boundary
+                        const remainingText = fullText.slice(currentDisplayed.length);
+                        const nextSpaceIndex = remainingText.indexOf(' ');
+                        const nextNewlineIndex = remainingText.indexOf('\n');
+                        
+                        // Determine chunk size: word + space, or until newline, or single character if no space found
+                        let chunkSize = 1;
+                        if (nextSpaceIndex !== -1 && (nextNewlineIndex === -1 || nextSpaceIndex < nextNewlineIndex)) {
+                            chunkSize = nextSpaceIndex + 1; // Include the space
+                        } else if (nextNewlineIndex !== -1) {
+                            chunkSize = nextNewlineIndex + 1; // Include the newline
+                        } else if (remainingText.length > 0) {
+                            // If we're near the end, show remaining characters in small chunks
+                            chunkSize = Math.min(remainingText.length, 5);
+                        }
+
+                        typingTimersRef.current[messageId] = setTimeout(() => {
+                            setDisplayedText((prev) => {
+                                const current = prev[messageId] || "";
+                                if (current.length < fullText.length) {
+                                    return {
+                                        ...prev,
+                                        [messageId]: fullText.slice(0, current.length + chunkSize),
+                                    };
+                                }
+                                return prev;
+                            });
+                        }, 30); // Typing speed: 30ms per word/chunk (faster rollout)
+                    }
+                }
+            });
+        };
+
+        animateMessages();
+
+        // Cleanup function
+        return () => {
+            Object.values(typingTimersRef.current).forEach(timer => clearTimeout(timer));
+        };
+    }, [messages, displayedText]);
 
     const handleResizeStart = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -415,7 +490,7 @@ export default function ChatSidebar({
             {/* Content Area */}
             {activeTab === "chat" ? (
                 <>
-                    <ScrollArea className="flex-1 px-4 py-4">
+                    <ScrollArea className="flex-1 px-4 pt-4 pb-0">
                         <div className="space-y-4">
                             {messages.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center h-full py-12 text-center">
@@ -436,7 +511,7 @@ export default function ChatSidebar({
                                                     </div>
                                                 )}
                                                 {message.content && (
-                                                    <div className="rounded-xl px-3.5 py-2 bg-gray-200 text-gray-900 text-sm shadow-sm">
+                                                    <div className="rounded-xl px-3.5 py-2 bg-gray-200 text-gray-900 text-[13px] shadow-sm">
                                                         {message.content}
                                                     </div>
                                                 )}
@@ -455,7 +530,20 @@ export default function ChatSidebar({
                                                 )}
                                                 {message.content && (
                                                     <div className="space-y-2">
-                                                        <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{message.content}</div>
+                                                        <div className="text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">
+                                                            {(() => {
+                                                                const messageId = message.id || `${message.timestamp}-${message.role}`;
+                                                                const displayed = displayedText[messageId] || "";
+                                                                return displayed || message.content;
+                                                            })()}
+                                                            {(() => {
+                                                                const messageId = message.id || `${message.timestamp}-${message.role}`;
+                                                                const displayed = displayedText[messageId] || "";
+                                                                return displayed.length < message.content.length ? (
+                                                                    <span className="inline-block w-0.5 h-3.5 bg-gray-800 ml-0.5 animate-pulse" />
+                                                                ) : null;
+                                                            })()}
+                                                        </div>
                                                         <div className="flex items-center gap-2">
                                                             <button
                                                                 onClick={() => copyToClipboard(message.content)}
@@ -476,8 +564,8 @@ export default function ChatSidebar({
                         </div>
                     </ScrollArea>
 
-                    <div className="px-2 pb-4 pt-8">
-                        <div className="rounded-xl border border-gray-200/60 bg-white shadow-sm overflow-hidden flex flex-col">
+                    <div className="px-3 pb-3 pt-0 mt-4">
+                        <div className="rounded-xl border border-gray-200/60 bg-gray-50/50 shadow-sm overflow-hidden flex flex-col">
                             <div className="flex-1 relative">
                                 <Textarea
                                     ref={textareaRef}
@@ -485,20 +573,35 @@ export default function ChatSidebar({
                                     onChange={(e) => setInput(e.target.value)}
                                     onKeyDown={handleKeyPress}
                                     placeholder="What would you like to create?"
-                                    className="min-h-[72px] max-h-[180px] resize-none bg-transparent border-0 focus-visible:ring-0 focus:ring-0 focus-visible:ring-offset-0 focus:ring-offset-0 focus-visible:outline-none focus:outline-none focus:border-0 focus-visible:border-0 px-4 pt-3 pb-0 text-sm text-gray-900 placeholder:text-gray-400 w-full"
+                                    className="min-h-[56px] max-h-[180px] resize-none bg-transparent border-0 focus-visible:ring-0 focus:ring-0 focus-visible:ring-offset-0 focus:ring-offset-0 focus-visible:outline-none focus:outline-none focus:border-0 focus-visible:border-0 px-4 pt-3.5 pb-0 text-[13px] text-gray-900 placeholder:text-gray-400 w-full"
                                     disabled={isGenerating}
                                 />
-                                <div className="flex items-center justify-between px-4 pb-2.5 pt-1">
+                                <div className="flex items-center justify-between pl-2 pr-2 pb-2.5 pt-1">
                                     <div className="flex items-center gap-2">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
-                                                    className="h-7 px-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 text-xs rounded-lg"
+                                                    className="h-6 px-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 text-[11px] rounded-lg flex items-center gap-1"
                                                 >
-                                                    {mode === "design" ? "Design" : mode === "canvas" ? "Canvas" : "Chat"}
-                                                    <ChevronDown className="w-3 h-3 ml-1" />
+                                                    {mode === "design" ? (
+                                                        <>
+                                                            <Palette className="w-3 h-3" />
+                                                            Design
+                                                        </>
+                                                    ) : mode === "canvas" ? (
+                                                        <>
+                                                            <PenTool className="w-3 h-3" />
+                                                            Canvas
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <MessageSquare className="w-3 h-3" />
+                                                            Chat
+                                                        </>
+                                                    )}
+                                                    <ChevronDown className="w-2.5 h-2.5 ml-0.5" />
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="start">
@@ -513,16 +616,18 @@ export default function ChatSidebar({
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
+                                    </div>
 
+                                    <div className="flex items-center gap-2 ml-auto">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
-                                                    className="h-7 px-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 text-xs rounded-lg"
+                                                    className="h-6 px-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 text-[11px] rounded-lg"
                                                 >
                                                     {selectedModel}
-                                                    <ChevronDown className="w-3 h-3 ml-1" />
+                                                    <ChevronDown className="w-2.5 h-2.5 ml-0.5" />
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="start">
@@ -537,20 +642,20 @@ export default function ChatSidebar({
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
-                                    </div>
 
-                                    <Button
-                                        onClick={handleSend}
-                                        disabled={isGenerating || !input.trim()}
-                                        size="icon"
-                                        className="h-8 w-8 rounded-full bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {isGenerating ? (
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                            <ArrowUp className="w-4 h-4" />
-                                        )}
-                                    </Button>
+                                        <Button
+                                            onClick={handleSend}
+                                            disabled={isGenerating || !input.trim()}
+                                            size="icon"
+                                            className="h-7 w-7 rounded-full bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isGenerating ? (
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            ) : (
+                                                <ArrowUp className="w-3.5 h-3.5" />
+                                            )}
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
