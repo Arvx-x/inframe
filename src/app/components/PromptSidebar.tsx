@@ -19,6 +19,7 @@ interface Message {
   timestamp?: number;
   id?: string;
   pendingImage?: boolean;
+  isThinking?: boolean;
 }
 
 type ChatMode = "canvas" | "design" | "chat";
@@ -243,6 +244,8 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
   // Chat mode states
   const [isChatMode, setIsChatMode] = useState(false);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
+  const [displayedChatText, setDisplayedChatText] = useState<Record<string, string>>({});
+  const chatTypingTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
   const [maxTextareaHeight, setMaxTextareaHeight] = useState<number>(0);
   const resizeTextareaEl = useCallback((el: HTMLTextAreaElement) => {
     if (!el) return;
@@ -343,7 +346,80 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
     if (isChatMode && bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [chatMessages, isChatMode]);
+  }, [chatMessages, isChatMode, displayedChatText]);
+
+  // Initialize typing animation state for new assistant chat messages
+  useEffect(() => {
+    chatMessages.forEach((message) => {
+      if (message.role === "assistant" && message.content && !message.pendingImage && !message.isThinking) {
+        const messageId = message.id || `${message.timestamp}-${message.role}`;
+        if (displayedChatText[messageId] === undefined) {
+          setDisplayedChatText((prev) => ({
+            ...prev,
+            [messageId]: "",
+          }));
+        }
+      }
+    });
+  }, [chatMessages]);
+
+  // Animate assistant chat messages word-by-word with blinking cursor
+  useEffect(() => {
+    const animateMessages = () => {
+      chatMessages.forEach((message) => {
+        if (message.role === "assistant" && message.content && !message.pendingImage && !message.isThinking) {
+          const messageId = message.id || `${message.timestamp}-${message.role}`;
+          const fullText = message.content;
+          const currentDisplayed = displayedChatText[messageId] || "";
+
+          if (currentDisplayed.length < fullText.length) {
+            if (chatTypingTimersRef.current[messageId]) {
+              clearTimeout(chatTypingTimersRef.current[messageId]);
+            }
+
+            const remainingText = fullText.slice(currentDisplayed.length);
+            const nextSpaceIndex = remainingText.indexOf(' ');
+            const nextNewlineIndex = remainingText.indexOf('\n');
+
+            let chunkSize = 1;
+            if (nextSpaceIndex !== -1 && (nextNewlineIndex === -1 || nextSpaceIndex < nextNewlineIndex)) {
+              chunkSize = nextSpaceIndex + 1;
+            } else if (nextNewlineIndex !== -1) {
+              chunkSize = nextNewlineIndex + 1;
+            } else if (remainingText.length > 0) {
+              chunkSize = remainingText.length;
+            }
+
+            chatTypingTimersRef.current[messageId] = setTimeout(() => {
+              setDisplayedChatText((prev) => {
+                const current = prev[messageId] || "";
+                if (current.length < fullText.length) {
+                  return {
+                    ...prev,
+                    [messageId]: fullText.slice(0, current.length + chunkSize),
+                  };
+                }
+                return prev;
+              });
+            }, 30);
+          }
+        }
+      });
+    };
+
+    animateMessages();
+
+    return () => {
+      Object.values(chatTypingTimersRef.current).forEach((timer) => clearTimeout(timer));
+    };
+  }, [chatMessages, displayedChatText]);
+
+  // Clear timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(chatTypingTimersRef.current).forEach((timer) => clearTimeout(timer));
+    };
+  }, []);
 
   const handleSend = async () => {
     if (!input.trim()) {
@@ -352,6 +428,14 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
     }
 
     const userMessage: Message = { role: "user", content: input, timestamp: Date.now() };
+    const thinkingId = generateMessageId();
+    const thinkingMessage: Message = {
+      id: thinkingId,
+      role: "assistant",
+      content: "Thinking...",
+      timestamp: Date.now(),
+      isThinking: true,
+    };
 
     // Update project name from first message
     if (!hasSetProjectName && onProjectNameUpdate) {
@@ -362,7 +446,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
 
     // Handle chat mode separately
     if (isChatMode || mode === "chat") {
-      setChatMessages((prev) => [...prev, userMessage]);
+      setChatMessages((prev) => [...prev, userMessage, thinkingMessage]);
       if (!firstUserMessage) setFirstUserMessage(input);
       setInput("");
       setIsGenerating(true);
@@ -389,6 +473,13 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
 
         // Check if AI is ready to generate
         if (data.success && data.shouldGenerate) {
+          // Remove thinking placeholder before image generation flow
+          setChatMessages((prev) => prev.filter(m => m.id !== thinkingId));
+          setDisplayedChatText(prev => {
+            const next = { ...prev };
+            delete next[thinkingId];
+            return next;
+          });
           const pendingId = addPendingImageMessage("chat");
 
           try {
@@ -448,11 +539,17 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
         } else {
           // Continue conversation
           const assistantMessage: Message = {
+            id: thinkingId,
             role: "assistant",
             content: data.message || "Tell me more about what you'd like to create.",
             timestamp: Date.now()
           };
-          setChatMessages((prev) => [...prev, assistantMessage]);
+          setDisplayedChatText(prev => ({ ...prev, [thinkingId]: "" }));
+          setChatMessages((prev) =>
+            prev.some(m => m.id === thinkingId)
+              ? prev.map(m => m.id === thinkingId ? { ...assistantMessage, isThinking: false } : m)
+              : [...prev, assistantMessage]
+          );
         }
       } catch (error) {
         console.error('Chat error:', error);
@@ -462,7 +559,15 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
           content: "Sorry, I encountered an error. Please try again.",
           timestamp: Date.now()
         };
-        setChatMessages((prev) => [...prev, errorMessage]);
+        setChatMessages((prev) => [
+          ...prev.filter(m => m.id !== thinkingId),
+          errorMessage
+        ]);
+        setDisplayedChatText(prev => {
+          const next = { ...prev };
+          delete next[thinkingId];
+          return next;
+        });
       } finally {
         setIsGenerating(false);
       }
@@ -847,6 +952,9 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                 className="h-6 w-6"
                 onClick={() => {
                   setChatMessages([]);
+                  setDisplayedChatText({});
+                  Object.values(chatTypingTimersRef.current).forEach((timer) => clearTimeout(timer));
+                  chatTypingTimersRef.current = {};
                   setInput("");
                   setFirstUserMessage("");
                   setHasSetProjectName(false);
@@ -901,7 +1009,17 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                         </div>
                       )}
                       {message.content && (
-                        <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                      <div className={`text-sm whitespace-pre-wrap leading-snug ${message.isThinking ? "text-gray-400 animate-thinking" : "text-foreground"}`}>
+                        {(() => {
+                          const messageId = message.id || `${message.timestamp}-${message.role}`;
+                          if (message.isThinking) return message.content;
+                          const hasDisplayed = Object.prototype.hasOwnProperty.call(displayedChatText, messageId);
+                          const displayed = hasDisplayed ? displayedChatText[messageId] : "";
+                          // Avoid flashing full text: if assistant and not initialized, show empty string until animation starts
+                          const renderText = hasDisplayed ? displayed : message.role === "assistant" ? "" : message.content;
+                          return renderText;
+                        })()}
+                      </div>
                       )}
                     </div>
                   )}
@@ -931,6 +1049,9 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
               className="h-6 w-6"
               onClick={() => {
                 setChatMessages([]);
+                setDisplayedChatText({});
+                Object.values(chatTypingTimersRef.current).forEach((timer) => clearTimeout(timer));
+                chatTypingTimersRef.current = {};
                 setInput("");
                 setFirstUserMessage("");
                 setHasSetProjectName(false);

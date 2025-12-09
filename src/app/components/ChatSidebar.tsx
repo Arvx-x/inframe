@@ -19,6 +19,7 @@ interface Message {
     timestamp?: number;
     id?: string;
     pendingImage?: boolean;
+    isThinking?: boolean;
 }
 
 type ChatMode = "canvas" | "design" | "chat";
@@ -185,7 +186,7 @@ export default function ChatSidebar({
     // Typing animation effect - initialize new messages
     useEffect(() => {
         messages.forEach((message) => {
-            if (message.role === "assistant" && message.content && !message.pendingImage) {
+            if (message.role === "assistant" && message.content && !message.pendingImage && !message.isThinking) {
                 const messageId = message.id || `${message.timestamp}-${message.role}`;
                 
                 // Initialize if not started
@@ -203,7 +204,7 @@ export default function ChatSidebar({
     useEffect(() => {
         const animateMessages = () => {
             messages.forEach((message) => {
-                if (message.role === "assistant" && message.content && !message.pendingImage) {
+                if (message.role === "assistant" && message.content && !message.pendingImage && !message.isThinking) {
                     const messageId = message.id || `${message.timestamp}-${message.role}`;
                     const fullText = message.content;
                     const currentDisplayed = displayedText[messageId] || "";
@@ -219,15 +220,14 @@ export default function ChatSidebar({
                         const nextSpaceIndex = remainingText.indexOf(' ');
                         const nextNewlineIndex = remainingText.indexOf('\n');
                         
-                        // Determine chunk size: word + space, or until newline, or single character if no space found
+                        // Determine chunk size: next word (with trailing space) or up to newline; if none, take remaining
                         let chunkSize = 1;
                         if (nextSpaceIndex !== -1 && (nextNewlineIndex === -1 || nextSpaceIndex < nextNewlineIndex)) {
                             chunkSize = nextSpaceIndex + 1; // Include the space
                         } else if (nextNewlineIndex !== -1) {
                             chunkSize = nextNewlineIndex + 1; // Include the newline
                         } else if (remainingText.length > 0) {
-                            // If we're near the end, show remaining characters in small chunks
-                            chunkSize = Math.min(remainingText.length, 5);
+                            chunkSize = remainingText.length; // Last word
                         }
 
                         typingTimersRef.current[messageId] = setTimeout(() => {
@@ -296,6 +296,14 @@ export default function ChatSidebar({
         }
 
         const userMessage: Message = { role: "user", content: input, timestamp: Date.now() };
+        const thinkingId = generateMessageId();
+        const thinkingMessage: Message = {
+            id: thinkingId,
+            role: "assistant",
+            content: "Thinking...",
+            timestamp: Date.now(),
+            isThinking: true,
+        };
 
         if (!hasSetProjectName && onProjectNameUpdate) {
             const projectName = extractProjectName(input);
@@ -303,7 +311,7 @@ export default function ChatSidebar({
             setHasSetProjectName(true);
         }
 
-        setMessages(prev => [...prev, userMessage]);
+        setMessages(prev => [...prev, userMessage, thinkingMessage]);
         setInput("");
         setIsGenerating(true);
 
@@ -311,11 +319,17 @@ export default function ChatSidebar({
             if (mode === "canvas" && onCanvasCommand) {
                 const response = await onCanvasCommand(userMessage.content);
                 const assistantMessage: Message = {
+                    id: thinkingId,
                     role: "assistant",
                     content: response,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
                 };
-                setMessages(prev => [...prev, assistantMessage]);
+                setDisplayedText(prev => ({ ...prev, [thinkingId]: "" }));
+                setMessages(prev =>
+                    prev.some(m => m.id === thinkingId)
+                        ? prev.map(m => m.id === thinkingId ? assistantMessage : m)
+                        : [...prev, assistantMessage]
+                );
             } else {
                 const res = await fetch('/api/design-wizard', {
                     method: 'POST',
@@ -334,6 +348,13 @@ export default function ChatSidebar({
                 const data = await res.json();
 
                 if (data.success && data.shouldGenerate) {
+                    // Remove thinking placeholder before image generation flow
+                    setMessages(prev => prev.filter(m => m.id !== thinkingId));
+                    setDisplayedText(prev => {
+                        const next = { ...prev };
+                        delete next[thinkingId];
+                        return next;
+                    });
                     const pendingId = addPendingImageMessage();
 
                     try {
@@ -386,11 +407,17 @@ export default function ChatSidebar({
                     }
                 } else {
                     const assistantMessage: Message = {
+                        id: thinkingId,
                         role: "assistant",
                         content: data.message || "Tell me more about what you'd like to create.",
                         timestamp: Date.now()
                     };
-                    setMessages(prev => [...prev, assistantMessage]);
+                    setDisplayedText(prev => ({ ...prev, [thinkingId]: "" }));
+                    setMessages(prev =>
+                        prev.some(m => m.id === thinkingId)
+                            ? prev.map(m => m.id === thinkingId ? assistantMessage : m)
+                            : [...prev, assistantMessage]
+                    );
                 }
             }
         } catch (error) {
@@ -401,7 +428,15 @@ export default function ChatSidebar({
                 content: "Sorry, I encountered an error. Please try again.",
                 timestamp: Date.now()
             };
-            setMessages(prev => [...prev, errorMessage]);
+            setMessages(prev => [
+                ...prev.filter(m => m.id !== thinkingId),
+                errorMessage
+            ]);
+            setDisplayedText(prev => {
+                const next = { ...prev };
+                delete next[thinkingId];
+                return next;
+            });
         } finally {
             setIsGenerating(false);
         }
@@ -529,28 +564,18 @@ export default function ChatSidebar({
                                                 )}
                                                 {message.content && (
                                                     <div className="space-y-2">
-                                                        <div className="text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">
+                                                        <div className={`text-[13px] whitespace-pre-wrap leading-snug ${message.isThinking ? "text-gray-400 animate-thinking" : "text-gray-800"}`}>
                                                             {(() => {
                                                                 const messageId = message.id || `${message.timestamp}-${message.role}`;
-                                                                const displayed = displayedText[messageId] || "";
+                                                                if (message.isThinking) return message.content;
+                                                                const hasDisplayed = Object.prototype.hasOwnProperty.call(displayedText, messageId);
+                                                                const displayed = hasDisplayed ? displayedText[messageId] : "";
+                                                                if (message.role === "assistant") {
+                                                                    // Never fall back to full content until animation completes to avoid flash
+                                                                    return displayed ?? "";
+                                                                }
                                                                 return displayed || message.content;
                                                             })()}
-                                                            {(() => {
-                                                                const messageId = message.id || `${message.timestamp}-${message.role}`;
-                                                                const displayed = displayedText[messageId] || "";
-                                                                return displayed.length < message.content.length ? (
-                                                                    <span className="inline-block w-0.5 h-3.5 bg-gray-800 ml-0.5 animate-pulse" />
-                                                                ) : null;
-                                                            })()}
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <button
-                                                                onClick={() => copyToClipboard(message.content)}
-                                                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-                                                            >
-                                                                <Copy className="w-3 h-3" />
-                                                                Copy
-                                                            </button>
                                                         </div>
                                                     </div>
                                                 )}
