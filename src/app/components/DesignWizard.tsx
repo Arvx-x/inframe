@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react";
+import type { JSX } from "react";
 import { Button } from "@/app/components/ui/button";
 import { Textarea } from "@/app/components/ui/textarea";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
@@ -9,6 +10,31 @@ import { Badge } from "@/app/components/ui/badge";
 import { Skeleton } from "@/app/components/ui/skeleton";
 import { Loader2, Sparkles, CheckCircle2, RefreshCw, ArrowUp, Plus } from "lucide-react";
 import { toast } from "sonner";
+
+// Helper function to parse asterisk-wrapped text into bold JSX
+const parseBoldText = (text: string): (string | JSX.Element)[] => {
+    if (!text) return [];
+    const parts: (string | JSX.Element)[] = [];
+    const regex = /\*([^*]+)\*/g;
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+
+    while ((match = regex.exec(text)) !== null) {
+        // Add text before the match
+        if (match.index > lastIndex) {
+            parts.push(text.substring(lastIndex, match.index));
+        }
+        // Add bold text
+        parts.push(<strong key={key++}>{match[1]}</strong>);
+        lastIndex = regex.lastIndex;
+    }
+    // Add remaining text
+    if (lastIndex < text.length) {
+        parts.push(text.substring(lastIndex));
+    }
+    return parts.length > 0 ? parts : [text];
+};
 
 interface Message {
   role: "user" | "assistant";
@@ -239,6 +265,10 @@ Elements: ${keywords?.elements.join(", ") || "none specified"}.`;
         const payload = await res.json();
         const variants: Variant[] = payload?.variants || [];
 
+        if (payload.fallbackMessage) {
+          toast.info(payload.fallbackMessage);
+        }
+
         // Update this direction with variants
         setDirections(prev => prev.map(d => {
           if (d.id === directionId) {
@@ -377,7 +407,7 @@ Elements: ${keywords?.elements.join(", ") || "none specified"}.`;
                     )}
                     {msg.content && (
                       <div className="text-sm leading-6 text-foreground whitespace-pre-wrap">
-                        {msg.content}
+                        {parseBoldText(msg.content)}
                       </div>
                     )}
                   </div>

@@ -272,6 +272,10 @@ export const SmartEdit: React.FC<SmartEditProps> = ({
                 throw new Error(data.error || "No image URL returned");
             }
 
+            if (data.fallbackMessage) {
+                toast.info(data.fallbackMessage);
+            }
+
             // Composite the edited region back onto the original image
             let finalImageUrl = data.imageUrl;
 

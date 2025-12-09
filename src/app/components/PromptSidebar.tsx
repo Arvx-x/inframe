@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import type { JSX } from "react";
 import { Button } from "@/app/components/ui/button";
 import { Textarea } from "@/app/components/ui/textarea";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
@@ -11,6 +12,31 @@ import { Skeleton } from "@/app/components/ui/skeleton";
 import { Sparkles, Loader2, ArrowUp, Wand2, ImagePlus, Zap, Brain, PenTool, Plus, Undo2, Redo2, Minus, Palette, X, Palette as DesignIcon, MousePointer as CanvasIcon, ChevronDown } from "lucide-react";
 // Calls go to local Next.js API routes instead of Supabase Edge Functions
 import { toast } from "sonner";
+
+// Helper function to parse asterisk-wrapped text into bold JSX
+const parseBoldText = (text: string): (string | JSX.Element)[] => {
+    if (!text) return [];
+    const parts: (string | JSX.Element)[] = [];
+    const regex = /\*([^*]+)\*/g;
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+
+    while ((match = regex.exec(text)) !== null) {
+        // Add text before the match
+        if (match.index > lastIndex) {
+            parts.push(text.substring(lastIndex, match.index));
+        }
+        // Add bold text
+        parts.push(<strong key={key++}>{match[1]}</strong>);
+        lastIndex = regex.lastIndex;
+    }
+    // Add remaining text
+    if (lastIndex < text.length) {
+        parts.push(text.substring(lastIndex));
+    }
+    return parts.length > 0 ? parts : [text];
+};
 
 interface Message {
   role: "user" | "assistant";
@@ -652,6 +678,9 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                   const variants = (mmgData?.variants || []).filter((v: any) => v?.imageUrl);
 
                   if (variants.length > 0) {
+                    if (mmgData.fallbackMessage) {
+                      toast.info(mmgData.fallbackMessage);
+                    }
                     const [firstVariant, ...restVariants] = variants;
                     resolvePendingImageMessage("design", pendingId, firstVariant.imageUrl);
                     onImageGenerated(firstVariant.imageUrl);
@@ -1017,7 +1046,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                           const displayed = hasDisplayed ? displayedChatText[messageId] : "";
                           // Avoid flashing full text: if assistant and not initialized, show empty string until animation starts
                           const renderText = hasDisplayed ? displayed : message.role === "assistant" ? "" : message.content;
-                          return renderText;
+                          return parseBoldText(renderText);
                         })()}
                       </div>
                       )}

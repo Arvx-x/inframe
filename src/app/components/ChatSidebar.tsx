@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import type { JSX } from "react";
 import { Button } from "@/app/components/ui/button";
 import { Textarea } from "@/app/components/ui/textarea";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
@@ -11,6 +12,31 @@ import {
     Copy, MessageSquare, Palette, GripVertical, PenTool
 } from "lucide-react";
 import { toast } from "sonner";
+
+// Helper function to parse asterisk-wrapped text into bold JSX
+const parseBoldText = (text: string): (string | JSX.Element)[] => {
+    if (!text) return [];
+    const parts: (string | JSX.Element)[] = [];
+    const regex = /\*([^*]+)\*/g;
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+
+    while ((match = regex.exec(text)) !== null) {
+        // Add text before the match
+        if (match.index > lastIndex) {
+            parts.push(text.substring(lastIndex, match.index));
+        }
+        // Add bold text
+        parts.push(<strong key={key++}>{match[1]}</strong>);
+        lastIndex = regex.lastIndex;
+    }
+    // Add remaining text
+    if (lastIndex < text.length) {
+        parts.push(text.substring(lastIndex));
+    }
+    return parts.length > 0 ? parts : [text];
+};
 
 interface Message {
     role: "user" | "assistant";
@@ -386,6 +412,9 @@ export default function ChatSidebar({
                         const genData = await genRes.json();
 
                         if (genData?.imageUrl) {
+                            if (genData.fallbackMessage) {
+                                toast.info(genData.fallbackMessage);
+                            }
                             resolvePendingImageMessage(pendingId, genData.imageUrl);
                             onImageGenerated(genData.imageUrl);
                             const confirmMessage: Message = {
@@ -570,11 +599,10 @@ export default function ChatSidebar({
                                                                 if (message.isThinking) return message.content;
                                                                 const hasDisplayed = Object.prototype.hasOwnProperty.call(displayedText, messageId);
                                                                 const displayed = hasDisplayed ? displayedText[messageId] : "";
-                                                                if (message.role === "assistant") {
-                                                                    // Never fall back to full content until animation completes to avoid flash
-                                                                    return displayed ?? "";
-                                                                }
-                                                                return displayed || message.content;
+                                                                const textToRender = message.role === "assistant" 
+                                                                    ? (displayed ?? "")
+                                                                    : (displayed || message.content);
+                                                                return parseBoldText(textToRender);
                                                             })()}
                                                         </div>
                                                     </div>

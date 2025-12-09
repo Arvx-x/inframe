@@ -192,35 +192,42 @@ export async function POST(request: Request) {
 
       const fullPrompt = `${basePrompt}\n\nStyle direction: ${direction.name}\nComposition: ${direction.compositionRules ?? ""}\nMood: ${(direction.moodKeywords || []).join(", ")}\n\nCreate a high-quality, professional image following these guidelines precisely.`;
 
-      // Call Gemini 3 Pro Image Preview directly
+      // Try Gemini 3 Pro Image Preview once, then fallback to 2.5 flash image on failure
       let response: Response | null = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 60000);
-          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${INFRAME_API_KEY}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: fullPrompt }] }]
-            }),
-            signal: controller.signal,
-          });
-          clearTimeout(timeout);
-          if (response.ok) break;
-          const text = await response.text().catch(() => "");
-          console.error("Gemini 3 Pro API error:", response.status, text);
-          if (response.status === 429 || response.status >= 500) {
-            await new Promise((r) => setTimeout(r, attempt * 600));
-            continue;
-          }
-          return NextResponse.json({ success: false, error: `Image generation failed: ${response.status}`, details: text }, { status: 502 });
-        } catch (e) {
-          await new Promise((r) => setTimeout(r, attempt * 600));
-        }
+      let usedFallback = false;
+      
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 60000);
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${INFRAME_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: fullPrompt }] }]
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+      } catch (e) {
+        console.error("Gemini 3 Pro API error:", e);
       }
+      
       if (!response || !response.ok) {
-        return NextResponse.json({ success: false, error: "Image generation failed after retries" }, { status: 502 });
+        // Fallback to gemini-2.5-flash-image immediately
+        console.log("Gemini 3 Pro not available, falling back to 2.5 Flash");
+        usedFallback = true;
+        const fallback = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${INFRAME_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: fullPrompt }] }]
+          }),
+        });
+        if (!fallback.ok) {
+          const fbText = await fallback.text().catch(() => "");
+          return NextResponse.json({ success: false, error: "Image generation failed", fallbackError: fbText }, { status: 502 });
+        }
+        response = fallback;
       }
 
       const data = await response.json().catch((e) => {
@@ -245,7 +252,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: "No image URL in response", raw: data }, { status: 502 });
       }
 
-      return NextResponse.json({ success: true, variants: [{ imageUrl }] }, { status: 200 });
+      return NextResponse.json({ 
+        success: true, 
+        variants: [{ imageUrl }],
+        fallbackMessage: usedFallback ? "Gemini 3 Pro not available, falling back to 2.5 Flash" : undefined
+      }, { status: 200 });
     }
 
     // Chat Image Generation Phase (Gemini 3 Pro Image Preview)
@@ -254,34 +265,42 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: "Prompt is required for chat image generation" }, { status: 400 });
       }
 
+      // Try Gemini 3 Pro Image Preview once, then fallback to 2.5 flash image on failure
       let response: Response | null = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 60000);
-          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${INFRAME_API_KEY}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: prompt }] }]
-            }),
-            signal: controller.signal,
-          });
-          clearTimeout(timeout);
-          if (response.ok) break;
-          const text = await response.text().catch(() => "");
-          console.error("Gemini 3 Pro API error:", response.status, text);
-          if (response.status === 429 || response.status >= 500) {
-            await new Promise((r) => setTimeout(r, attempt * 600));
-            continue;
-          }
-          return NextResponse.json({ success: false, error: `Image generation failed: ${response.status}`, details: text }, { status: 502 });
-        } catch (e) {
-          await new Promise((r) => setTimeout(r, attempt * 600));
-        }
+      let usedFallback = false;
+      
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 60000);
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${INFRAME_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }]
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+      } catch (e) {
+        console.error("Gemini 3 Pro API error:", e);
       }
+      
       if (!response || !response.ok) {
-        return NextResponse.json({ success: false, error: "Image generation failed after retries" }, { status: 502 });
+        // Fallback to gemini-2.5-flash-image immediately
+        console.log("Gemini 3 Pro not available, falling back to 2.5 Flash");
+        usedFallback = true;
+        const fallback = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${INFRAME_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }]
+          }),
+        });
+        if (!fallback.ok) {
+          const fbText = await fallback.text().catch(() => "");
+          return NextResponse.json({ success: false, error: "Image generation failed", fallbackError: fbText }, { status: 502 });
+        }
+        response = fallback;
       }
 
       const data = await response.json().catch((e) => {
@@ -306,7 +325,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: "No image URL in response", raw: data }, { status: 502 });
       }
 
-      return NextResponse.json({ success: true, imageUrl });
+      return NextResponse.json({ 
+        success: true, 
+        imageUrl,
+        fallbackMessage: usedFallback ? "Gemini 3 Pro not available, falling back to 2.5 Flash" : undefined
+      });
     }
 
     // Build system prompt and response format depending on phase

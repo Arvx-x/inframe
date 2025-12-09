@@ -99,60 +99,65 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // Call Gemini 3 Pro Image Preview with retry logic
+        // Try Gemini 3 Pro Image Preview once, then fallback to 2.5 flash image on failure
         let response: Response | null = null;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 60000);
+        let usedFallback = false;
+        
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 60000);
 
-                response = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${INFRAME_API_KEY}`,
-                    {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            contents: [{ role: "user", parts }],
-                            safetySettings: [
-                                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-                            ]
-                        }),
-                        signal: controller.signal,
-                    }
-                );
-
-                clearTimeout(timeout);
-
-                if (response.ok) break;
-
-                const text = await response.text().catch(() => "");
-                console.error(`Gemini 3 Pro API error (attempt ${attempt}):`, response.status, text);
-
-                if (response.status === 429 || response.status >= 500) {
-                    await new Promise((r) => setTimeout(r, attempt * 1000));
-                    continue;
+            response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${INFRAME_API_KEY}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ role: "user", parts }],
+                        safetySettings: [
+                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                        ]
+                    }),
+                    signal: controller.signal,
                 }
+            );
 
-                return NextResponse.json(
-                    { success: false, error: `Image editing failed: ${response.status}`, details: text },
-                    { status: 502 }
-                );
-            } catch (e) {
-                console.error(`Request error (attempt ${attempt}):`, e);
-                if (attempt < 3) {
-                    await new Promise((r) => setTimeout(r, attempt * 1000));
-                }
-            }
+            clearTimeout(timeout);
+        } catch (e) {
+            console.error("Gemini 3 Pro API error:", e);
         }
 
         if (!response || !response.ok) {
-            return NextResponse.json(
-                { success: false, error: "Image editing failed after retries" },
-                { status: 502 }
+            // Fallback to gemini-2.5-flash-image immediately
+            console.log("Gemini 3 Pro not available, falling back to 2.5 Flash");
+            usedFallback = true;
+            const fallback = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${INFRAME_API_KEY}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ role: "user", parts }],
+                        safetySettings: [
+                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                        ]
+                    }),
+                }
             );
+            if (!fallback.ok) {
+                const fbText = await fallback.text().catch(() => "");
+                return NextResponse.json(
+                    { success: false, error: "Image editing failed", fallbackError: fbText },
+                    { status: 502 }
+                );
+            }
+            response = fallback;
         }
 
         const data = await response.json().catch((e) => {
@@ -197,7 +202,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             imageUrl,
-            selection
+            selection,
+            fallbackMessage: usedFallback ? "Gemini 3 Pro not available, falling back to 2.5 Flash" : undefined
         });
 
     } catch (error) {
