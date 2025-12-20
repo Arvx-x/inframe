@@ -328,11 +328,11 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
     <div
       ref={sidebarRef}
       className={cn(
-        "fixed top-12 right-0 bg-white border-l border-[#E5E5E5] z-50 flex flex-col transition-all duration-300 ease-in-out shadow-lg",
+        "fixed top-14 right-0 bg-white border-l border-[#E5E5E5] z-50 flex flex-col transition-all duration-300 ease-in-out shadow-lg rounded-t-xl overflow-hidden",
         isResizing && "transition-none"
       )}
       style={{
-        height: 'calc(100vh - 48px)',
+        height: 'calc(100vh - 56px)',
         width: `${sidebarWidth}px`,
         transform: 'translateX(0)',
         animation: isClosing ? 'slideOutToRight 0.3s ease-in forwards' : 'slideInFromRight 0.3s ease-out'
