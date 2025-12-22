@@ -12,7 +12,7 @@ import Canvas from "@/app/components/Canvas";
 import { InspectorSidebar } from "@/app/components/InspectorSidebar";
 import ColorSelector from "@/app/components/ColorSelector";
 import { Button } from "@/app/components/ui/button";
-import { Share, ArrowLeft, PenTool, Image as ImageIcon, Layout, PanelLeftClose, PanelLeft, Menu, Palette, Monitor } from "lucide-react";
+import { Share, ArrowLeft, PenTool, Image as ImageIcon, Layout, PanelLeftClose, PanelLeft, Menu, Palette, Monitor, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { ProfileDropdown } from "@/app/components/ProfileDropdown";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
@@ -42,8 +42,9 @@ function EditorContent() {
   const [isLoading, setIsLoading] = useState(true);
   
   // Studio management
-  type StudioType = 'vector' | 'pixel' | 'layout' | 'color' | 'screen';
+  type StudioType = 'design' | 'vector' | 'pixel' | 'layout' | 'color' | 'screen';
   const allStudios: { type: StudioType; label: string; icon: any }[] = [
+    { type: 'design', label: 'Design', icon: Sparkles },
     { type: 'vector', label: 'Vector', icon: PenTool },
     { type: 'pixel', label: 'Pixel', icon: ImageIcon },
     { type: 'layout', label: 'Layout', icon: Layout },
@@ -51,8 +52,9 @@ function EditorContent() {
     { type: 'screen', label: 'Screen', icon: Monitor },
   ];
   
-  const [visibleStudios, setVisibleStudios] = useState<StudioType[]>(['vector', 'pixel', 'layout']);
-  const [activeStudio, setActiveStudio] = useState<StudioType>('vector');
+  const [visibleStudios, setVisibleStudios] = useState<StudioType[]>(['design', 'vector', 'pixel']);
+  const [activeStudio, setActiveStudio] = useState<StudioType>('design');
+  const [isStudiosCollapsed, setIsStudiosCollapsed] = useState(true);
   
   const availableStudios = allStudios.filter(studio => !visibleStudios.includes(studio.type));
   
@@ -308,25 +310,61 @@ function EditorContent() {
             )}
 
             {/* Studio Selector */}
-            <div className="flex items-center bg-gray-100 p-1 rounded-full ml-2">
-              {visibleStudios.map((studioType) => {
-                const studio = allStudios.find(s => s.type === studioType);
-                if (!studio) return null;
-                const Icon = studio.icon;
-                return (
-                  <button
-                    key={studioType}
-                    onClick={() => setActiveStudio(studioType)}
-                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeStudio === studioType
-                      ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    {studio.label}
-                  </button>
-                );
-              })}
+            <div className="flex items-center bg-gray-100 p-1 rounded-full ml-2 overflow-hidden">
+              {/* Active Studio Button - Always visible, shows chevron when collapsed */}
+              <button
+                onClick={() => setIsStudiosCollapsed(!isStudiosCollapsed)}
+                className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] bg-[hsl(var(--sidebar-ring))] text-white shadow-sm cursor-pointer select-none outline-none shrink-0"
+              >
+                {(() => {
+                  const activeStudioData = allStudios.find(s => s.type === activeStudio);
+                  if (!activeStudioData) return null;
+                  const Icon = activeStudioData.icon;
+                  return (
+                    <>
+                      <Icon className="w-3.5 h-3.5" />
+                      {activeStudioData.label}
+                      {isStudiosCollapsed ? (
+                        <ChevronDown className="w-3.5 h-3.5 ml-1 transition-transform duration-300" />
+                      ) : (
+                        <ChevronUp className="w-3.5 h-3.5 ml-1 transition-transform duration-300" />
+                      )}
+                    </>
+                  );
+                })()}
+              </button>
+
+              {/* Other Studio Buttons - Slide in/out */}
+              <div className="flex items-center overflow-hidden">
+                {visibleStudios
+                  .filter(studioType => studioType !== activeStudio)
+                  .map((studioType, index) => {
+                    const studio = allStudios.find(s => s.type === studioType);
+                    if (!studio) return null;
+                    const Icon = studio.icon;
+                    return (
+                      <div
+                        key={studioType}
+                        className={`transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                          isStudiosCollapsed
+                            ? 'max-w-0 opacity-0 translate-x-full pointer-events-none overflow-hidden'
+                            : 'max-w-[200px] opacity-100 translate-x-0'
+                        }`}
+                        style={{
+                          transitionDelay: isStudiosCollapsed ? '0ms' : `${index * 30}ms`
+                        }}
+                      >
+                        <button
+                          onClick={() => setActiveStudio(studioType)}
+                          className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none outline-none whitespace-nowrap text-muted-foreground hover:text-foreground"
+                        >
+                          <Icon className="w-3.5 h-3.5 shrink-0" />
+                          {studio.label}
+                        </button>
+                      </div>
+                    );
+                  })}
+              </div>
               
               {/* Hamburger Menu Button for Studio Management */}
               <DropdownMenu>
@@ -528,25 +566,61 @@ function EditorContent() {
           )}
 
           {/* Studio Selector */}
-          <div className="flex items-center bg-gray-100 p-1 rounded-full ml-2">
-            {visibleStudios.map((studioType) => {
-              const studio = allStudios.find(s => s.type === studioType);
-              if (!studio) return null;
-              const Icon = studio.icon;
-              return (
-                <button
-                  key={studioType}
-                  onClick={() => setActiveStudio(studioType)}
-                  className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeStudio === studioType
-                    ? 'bg-[hsl(var(--sidebar-ring))] text-white shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {studio.label}
-                </button>
-              );
-            })}
+          <div className="flex items-center bg-gray-100 p-1 rounded-full ml-2 overflow-hidden">
+              {/* Active Studio Button - Always visible, shows chevron when collapsed */}
+              <button
+                onClick={() => setIsStudiosCollapsed(!isStudiosCollapsed)}
+                className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] bg-[hsl(var(--sidebar-ring))] text-white shadow-sm cursor-pointer select-none outline-none shrink-0"
+              >
+                {(() => {
+                  const activeStudioData = allStudios.find(s => s.type === activeStudio);
+                  if (!activeStudioData) return null;
+                  const Icon = activeStudioData.icon;
+                  return (
+                    <>
+                      <Icon className="w-3.5 h-3.5" />
+                      {activeStudioData.label}
+                      {isStudiosCollapsed ? (
+                        <ChevronDown className="w-3.5 h-3.5 ml-1 transition-transform duration-300" />
+                      ) : (
+                        <ChevronUp className="w-3.5 h-3.5 ml-1 transition-transform duration-300" />
+                      )}
+                    </>
+                  );
+                })()}
+              </button>
+
+              {/* Other Studio Buttons - Slide in/out */}
+              <div className="flex items-center overflow-hidden">
+                {visibleStudios
+                  .filter(studioType => studioType !== activeStudio)
+                  .map((studioType, index) => {
+                    const studio = allStudios.find(s => s.type === studioType);
+                    if (!studio) return null;
+                    const Icon = studio.icon;
+                    return (
+                      <div
+                        key={studioType}
+                        className={`transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                          isStudiosCollapsed
+                            ? 'max-w-0 opacity-0 translate-x-full pointer-events-none overflow-hidden'
+                            : 'max-w-[200px] opacity-100 translate-x-0'
+                        }`}
+                        style={{
+                          transitionDelay: isStudiosCollapsed ? '0ms' : `${index * 30}ms`
+                        }}
+                      >
+                        <button
+                          onClick={() => setActiveStudio(studioType)}
+                          className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none outline-none whitespace-nowrap text-muted-foreground hover:text-foreground"
+                        >
+                          <Icon className="w-3.5 h-3.5 shrink-0" />
+                          {studio.label}
+                        </button>
+                      </div>
+                    );
+                  })}
+              </div>
             
             {/* Hamburger Menu Button for Studio Management */}
             <DropdownMenu>
