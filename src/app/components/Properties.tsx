@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import { Mountain, Square, RotateCw, Maximize, Droplet, Minus, Layers, Palette, Lock, ChevronDown, ChevronUp, Eye, EyeOff, Plus, HelpCircle, Grid3x3, X, Link, Sun, Zap, Wand2, Trash2, Sparkles, Loader2, Move, Type, Box, Sliders, Crop, Brain, Shuffle, Paintbrush, Globe, Scissors } from "lucide-react";
+import { Mountain, Square, RotateCw, Maximize, Droplet, Minus, Layers, Palette, Lock, ChevronDown, ChevronUp, Eye, EyeOff, Plus, HelpCircle, Grid3x3, X, Link, Sun, Zap, Wand2, Trash2, Sparkles, Loader2, Move, Type, Box, Sliders, Crop, Brain, Shuffle, Paintbrush, Globe, Scissors, ImageIcon } from "lucide-react";
 import { Input } from "@/app/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { Textarea } from "@/app/components/ui/textarea";
@@ -9,6 +9,7 @@ import { FabricObject, FabricImage, filters } from "fabric";
 import { toast } from "sonner";
 import { EditSpace } from "@/app/components/EditSpace";
 import { SmartEdit } from "@/app/components/SmartEdit";
+import { ImageRasterControls } from "@/app/components/ImageRasterControls";
 
 interface PropertiesData {
   x: number;
@@ -1456,6 +1457,20 @@ export const Properties = ({
                 </button>
               </div>
             </div>
+
+            {/* Image Raster Controls Section - Only for images, appears after original transform tools */}
+            {isImage && (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 px-1 mb-2">
+                  <ImageIcon className="w-4 h-4 text-blue-500" />
+                  <span className="text-[12px] font-semibold text-[#161616] tracking-wide">Image Editing</span>
+                </div>
+                <ImageRasterControls
+                  selectedObject={selectedObject}
+                  canvas={canvas}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
