@@ -15,6 +15,7 @@ import { Button } from "@/app/components/ui/button";
 import { Share, ArrowLeft, PenTool, Image as ImageIcon, Layout, PanelLeftClose, PanelLeft, Menu, Palette, Monitor, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { ProfileDropdown } from "@/app/components/ProfileDropdown";
+import { GlobalSearchBar } from "@/app/components/GlobalSearchBar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -279,7 +280,7 @@ function EditorContent() {
     return (
       <div className="relative w-full h-screen overflow-hidden bg-white">
         {/* Header - Old Layout (with studio selector) */}
-        <div className="fixed top-0 left-0 right-0 h-12 bg-white border-b border-border z-[100] flex items-center px-4">
+        <div className="fixed top-0 left-0 right-0 h-[52px] bg-white border-b border-border z-[100] flex items-center px-4">
           {/* Left: Back Button and Layers Toggle */}
           <div className="flex-1 flex items-center gap-2">
             {/* Layers Panel Toggle */}
@@ -427,8 +428,10 @@ function EditorContent() {
             </div>
           </div>
 
-          {/* Centered Project Title */}
-          <h1 className="text-sm font-medium text-foreground absolute left-1/2 -translate-x-1/2">{projectName}</h1>
+          {/* Centered Global Search Bar (anchored to top so it expands downward only) */}
+          <div className="absolute left-1/2 -translate-x-1/2 top-1.5 z-[101]">
+            <GlobalSearchBar projectName={projectName} />
+          </div>
 
           {/* Right side controls */}
           <div className="flex-1 flex justify-end gap-2">
@@ -461,7 +464,7 @@ function EditorContent() {
         </div>
 
         {/* Main Content Area - below header */}
-        <div className="absolute top-12 left-0 right-0 bottom-0 flex">
+        <div className="absolute top-[52px] left-0 right-0 bottom-0 flex">
           {/* Canvas Area - takes remaining space */}
           <div className="flex-1 relative">
             <Canvas
@@ -535,7 +538,7 @@ function EditorContent() {
   return (
     <div className="relative w-full h-screen overflow-hidden bg-white">
       {/* Header - Current Layout (with studio selector) */}
-      <div className="fixed top-0 left-0 right-0 h-12 bg-white border-b border-border z-[100] flex items-center px-4">
+      <div className="fixed top-0 left-0 right-0 h-[52px] bg-white border-b border-border z-[100] flex items-center px-4">
         {/* Left: Back Button and Layers Toggle */}
         <div className="flex-1 flex items-center gap-2">
           {/* Layers Panel Toggle */}
@@ -683,8 +686,10 @@ function EditorContent() {
           </div>
         </div>
 
-        {/* Centered Project Title */}
-        <h1 className="text-sm font-medium text-foreground absolute left-1/2 -translate-x-1/2">{projectName}</h1>
+        {/* Centered Global Search Bar (anchored to top so it expands downward only) */}
+        <div className="absolute left-1/2 -translate-x-1/2 top-1.5 z-[101]">
+          <GlobalSearchBar projectName={projectName} />
+        </div>
 
         {/* Right side controls */}
         <div className="flex-1 flex justify-end gap-2">
@@ -717,7 +722,7 @@ function EditorContent() {
       </div>
 
       {/* Main Content Area - below header */}
-      <div className="absolute top-12 left-0 right-0 bottom-0 flex">
+      <div className="absolute top-[52px] left-0 right-0 bottom-0 flex">
         {/* Canvas Area - takes remaining space */}
         <div className="flex-1 relative">
           <Canvas
@@ -743,7 +748,7 @@ function EditorContent() {
         </div>
 
         {/* Right Sidebar - Chat */}
-        <div className="absolute right-0 top-14 -bottom-12">
+        <div className="absolute right-0 top-[58px] -bottom-12">
           <ChatSidebar
             width={rightSidebarWidth}
             onWidthChange={setRightSidebarWidth}

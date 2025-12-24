@@ -767,7 +767,23 @@ export const Properties = ({
   }, [brightness, contrast, saturation, highlights, shadows, exposure, vibrance, blur, noise, pixelate, sepia, vintage, isImage]);
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-white">
+    <>
+      {isImage && (activeTab === "transform" || activeTab === "tools") && (
+        <style>{`
+          .image-tab-no-scrollbar::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
+          }
+          .image-tab-no-scrollbar::-webkit-scrollbar-track {
+            display: none;
+          }
+          .image-tab-no-scrollbar::-webkit-scrollbar-thumb {
+            display: none;
+          }
+        `}</style>
+      )}
+      <div className="flex-1 min-h-0 flex flex-col bg-white">
       {activeTab === "tools" ? (
         <>
           {/* Fixed EditSpace at Top */}
@@ -817,7 +833,13 @@ export const Properties = ({
             onRemoveBgMaskChange={setRemoveBgMask}
           />
           {/* Scrollable Tools Section Below */}
-          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar-track]:hidden [&::-webkit-scrollbar-thumb]:hidden">
+          <div 
+            className={`flex-1 min-h-0 overflow-y-auto px-3 py-3 ${isImage ? "image-tab-no-scrollbar" : ""}`}
+            style={{
+              scrollbarWidth: isImage ? "none" : undefined,
+              msOverflowStyle: isImage ? "none" : undefined,
+            } as React.CSSProperties}
+          >
             <div className="space-y-2.5">
               {/* Crop Section */}
               <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
@@ -1229,7 +1251,13 @@ export const Properties = ({
         </>
       ) : (
         /* Transform Tab Content */
-        <div className="flex-1 overflow-y-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar-track]:hidden [&::-webkit-scrollbar-thumb]:hidden">
+        <div 
+          className={`flex-1 overflow-y-auto px-3 py-3 ${isImage ? "image-tab-no-scrollbar" : ""}`}
+          style={{
+            scrollbarWidth: isImage ? "none" : undefined,
+            msOverflowStyle: isImage ? "none" : undefined,
+          } as React.CSSProperties}
+        >
           <div className="space-y-2.5">
             {/* Position Section */}
             <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl px-3 py-2.5 space-y-2.5">
@@ -1475,5 +1503,6 @@ export const Properties = ({
         </div>
       )}
     </div>
+    </>
   );
 };

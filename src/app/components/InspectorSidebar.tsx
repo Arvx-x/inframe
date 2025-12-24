@@ -325,19 +325,35 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
   if (!selectedObject || (!isImage && !isShape && !isText && !isPath && !isArtboard)) return null;
 
   return (
-    <div
-      ref={sidebarRef}
-      className={cn(
-        "fixed top-14 right-0 bg-white border-l border-[#E5E5E5] z-50 flex flex-col transition-all duration-300 ease-in-out shadow-lg rounded-t-xl overflow-hidden",
-        isResizing && "transition-none"
+    <>
+      {(activeTab === "transform" || activeTab === "tools") && isImage && (
+        <style>{`
+          .inspector-image-no-scrollbar::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
+          }
+          .inspector-image-no-scrollbar::-webkit-scrollbar-track {
+            display: none;
+          }
+          .inspector-image-no-scrollbar::-webkit-scrollbar-thumb {
+            display: none;
+          }
+        `}</style>
       )}
-      style={{
-        height: 'calc(100vh - 56px)',
-        width: `${sidebarWidth}px`,
-        transform: 'translateX(0)',
-        animation: isClosing ? 'slideOutToRight 0.3s ease-in forwards' : 'slideInFromRight 0.3s ease-out'
-      }}
-    >
+      <div
+        ref={sidebarRef}
+        className={cn(
+          "fixed top-14 right-0 bg-white border-l border-[#E5E5E5] z-50 flex flex-col transition-all duration-300 ease-in-out shadow-lg rounded-t-xl overflow-hidden",
+          isResizing && "transition-none"
+        )}
+        style={{
+          height: 'calc(100vh - 56px)',
+          width: `${sidebarWidth}px`,
+          transform: 'translateX(0)',
+          animation: isClosing ? 'slideOutToRight 0.3s ease-in forwards' : 'slideInFromRight 0.3s ease-out'
+        }}
+      >
       {/* Resize Handle */}
       <div
         className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-500/20 active:bg-blue-500/40 transition-colors z-10"
@@ -396,12 +412,22 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
       </div>
 
       {/* Scrollable Content Area */}
-      <div className={cn(
-        "flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar]:bg-transparent [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[#d4d4d8] [&::-webkit-scrollbar-thumb]:rounded-full",
-        activeTab === "color"
-          ? "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          : ""
-      )}>
+      <div 
+        className={cn(
+          "flex-1 overflow-y-auto overflow-x-hidden",
+          activeTab === "color" || ((activeTab === "transform" || activeTab === "tools") && isImage)
+            ? (activeTab === "transform" || activeTab === "tools") && isImage ? "inspector-image-no-scrollbar" : ""
+            : "[scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar]:bg-transparent [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[#d4d4d8] [&::-webkit-scrollbar-thumb]:rounded-full"
+        )}
+        style={
+          activeTab === "color" || ((activeTab === "transform" || activeTab === "tools") && isImage)
+            ? {
+                scrollbarWidth: "none",
+                msOverflowStyle: "none",
+              } as React.CSSProperties
+            : undefined
+        }
+      >
         {/* Color Tab - Shows Colors Component */}
         {activeTab === "color" && (
           <Colors
@@ -470,5 +496,6 @@ export const InspectorSidebar = ({ selectedObject, canvas, onClose, isClosing = 
       </div>
 
     </div>
+    </>
   );
 };
