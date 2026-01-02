@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/pop
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
 import { Input } from "@/app/components/ui/input";
 import { Skeleton } from "@/app/components/ui/skeleton";
-import { Sparkles, Loader2, ArrowUp, Wand2, ImagePlus, Zap, Brain, PenTool, Plus, Undo2, Redo2, Minus, Palette, X, Palette as DesignIcon, MousePointer as CanvasIcon, ChevronDown } from "lucide-react";
+import { Sparkles, Loader2, ArrowUp, Wand2, ImagePlus, Zap, Brain, PenTool, Plus, Undo2, Redo2, Minus, Palette, X, Palette as DesignIcon, ChevronDown } from "lucide-react";
 // Calls go to local Next.js API routes instead of Supabase Edge Functions
 import { toast } from "sonner";
 
@@ -48,7 +48,7 @@ interface Message {
   isThinking?: boolean;
 }
 
-type ChatMode = "canvas" | "design" | "chat";
+type ChatMode = "design" | "chat";
 type GenerationCategory = "logo" | "poster" | "image";
 
 const classifyIdea = (idea: string): GenerationCategory => {
@@ -115,13 +115,24 @@ interface PromptSidebarProps {
   onCanvasRedo?: () => void;
   showHistoryControls?: boolean;
   onProjectNameUpdate?: (name: string) => void;
+  externalMode?: "design" | "chat";
+  onExternalModeChange?: (mode: "design" | "chat") => void;
 }
 
-export default function PromptSidebar({ onImageGenerated, onImageGenerationPending, currentImageUrl, onCanvasCommand, onCanvasUndo, onCanvasRedo, showHistoryControls = false, onProjectNameUpdate }: PromptSidebarProps) {
+export default function PromptSidebar({ onImageGenerated, onImageGenerationPending, currentImageUrl, onCanvasCommand, onCanvasUndo, onCanvasRedo, showHistoryControls = false, onProjectNameUpdate, externalMode, onExternalModeChange }: PromptSidebarProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [mode, setMode] = useState<ChatMode>("design");
+  const [internalMode, setInternalMode] = useState<ChatMode>("design");
+  
+  // Use external mode if provided, otherwise use internal mode
+  const mode = externalMode || internalMode;
+  const setMode = (newMode: ChatMode) => {
+    if (onExternalModeChange && (newMode === "design" || newMode === "chat")) {
+      onExternalModeChange(newMode);
+    }
+    setInternalMode(newMode);
+  };
   const [isGuidedMode, setIsGuidedMode] = useState(false);
   // User preferences for generation
   const [excludeText, setExcludeText] = useState<string>("");
@@ -134,6 +145,11 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
   const [selectedRatio, setSelectedRatio] = useState<string>("1×1");
   const [selectedModel, setSelectedModel] = useState<string>("DALL-E 3");
   const pendingMessageIdsRef = useRef<Set<string>>(new Set());
+  
+  // Design reference image state
+  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const [isAnalyzingReference, setIsAnalyzingReference] = useState(false);
+  const referenceInputRef = useRef<HTMLInputElement | null>(null);
 
   const generateMessageId = () =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -615,20 +631,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
         exclude: (excludeText || "").trim() || undefined,
         colors: selectedColors,
       } as { exclude?: string; colors: string[] };
-      if (mode === "canvas") {
-        // Canvas mode - send command to canvas
-        if (!onCanvasCommand) {
-          throw new Error("Canvas command handler not available");
-        }
-
-        const response = await onCanvasCommand(userMessage.content);
-        const assistantMessage: Message = {
-          role: "assistant",
-          content: response,
-          timestamp: Date.now()
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-      } else if (mode === "design") {
+      if (mode === "design") {
         if (isGuidedMode) {
           // Guided: conversational wizard inside chat
           if (wizardPhase === 'interview') {
@@ -805,7 +808,12 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
             const quickRes = await fetch('/api/generate-image', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ prompt: userMessage.content, isEdit: !!currentImageUrl, currentImageUrl })
+              body: JSON.stringify({ 
+                prompt: userMessage.content, 
+                isEdit: !!currentImageUrl, 
+                currentImageUrl,
+                referenceImageUrl: referenceImage || undefined
+              })
             });
             if (!quickRes.ok) {
               throw new Error(await quickRes.text());
@@ -830,7 +838,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
       }
     } catch (error) {
       console.error('Generation error:', error);
-      toast.error(error instanceof Error ? error.message : mode === "canvas" ? "Failed to execute command" : "Failed to generate image");
+      toast.error(error instanceof Error ? error.message : "Failed to generate image");
       setMessages((prev) => prev.slice(0, -1));
     } finally {
       setIsGenerating(false);
@@ -895,6 +903,36 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
       { role: 'user', content: '', imageUrl: url, timestamp: Date.now() }
     ]);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Handle design reference image upload
+  const handleReferenceUploadClick = () => {
+    referenceInputRef.current?.click();
+  };
+
+  const handleReferenceFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error("Only image files are supported");
+      return;
+    }
+    
+    // Convert to base64 data URL for sending to API
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setReferenceImage(dataUrl);
+      toast.success("Design reference added! The AI will analyze this image when generating.");
+    };
+    reader.readAsDataURL(file);
+    
+    if (referenceInputRef.current) referenceInputRef.current.value = '';
+  };
+
+  const clearReferenceImage = () => {
+    setReferenceImage(null);
+    toast.info("Design reference removed");
   };
 
   // Helper: extract keywords from conversation
@@ -1111,9 +1149,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
         className={`${isChatMode || mode === "chat" ? 'rounded-b-xl' : 'rounded-xl'} border shadow-[0_4px_8px_rgba(0,0,0,0.12)] hover:shadow-[0_6px_12px_rgba(0,0,0,0.16)] bg-white transition-all duration-300 ease-in-out overflow-hidden ${isExpanded || isChatMode || mode === "chat" ? 'cursor-default' : 'cursor-text'
           } ${mode === "design"
             ? "border-blue-200/50"
-            : mode === "canvas"
-              ? "border-blue-300/50"
-              : "border-green-200/50"
+            : "border-green-200/50"
           }`}
         style={{
           height: (isExpanded || isChatMode || mode === "chat") ? '100px' : '52px'
@@ -1124,61 +1160,53 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
           {/* Left buttons - always rendered but animated */}
           <div className={`absolute left-2 bottom-3 flex items-center gap-2 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${!isExpanded && !isChatMode && mode !== "chat" ? 'translate-y-12 pointer-events-none' : 'translate-y-0'
             }`}>
-            {/* Mode toggle button */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            {/* Design Reference Image Upload Button */}
+            <div className="relative">
+              {referenceImage ? (
+                // Show thumbnail of reference image when uploaded
+                <div className="relative group">
+                  <button
+                    onClick={handleReferenceUploadClick}
+                    className="h-6 w-6 rounded-md overflow-hidden border border-blue-300 shadow-sm hover:border-blue-400 transition-all duration-200 ml-1"
+                    title="Design reference (click to change)"
+                  >
+                    <img 
+                      src={referenceImage} 
+                      alt="Design reference" 
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                  {/* Remove reference button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearReferenceImage();
+                    }}
+                    className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Remove reference"
+                  >
+                    <X className="w-2 h-2" />
+                  </button>
+                </div>
+              ) : (
+                // Show upload button when no reference
                 <Button
                   size="icon"
-                  className="h-6 w-6 bg-transparent hover:bg-gray-100 border-0 rounded-sm shadow-none text-gray-700 hover:text-gray-900 transition-all duration-200 ml-1 -m"
-                  title={`Current mode: ${mode === "design" ? "Design" : mode === "canvas" ? "Canvas" : "Chat"}`}
+                  onClick={handleReferenceUploadClick}
+                  className="h-6 w-6 bg-transparent hover:bg-gray-100 border-0 rounded-sm shadow-none text-gray-700 hover:text-gray-900 transition-all duration-200 ml-1"
+                  title="Add design reference image"
                 >
-                  {mode === "design" ? (
-                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21,15 16,10 5,21" />
-                    </svg>
-                  ) : mode === "canvas" ? (
-                    <CanvasIcon className="w-3 h-3" />
-                  ) : (
-                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    </svg>
-                  )}
+                  <ImagePlus className="w-3.5 h-3.5" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" sideOffset={8} className="rounded-xl border bg-white shadow-lg">
-                <DropdownMenuItem
-                  className="gap-2 text-sm"
-                  onClick={() => setMode("design")}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                    <circle cx="8.5" cy="8.5" r="1.5" />
-                    <polyline points="21,15 16,10 5,21" />
-                  </svg>
-                  Design Mode
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="gap-2 text-sm"
-                  onClick={() => setMode("canvas")}
-                >
-                  <CanvasIcon className="w-4 h-4" /> Canvas Mode
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="gap-2 text-sm"
-                  onClick={() => {
-                    setMode("chat");
-                    setIsChatMode(true);
-                  }}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
-                  Chat Mode
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              )}
+              <input 
+                ref={referenceInputRef} 
+                type="file" 
+                accept="image/*" 
+                className="hidden" 
+                onChange={handleReferenceFileChange} 
+              />
+            </div>
 
 
             {/* Exclude popup */}
@@ -1533,14 +1561,14 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
               onClick={handleSend}
               disabled={isGenerating || !input.trim()}
               size="icon"
-              className={`h-7 w-7 p-0 rounded-full shadow-sm transition-all duration-300 focus-visible:ring-0 focus-visible:ring-offset-0 ${mode === "canvas" ? "bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90" : mode === "chat" ? "bg-green-600 hover:bg-green-700" : ""
+              className={`h-7 w-7 p-0 rounded-full shadow-sm transition-all duration-300 focus-visible:ring-0 focus-visible:ring-offset-0 ${mode === "chat" ? "bg-green-600 hover:bg-green-700" : ""
                 }`}
-              title={mode === "design" ? (isGuidedMode ? "Start Wizard" : "Generate Image") : mode === "canvas" ? "Execute Command" : "Send Message"}
+              title={mode === "design" ? (isGuidedMode ? "Start Wizard" : "Generate Image") : "Send Message"}
             >
               {isGenerating ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <ArrowUp className={`w-3 h-3 ${mode === "chat" || mode === "canvas" ? "text-white" : ""}`} />
+                <ArrowUp className={`w-3 h-3 ${mode === "chat" ? "text-white" : ""}`} />
               )}
             </Button>
           </div>
@@ -1552,7 +1580,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
               className="relative h-full flex flex-col justify-start px-4 pt-4 cursor-pointer caret-transparent overflow-hidden"
             >
               <div className="text-sm text-muted-foreground/80 whitespace-nowrap overflow-hidden">
-                {firstUserMessage || (mode === "design" ? "What would you like to create?" : mode === "canvas" ? "Tell the canvas what to do..." : "Start a conversation...")}
+                {firstUserMessage || (mode === "design" ? "What would you like to create?" : "Start a conversation...")}
               </div>
               {/* Fade-out gradient on the right */}
               {firstUserMessage && (
@@ -1572,7 +1600,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                 }}
                 onKeyDown={handleKeyPress}
                 placeholder={
-                  mode === "design" ? "What would you like to create?" : mode === "canvas" ? "Tell the canvas what to do..." : "Start a conversation..."
+                  mode === "design" ? "What would you like to create?" : "Start a conversation..."
                 }
                 className="min-h-[120px] resize-none bg-transparent border-0 focus-visible:ring-0 pl-4 pr-16 pt-4 pb-8 placeholder:text-muted-foreground/80"
                 disabled={isGenerating}

@@ -208,12 +208,10 @@ const computeImagePlacement = (
 
 export default function Canvas({ generatedImageUrl, isImagePending = false, pendingImageRatio = null, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasSaveRef, onCanvasColorRef, onCanvasInstanceRef, initialCanvasColor = "#F4F4F6", initialCanvasData, isLayersOpen: isLayersOpenProp, onLayersOpenChange, onSelectedObjectChange, onCanvasInstanceChange, toolbarLayout = 'horizontal' }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const canvasWrapperRef = useRef<HTMLDivElement | null>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [selectedImage, setSelectedImage] = useState<FabricImage | null>(null);
   const [isCropping, setIsCropping] = useState(false);
   const cropRectRef = useRef<FabricRect | null>(null);
-  const [workspaceBg, setWorkspaceBg] = useState<string>(initialCanvasColor);
   const [imageFilters, setImageFilters] = useState({
     brightness: 0,
     contrast: 0,
@@ -229,53 +227,6 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     width: DEFAULT_PLACEHOLDER_SIZE,
     height: DEFAULT_PLACEHOLDER_SIZE,
   });
-
-  useEffect(() => {
-    setWorkspaceBg(initialCanvasColor);
-  }, [initialCanvasColor]);
-
-  // Keep the dotted grid "attached" to the Fabric viewport transform (pan/zoom).
-  useEffect(() => {
-    if (!fabricCanvas) return;
-
-    const GRID_SPACING_PX = 18;
-    let raf = 0;
-
-    const syncGridToViewport = () => {
-      raf = 0;
-      const el = canvasWrapperRef.current;
-      if (!el) return;
-
-      const vt = fabricCanvas.viewportTransform;
-      const zoom = typeof fabricCanvas.getZoom === 'function' ? fabricCanvas.getZoom() : 1;
-      const spacing = Math.max(2, GRID_SPACING_PX * (Number.isFinite(zoom) ? zoom : 1));
-
-      const tx = Array.isArray(vt) ? (vt[4] ?? 0) : 0;
-      const ty = Array.isArray(vt) ? (vt[5] ?? 0) : 0;
-
-      // Keep values bounded for stability/perf.
-      const mod = (n: number, m: number) => ((n % m) + m) % m;
-      const px = mod(tx, spacing);
-      const py = mod(ty, spacing);
-
-      el.style.backgroundPosition = `${px}px ${py}px`;
-      el.style.backgroundSize = `${spacing}px ${spacing}px`;
-    };
-
-    const scheduleSync = () => {
-      if (raf) return;
-      raf = window.requestAnimationFrame(syncGridToViewport);
-    };
-
-    // Initial + on any render that changes viewport/object display.
-    scheduleSync();
-    fabricCanvas.on('after:render', scheduleSync as any);
-
-    return () => {
-      if (raf) window.cancelAnimationFrame(raf);
-      fabricCanvas.off('after:render', scheduleSync as any);
-    };
-  }, [fabricCanvas]);
 
   useEffect(() => {
     if (!fabricCanvas) return;
@@ -636,9 +587,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     const canvas = new FabricCanvas(canvasRef.current, {
       width: canvasRef.current.parentElement?.clientWidth || window.innerWidth,
       height: canvasRef.current.parentElement?.clientHeight || window.innerHeight,
-      // Keep the Fabric canvas transparent so the workspace grid (CSS) shows through.
-      // Export routines already force a solid white background when needed.
-      backgroundColor: 'transparent',
+      backgroundColor: initialCanvasColor,
       preserveObjectStacking: true, // Prevent automatic z-index changes on selection
     });
 
@@ -2445,8 +2394,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   const handleNewProject = () => {
     if (!fabricCanvas) return;
     fabricCanvas.clear();
-    fabricCanvas.backgroundColor = 'transparent';
-    setWorkspaceBg(initialCanvasColor);
+    fabricCanvas.backgroundColor = initialCanvasColor;
     fabricCanvas.renderAll();
     setSelectedImage(null);
     setImageFilters({
@@ -2889,10 +2837,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
 
   const handleCanvasColorChange = (color: string) => {
     if (!fabricCanvas) return;
-    // This controls the workspace background behind the artboards.
-    // Keep Fabric background transparent so the dotted grid remains visible.
-    setWorkspaceBg(color);
-    fabricCanvas.backgroundColor = 'transparent';
+    fabricCanvas.backgroundColor = color;
     fabricCanvas.renderAll();
   };
 
@@ -2907,11 +2852,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div
-            ref={canvasWrapperRef}
-            className="relative w-full h-screen overflow-hidden inframe-dotted-grid"
-            style={{ backgroundColor: workspaceBg }}
-          >
+          <div className="relative w-full h-screen overflow-hidden bg-[#F4F4F6]">
             <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
             {isImagePending && (
               <div

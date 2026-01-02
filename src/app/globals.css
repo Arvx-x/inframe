@@ -162,17 +162,6 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-
-  /* Dotted grid background (Figma-like) for the editor workspace */
-  .inframe-dotted-grid {
-    background-image: radial-gradient(circle, rgba(0, 0, 0, 0.12) 1.1px, transparent 1.1px);
-    background-size: 18px 18px;
-    background-position: 0 0;
-  }
-
-  .dark .inframe-dotted-grid {
-    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.12) 1.1px, transparent 1.1px);
-  }
 }
 
 /* 

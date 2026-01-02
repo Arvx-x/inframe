@@ -57,6 +57,10 @@ function EditorContent() {
   const [activeStudio, setActiveStudio] = useState<StudioType>('design');
   const [isStudiosCollapsed, setIsStudiosCollapsed] = useState(true);
   
+  // Prompt mode management (design vs chat) - controlled from Studios dropdown
+  type PromptMode = 'design' | 'chat';
+  const [promptMode, setPromptMode] = useState<PromptMode>('design');
+  
   const availableStudios = allStudios.filter(studio => !visibleStudios.includes(studio.type));
   
   const handleStudioSwap = (studioToAdd: StudioType, studioToRemove: StudioType) => {
@@ -310,12 +314,12 @@ function EditorContent() {
               </Button>
             )}
 
-            {/* Studio Selector */}
-            <div className="flex items-center bg-gray-100 p-1 rounded-full ml-2 overflow-hidden">
-              {/* Active Studio Button - Always visible, shows chevron when collapsed */}
+            {/* Studio Selector - Vertical Dropdown */}
+            <div className="relative ml-2">
+              {/* Active Studio Button - Always visible */}
               <button
                 onClick={() => setIsStudiosCollapsed(!isStudiosCollapsed)}
-                className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] bg-[hsl(var(--sidebar-ring))] text-white shadow-sm cursor-pointer select-none outline-none shrink-0"
+                className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] bg-[hsl(var(--sidebar-ring))] text-white shadow-sm cursor-pointer select-none outline-none"
               >
                 {(() => {
                   const activeStudioData = allStudios.find(s => s.type === activeStudio);
@@ -325,106 +329,120 @@ function EditorContent() {
                     <>
                       <Icon className="w-3.5 h-3.5" />
                       {activeStudioData.label}
-                      {isStudiosCollapsed ? (
-                        <ChevronDown className="w-3.5 h-3.5 ml-1 transition-transform duration-300" />
-                      ) : (
-                        <ChevronUp className="w-3.5 h-3.5 ml-1 transition-transform duration-300" />
-                      )}
+                      <ChevronDown className={`w-3.5 h-3.5 ml-1 transition-transform duration-300 ${!isStudiosCollapsed ? 'rotate-180' : ''}`} />
                     </>
                   );
                 })()}
               </button>
 
-              {/* Other Studio Buttons - Slide in/out */}
-              <div className="flex items-center overflow-hidden">
-                {visibleStudios
-                  .filter(studioType => studioType !== activeStudio)
-                  .map((studioType, index) => {
-                    const studio = allStudios.find(s => s.type === studioType);
-                    if (!studio) return null;
-                    const Icon = studio.icon;
-                    return (
-                      <div
-                        key={studioType}
-                        className={`transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-                          isStudiosCollapsed
-                            ? 'max-w-0 opacity-0 translate-x-full pointer-events-none overflow-hidden'
-                            : 'max-w-[200px] opacity-100 translate-x-0'
-                        }`}
-                        style={{
-                          transitionDelay: isStudiosCollapsed ? '0ms' : `${index * 30}ms`
-                        }}
-                      >
-                        <button
-                          onClick={() => setActiveStudio(studioType)}
-                          className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none outline-none whitespace-nowrap text-muted-foreground hover:text-foreground"
-                        >
-                          <Icon className="w-3.5 h-3.5 shrink-0" />
-                          {studio.label}
-                        </button>
-                      </div>
-                    );
-                  })}
-              </div>
-              
-              {/* Hamburger Menu Button for Studio Management */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className="flex items-center justify-center w-8 h-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-gray-200 transition-all ml-1"
-                    aria-label="Manage studios"
-                  >
-                    <Menu className="w-4 h-4" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-48">
-                  {availableStudios.length > 0 ? (
-                    // Show available studios to add
-                    availableStudios.map((studio) => {
-                      const Icon = studio.icon;
-                      return (
-                        <DropdownMenuItem
-                          key={studio.type}
-                          className="flex items-center gap-2"
-                          onSelect={(e) => {
-                            e.preventDefault();
-                            // Replace the first non-active studio
-                            const studioToRemove = visibleStudios.find(s => s !== activeStudio) || visibleStudios[0];
-                            handleStudioSwap(studio.type, studioToRemove);
-                          }}
-                        >
-                          <Icon className="w-4 h-4" />
-                          <span>Add {studio.label}</span>
-                        </DropdownMenuItem>
-                      );
-                    })
-                  ) : (
-                    // Show visible studios to remove (when all studios are visible)
-                    visibleStudios.map((studioType) => {
+              {/* Vertical Dropdown - expands below */}
+              <div 
+                className={`absolute left-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-border/60 overflow-hidden z-50 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                  isStudiosCollapsed 
+                    ? 'opacity-0 translate-y-[-8px] pointer-events-none max-h-0' 
+                    : 'opacity-100 translate-y-0 max-h-[400px]'
+                }`}
+              >
+                {/* Mode Toggle Section */}
+                <div className="px-3 py-2 border-b border-border/40">
+                  <div className="text-xs font-semibold text-muted-foreground mb-2">Mode</div>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => {
+                        setPromptMode('design');
+                      }}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        promptMode === 'design' 
+                          ? 'bg-blue-50 text-blue-600' 
+                          : 'text-muted-foreground hover:text-foreground hover:bg-gray-50'
+                      }`}
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <polyline points="21,15 16,10 5,21" />
+                      </svg>
+                      <span>Design</span>
+                      {promptMode === 'design' && <span className="ml-auto text-blue-600">✓</span>}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPromptMode('chat');
+                      }}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        promptMode === 'chat' 
+                          ? 'bg-green-50 text-green-600' 
+                          : 'text-muted-foreground hover:text-foreground hover:bg-gray-50'
+                      }`}
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                      <span>Chat</span>
+                      {promptMode === 'chat' && <span className="ml-auto text-green-600">✓</span>}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Studios Section */}
+                <div className="px-3 py-2">
+                  <div className="text-xs font-semibold text-muted-foreground mb-2">Studios</div>
+                  <div className="flex flex-col gap-1">
+                    {visibleStudios.map((studioType, index) => {
                       const studio = allStudios.find(s => s.type === studioType);
                       if (!studio) return null;
                       const Icon = studio.icon;
+                      const isActive = studioType === activeStudio;
                       return (
-                        <DropdownMenuItem
+                        <button
                           key={studioType}
-                          className="flex items-center gap-2"
-                          onSelect={(e) => {
-                            e.preventDefault();
-                            // Remove this studio and add the first available one
-                            const allAvailable = allStudios.filter(s => !visibleStudios.includes(s.type));
-                            if (allAvailable.length > 0) {
-                              handleStudioSwap(allAvailable[0].type, studioType);
-                            }
+                          onClick={() => {
+                            setActiveStudio(studioType);
+                            setIsStudiosCollapsed(true);
+                          }}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            isActive 
+                              ? 'bg-[hsl(var(--sidebar-ring)/0.1)] text-[hsl(var(--sidebar-ring))]' 
+                              : 'text-muted-foreground hover:text-foreground hover:bg-gray-50'
+                          }`}
+                          style={{
+                            animationDelay: `${index * 30}ms`
                           }}
                         >
                           <Icon className="w-4 h-4" />
-                          <span>Remove {studio.label}</span>
-                        </DropdownMenuItem>
+                          <span>{studio.label}</span>
+                          {isActive && <span className="ml-auto text-[hsl(var(--sidebar-ring))]">✓</span>}
+                        </button>
                       );
-                    })
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    })}
+                  </div>
+                </div>
+
+                {/* Add More Studios */}
+                {availableStudios.length > 0 && (
+                  <div className="px-3 py-2 border-t border-border/40">
+                    <div className="text-xs font-semibold text-muted-foreground mb-2">Add Studio</div>
+                    <div className="flex flex-col gap-1">
+                      {availableStudios.map((studio) => {
+                        const Icon = studio.icon;
+                        return (
+                          <button
+                            key={studio.type}
+                            onClick={() => {
+                              const studioToRemove = visibleStudios.find(s => s !== activeStudio) || visibleStudios[0];
+                              handleStudioSwap(studio.type, studioToRemove);
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-gray-50 transition-colors"
+                          >
+                            <Icon className="w-4 h-4" />
+                            <span>{studio.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -506,6 +524,8 @@ function EditorContent() {
               currentImageUrl={generatedImageUrl}
               onCanvasCommand={handleCanvasCommand}
               onProjectNameUpdate={handleProjectNameUpdate}
+              externalMode={promptMode}
+              onExternalModeChange={setPromptMode}
             />
             </div>
           </div>
@@ -568,121 +588,135 @@ function EditorContent() {
             </Button>
           )}
 
-          {/* Studio Selector */}
-          <div className="flex items-center bg-gray-100 p-1 rounded-full ml-2 overflow-hidden">
-              {/* Active Studio Button - Always visible, shows chevron when collapsed */}
-              <button
-                onClick={() => setIsStudiosCollapsed(!isStudiosCollapsed)}
-                className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] bg-[hsl(var(--sidebar-ring))] text-white shadow-sm cursor-pointer select-none outline-none shrink-0"
-              >
-                {(() => {
-                  const activeStudioData = allStudios.find(s => s.type === activeStudio);
-                  if (!activeStudioData) return null;
-                  const Icon = activeStudioData.icon;
-                  return (
-                    <>
-                      <Icon className="w-3.5 h-3.5" />
-                      {activeStudioData.label}
-                      {isStudiosCollapsed ? (
-                        <ChevronDown className="w-3.5 h-3.5 ml-1 transition-transform duration-300" />
-                      ) : (
-                        <ChevronUp className="w-3.5 h-3.5 ml-1 transition-transform duration-300" />
-                      )}
-                    </>
-                  );
-                })()}
-              </button>
+          {/* Studio Selector - Vertical Dropdown */}
+          <div className="relative ml-2">
+            {/* Active Studio Button - Always visible */}
+            <button
+              onClick={() => setIsStudiosCollapsed(!isStudiosCollapsed)}
+              className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] bg-[hsl(var(--sidebar-ring))] text-white shadow-sm cursor-pointer select-none outline-none"
+            >
+              {(() => {
+                const activeStudioData = allStudios.find(s => s.type === activeStudio);
+                if (!activeStudioData) return null;
+                const Icon = activeStudioData.icon;
+                return (
+                  <>
+                    <Icon className="w-3.5 h-3.5" />
+                    {activeStudioData.label}
+                    <ChevronDown className={`w-3.5 h-3.5 ml-1 transition-transform duration-300 ${!isStudiosCollapsed ? 'rotate-180' : ''}`} />
+                  </>
+                );
+              })()}
+            </button>
 
-              {/* Other Studio Buttons - Slide in/out */}
-              <div className="flex items-center overflow-hidden">
-                {visibleStudios
-                  .filter(studioType => studioType !== activeStudio)
-                  .map((studioType, index) => {
+            {/* Vertical Dropdown - expands below */}
+            <div 
+              className={`absolute left-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-border/60 overflow-hidden z-50 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                isStudiosCollapsed 
+                  ? 'opacity-0 translate-y-[-8px] pointer-events-none max-h-0' 
+                  : 'opacity-100 translate-y-0 max-h-[400px]'
+              }`}
+            >
+              {/* Mode Toggle Section */}
+              <div className="px-3 py-2 border-b border-border/40">
+                <div className="text-xs font-semibold text-muted-foreground mb-2">Mode</div>
+                <div className="flex flex-col gap-1">
+                  <button
+                    onClick={() => {
+                      setPromptMode('design');
+                    }}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      promptMode === 'design' 
+                        ? 'bg-blue-50 text-blue-600' 
+                        : 'text-muted-foreground hover:text-foreground hover:bg-gray-50'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21,15 16,10 5,21" />
+                    </svg>
+                    <span>Design</span>
+                    {promptMode === 'design' && <span className="ml-auto text-blue-600">✓</span>}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPromptMode('chat');
+                    }}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      promptMode === 'chat' 
+                        ? 'bg-green-50 text-green-600' 
+                        : 'text-muted-foreground hover:text-foreground hover:bg-gray-50'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                    <span>Chat</span>
+                    {promptMode === 'chat' && <span className="ml-auto text-green-600">✓</span>}
+                  </button>
+                </div>
+              </div>
+
+              {/* Studios Section */}
+              <div className="px-3 py-2">
+                <div className="text-xs font-semibold text-muted-foreground mb-2">Studios</div>
+                <div className="flex flex-col gap-1">
+                  {visibleStudios.map((studioType, index) => {
                     const studio = allStudios.find(s => s.type === studioType);
                     if (!studio) return null;
                     const Icon = studio.icon;
+                    const isActive = studioType === activeStudio;
                     return (
-                      <div
+                      <button
                         key={studioType}
-                        className={`transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-                          isStudiosCollapsed
-                            ? 'max-w-0 opacity-0 translate-x-full pointer-events-none overflow-hidden'
-                            : 'max-w-[200px] opacity-100 translate-x-0'
+                        onClick={() => {
+                          setActiveStudio(studioType);
+                          setIsStudiosCollapsed(true);
+                        }}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          isActive 
+                            ? 'bg-[hsl(var(--sidebar-ring)/0.1)] text-[hsl(var(--sidebar-ring))]' 
+                            : 'text-muted-foreground hover:text-foreground hover:bg-gray-50'
                         }`}
                         style={{
-                          transitionDelay: isStudiosCollapsed ? '0ms' : `${index * 30}ms`
+                          animationDelay: `${index * 30}ms`
                         }}
                       >
-                        <button
-                          onClick={() => setActiveStudio(studioType)}
-                          className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none outline-none whitespace-nowrap text-muted-foreground hover:text-foreground"
-                        >
-                          <Icon className="w-3.5 h-3.5 shrink-0" />
-                          {studio.label}
-                        </button>
-                      </div>
+                        <Icon className="w-4 h-4" />
+                        <span>{studio.label}</span>
+                        {isActive && <span className="ml-auto text-[hsl(var(--sidebar-ring))]">✓</span>}
+                      </button>
                     );
                   })}
+                </div>
               </div>
-            
-            {/* Hamburger Menu Button for Studio Management */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="flex items-center justify-center w-8 h-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-gray-200 transition-all ml-1"
-                  aria-label="Manage studios"
-                >
-                  <Menu className="w-4 h-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-48">
-                {availableStudios.length > 0 ? (
-                  // Show available studios to add
-                  availableStudios.map((studio) => {
-                    const Icon = studio.icon;
-                    return (
-                      <DropdownMenuItem
-                        key={studio.type}
-                        className="flex items-center gap-2"
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          // Replace the first non-active studio
-                          const studioToRemove = visibleStudios.find(s => s !== activeStudio) || visibleStudios[0];
-                          handleStudioSwap(studio.type, studioToRemove);
-                        }}
-                      >
-                        <Icon className="w-4 h-4" />
-                        <span>Add {studio.label}</span>
-                      </DropdownMenuItem>
-                    );
-                  })
-                ) : (
-                  // Show visible studios to remove (when all studios are visible)
-                  visibleStudios.map((studioType) => {
-                    const studio = allStudios.find(s => s.type === studioType);
-                    if (!studio) return null;
-                    const Icon = studio.icon;
-                    return (
-                      <DropdownMenuItem
-                        key={studioType}
-                        className="flex items-center gap-2"
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          // Remove this studio and add the first available one
-                          const allAvailable = allStudios.filter(s => !visibleStudios.includes(s.type));
-                          if (allAvailable.length > 0) {
-                            handleStudioSwap(allAvailable[0].type, studioType);
-                          }
-                        }}
-                      >
-                        <Icon className="w-4 h-4" />
-                        <span>Remove {studio.label}</span>
-                      </DropdownMenuItem>
-                    );
-                  })
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+
+              {/* Add More Studios */}
+              {availableStudios.length > 0 && (
+                <div className="px-3 py-2 border-t border-border/40">
+                  <div className="text-xs font-semibold text-muted-foreground mb-2">Add Studio</div>
+                  <div className="flex flex-col gap-1">
+                    {availableStudios.map((studio) => {
+                      const Icon = studio.icon;
+                      return (
+                        <button
+                          key={studio.type}
+                          onClick={() => {
+                            const studioToRemove = visibleStudios.find(s => s !== activeStudio) || visibleStudios[0];
+                            handleStudioSwap(studio.type, studioToRemove);
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-gray-50 transition-colors"
+                        >
+                          <Icon className="w-4 h-4" />
+                          <span>{studio.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

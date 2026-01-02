@@ -10,7 +10,7 @@ if (!INFRAME_API_KEY) {
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { prompt, currentImageUrl, isEdit, selection, selectionImageUrl, editIntent, textEditOptions } = body as {
+    const { prompt, currentImageUrl, isEdit, selection, selectionImageUrl, editIntent, textEditOptions, referenceImageUrl } = body as {
       prompt?: string;
       currentImageUrl?: string;
       isEdit?: boolean;
@@ -22,6 +22,7 @@ export async function POST(request: Request) {
         allowSizeChange?: boolean;
         allowPositionChange?: boolean;
       } | null;
+      referenceImageUrl?: string | null;
     };
 
     if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
@@ -61,7 +62,21 @@ export async function POST(request: Request) {
 
     // Build parts for request
     const parts: any[] = [];
-    if (isEdit && currentImageUrl) {
+    
+    // If a reference image is provided, include it first with analysis instructions
+    if (referenceImageUrl && typeof referenceImageUrl === "string" && !isEdit) {
+      parts.push({
+        text: "DESIGN REFERENCE IMAGE ANALYSIS: Carefully analyze the following reference image for its design elements including: color palette and color harmony, typography style and font choices, layout and composition, visual style (minimalist, bold, vintage, modern, etc.), mood and atmosphere, textures and patterns, spacing and proportions. Use these design elements as inspiration and guidance for the image you will create.",
+      });
+      const refBase64 = referenceImageUrl.split(",")[1] || referenceImageUrl;
+      const refMime = referenceImageUrl.includes("image/jpeg") ? "image/jpeg" : 
+                      referenceImageUrl.includes("image/png") ? "image/png" :
+                      referenceImageUrl.includes("image/webp") ? "image/webp" : "image/png";
+      parts.push({ inline_data: { mime_type: refMime, data: refBase64 } });
+      parts.push({
+        text: `Now, using the design elements, style, color palette, and visual aesthetic from the reference image above, create a new image based on this prompt: ${prompt}. The new image should feel cohesive with the reference in terms of visual style while being a unique creation based on the prompt.`,
+      });
+    } else if (isEdit && currentImageUrl) {
       parts.push({ text: prompt });
       if (selection) {
         parts.push({ text: `Selection JSON: ${JSON.stringify(selection)}` });
