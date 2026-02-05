@@ -997,7 +997,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
       {/* Mode Switcher - Hidden but functionality preserved */}
       <div className="hidden">
         <button onClick={() => setMode("design")}>Design</button>
-        <button onClick={() => setMode("canvas")}>Canvas</button>
+        <button onClick={() => setMode("chat")}>Chat</button>
       </div>
 
       {/* Chat Mode Message Area - appears above composer */}

@@ -384,64 +384,7 @@ function EditorContent() {
                   </div>
                 </div>
 
-                {/* Studios Section */}
-                <div className="px-3 py-2">
-                  <div className="text-xs font-semibold text-muted-foreground mb-2">Studios</div>
-                  <div className="flex flex-col gap-1">
-                    {visibleStudios.map((studioType, index) => {
-                      const studio = allStudios.find(s => s.type === studioType);
-                      if (!studio) return null;
-                      const Icon = studio.icon;
-                      const isActive = studioType === activeStudio;
-                      return (
-                        <button
-                          key={studioType}
-                          onClick={() => {
-                            setActiveStudio(studioType);
-                            setIsStudiosCollapsed(true);
-                          }}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                            isActive 
-                              ? 'bg-[hsl(var(--sidebar-ring)/0.1)] text-[hsl(var(--sidebar-ring))]' 
-                              : 'text-muted-foreground hover:text-foreground hover:bg-gray-50'
-                          }`}
-                          style={{
-                            animationDelay: `${index * 30}ms`
-                          }}
-                        >
-                          <Icon className="w-4 h-4" />
-                          <span>{studio.label}</span>
-                          {isActive && <span className="ml-auto text-[hsl(var(--sidebar-ring))]">✓</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Add More Studios */}
-                {availableStudios.length > 0 && (
-                  <div className="px-3 py-2 border-t border-border/40">
-                    <div className="text-xs font-semibold text-muted-foreground mb-2">Add Studio</div>
-                    <div className="flex flex-col gap-1">
-                      {availableStudios.map((studio) => {
-                        const Icon = studio.icon;
-                        return (
-                          <button
-                            key={studio.type}
-                            onClick={() => {
-                              const studioToRemove = visibleStudios.find(s => s !== activeStudio) || visibleStudios[0];
-                              handleStudioSwap(studio.type, studioToRemove);
-                            }}
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-gray-50 transition-colors"
-                          >
-                            <Icon className="w-4 h-4" />
-                            <span>{studio.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                {/* Studios section removed from this dropdown */}
               </div>
             </div>
           </div>
