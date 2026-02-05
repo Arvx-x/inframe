@@ -208,6 +208,8 @@ const computeImagePlacement = (
 
 export default function Canvas({ generatedImageUrl, isImagePending = false, pendingImageRatio = null, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasSaveRef, onCanvasColorRef, onCanvasInstanceRef, initialCanvasColor = "#F4F4F6", initialCanvasData, isLayersOpen: isLayersOpenProp, onLayersOpenChange, onSelectedObjectChange, onCanvasInstanceChange, toolbarLayout = 'horizontal' }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [gridOffset, setGridOffset] = useState({ x: 0, y: 0 });
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [selectedImage, setSelectedImage] = useState<FabricImage | null>(null);
   const [isCropping, setIsCropping] = useState(false);
@@ -587,7 +589,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     const canvas = new FabricCanvas(canvasRef.current, {
       width: canvasRef.current.parentElement?.clientWidth || window.innerWidth,
       height: canvasRef.current.parentElement?.clientHeight || window.innerHeight,
-      backgroundColor: initialCanvasColor,
+      backgroundColor: 'transparent',
       preserveObjectStacking: true, // Prevent automatic z-index changes on selection
     });
 
@@ -932,6 +934,8 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         vpt[4] += e.movementX;
         vpt[5] += e.movementY;
         canvas.setViewportTransform(vpt);
+        // Update grid offset to follow panning
+        setGridOffset({ x: vpt[4], y: vpt[5] });
       }
 
       // Handle text box drawing
@@ -1350,12 +1354,17 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
         zoom = Math.min(4, Math.max(0.1, zoom));
         const point = new Point(e.offsetX, e.offsetY);
         canvas.zoomToPoint(point, zoom);
+        // Update grid offset after zoom
+        const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+        setGridOffset({ x: vpt[4], y: vpt[5] });
       } else {
         const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
         // natural scroll: swipe moves content; move viewport opposite of scroll
         vpt[4] -= e.deltaX;
         vpt[5] -= e.deltaY;
         canvas.setViewportTransform(vpt);
+        // Update grid offset to follow panning
+        setGridOffset({ x: vpt[4], y: vpt[5] });
       }
       e.preventDefault();
       e.stopPropagation();
@@ -1383,6 +1392,18 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       setSelectedImage(null);
     });
 
+    // Ensure canvas background stays transparent so grid is always visible
+    const ensureTransparentBackground = () => {
+      if (canvas.backgroundColor !== 'transparent') {
+        canvas.backgroundColor = 'transparent';
+        canvas.renderAll();
+      }
+    };
+
+    // Listen for object additions and modifications to ensure grid stays visible
+    canvas.on('object:added', ensureTransparentBackground);
+    canvas.on('object:modified', ensureTransparentBackground);
+    canvas.on('path:created', ensureTransparentBackground);
 
     setFabricCanvas(canvas);
     if (onCanvasInstanceChange) {
@@ -1404,6 +1425,10 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     window.addEventListener('resize', handleResize);
 
     return () => {
+      // Clean up event listeners
+      canvas.off('object:added', ensureTransparentBackground);
+      canvas.off('object:modified', ensureTransparentBackground);
+      canvas.off('path:created', ensureTransparentBackground);
       window.removeEventListener('resize', handleResize);
       ro.disconnect();
       canvas.dispose();
@@ -2394,7 +2419,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   const handleNewProject = () => {
     if (!fabricCanvas) return;
     fabricCanvas.clear();
-    fabricCanvas.backgroundColor = initialCanvasColor;
+    fabricCanvas.backgroundColor = 'transparent';
     fabricCanvas.renderAll();
     setSelectedImage(null);
     setImageFilters({
@@ -2837,7 +2862,9 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
 
   const handleCanvasColorChange = (color: string) => {
     if (!fabricCanvas) return;
-    fabricCanvas.backgroundColor = color;
+    // Keep canvas background transparent so grid is always visible
+    // The grid is rendered on the container div, so we don't change canvas background
+    fabricCanvas.backgroundColor = 'transparent';
     fabricCanvas.renderAll();
   };
 
@@ -2852,7 +2879,16 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div className="relative w-full h-screen overflow-hidden bg-[#F4F4F6]">
+          <div 
+            ref={containerRef}
+            className="relative w-full h-screen overflow-hidden"
+            style={{
+              backgroundColor: '#F4F4F6',
+              backgroundImage: 'radial-gradient(circle, #d1d1d6 1px, transparent 1px)',
+              backgroundSize: '24px 24px',
+              backgroundPosition: `${gridOffset.x}px ${gridOffset.y}px`,
+            }}
+          >
             <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
             {isImagePending && (
               <div
