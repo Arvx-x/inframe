@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Skeleton } from "@/app/components/ui/skeleton";
 import {
     Sparkles, Loader2, ArrowUp, Plus, RotateCcw, ChevronDown,
-    Copy, MessageSquare, Palette, GripVertical, PenTool
+    Copy, MessageSquare, Palette, GripVertical, PenTool, Link2, Play
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -66,6 +66,10 @@ interface ChatSidebarProps {
     onProjectNameUpdate?: (name: string) => void;
     selectedObject?: any;
     fabricCanvas?: any;
+    onAddInputNode?: () => void;
+    onAddToolNode?: (kind: string) => void;
+    onConnectNodes?: () => void;
+    onRunTools?: () => void;
 }
 
 // Helper functions
@@ -127,18 +131,65 @@ export default function ChatSidebar({
     onProjectNameUpdate,
     selectedObject,
     fabricCanvas,
+    onAddInputNode,
+    onAddToolNode,
+    onConnectNodes,
+    onRunTools,
 }: ChatSidebarProps) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isGenerating, setIsGenerating] = useState(false);
     const [mode, setMode] = useState<ChatMode>("design");
-    const [activeTab, setActiveTab] = useState<"chat" | "styles">("chat");
+    const [activeTab, setActiveTab] = useState<"chat" | "tools">("chat");
     const [hasSetProjectName, setHasSetProjectName] = useState(false);
     const [selectedRatio, setSelectedRatio] = useState<string>("1×1");
     const [selectedModel, setSelectedModel] = useState<string>("DALL-E 3");
     const [excludeText, setExcludeText] = useState<string>("");
     const [selectedColors, setSelectedColors] = useState<string[]>([]);
     const [displayedText, setDisplayedText] = useState<Record<string, string>>({});
+    const toolsAvailable = Boolean(onAddInputNode || onAddToolNode);
+    const toolCategories = [
+        {
+            category: "Copywriting",
+            color: "bg-blue-50 border-blue-200",
+            tools: [
+                { kind: "tool-brand-tagline", title: "Brand Tagline", description: "Turn rough copy into a punchy brand tagline." },
+                { kind: "tool-ad-headline", title: "Ad Headline", description: "Generate attention-grabbing ad headlines." },
+                { kind: "tool-product-shortener", title: "Copy Shortener", description: "Condense long descriptions into concise copy." },
+                { kind: "tool-cta-generator", title: "CTA Generator", description: "Create compelling calls-to-action." },
+            ],
+        },
+        {
+            category: "Campaign & Strategy",
+            color: "bg-purple-50 border-purple-200",
+            tools: [
+                { kind: "tool-campaign-hook", title: "Campaign Hook", description: "Generate a hook idea for your campaign." },
+                { kind: "tool-audience-persona", title: "Audience Persona", description: "Build a target audience persona from a brief." },
+                { kind: "tool-swot", title: "SWOT Analysis", description: "Generate strengths, weaknesses, opportunities, threats." },
+                { kind: "tool-positioning", title: "Brand Positioning", description: "Craft a positioning statement from product info." },
+            ],
+        },
+        {
+            category: "Content & Social",
+            color: "bg-green-50 border-green-200",
+            tools: [
+                { kind: "tool-social-caption", title: "Social Caption", description: "Write a social media caption from a brief." },
+                { kind: "tool-hashtag", title: "Hashtag Generator", description: "Generate relevant hashtags for your content." },
+                { kind: "tool-email-subject", title: "Email Subject Line", description: "Craft high-open-rate email subject lines." },
+                { kind: "tool-blog-outline", title: "Blog Outline", description: "Create a structured blog post outline." },
+            ],
+        },
+        {
+            category: "Brand Identity",
+            color: "bg-amber-50 border-amber-200",
+            tools: [
+                { kind: "tool-brand-voice", title: "Brand Voice", description: "Define tone and voice guidelines from examples." },
+                { kind: "tool-name-generator", title: "Name Generator", description: "Brainstorm product or brand name ideas." },
+                { kind: "tool-value-prop", title: "Value Proposition", description: "Distill a clear value proposition statement." },
+                { kind: "tool-elevator-pitch", title: "Elevator Pitch", description: "Generate a concise elevator pitch." },
+            ],
+        },
+    ];
 
     // Resize state
     const [isResizing, setIsResizing] = useState(false);
@@ -518,14 +569,14 @@ export default function ChatSidebar({
                         Chat
                     </button>
                     <button
-                        onClick={() => setActiveTab("styles")}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === "styles"
+                        onClick={() => setActiveTab("tools")}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === "tools"
                                 ? "bg-white text-gray-900 shadow-sm border border-gray-200/60"
                                 : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
                             }`}
                     >
                         <Palette className="w-3.5 h-3.5" />
-                        Styles
+                        Tools
                     </button>
                 </div>
 
@@ -715,15 +766,82 @@ export default function ChatSidebar({
                 </>
             ) : (
                 <div className="flex-1 overflow-hidden relative">
-                    <div className="flex items-center justify-center h-full p-4">
-                        <div className="text-center">
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-100 to-purple-50 flex items-center justify-center mb-4 mx-auto">
-                                <Palette className="w-5 h-5 text-purple-600/60" />
+                    {toolsAvailable ? (
+                        <ScrollArea className="h-full px-4 py-4">
+                            <div className="space-y-5">
+                                {/* Input node */}
+                                <div className="space-y-2">
+                                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Input</p>
+                                    <button
+                                        onClick={() => onAddInputNode?.()}
+                                        className="w-full flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-medium text-gray-800 hover:bg-amber-100/60 transition"
+                                    >
+                                        <span>Text Input</span>
+                                        <Plus className="h-4 w-4 text-gray-500" />
+                                    </button>
+                                </div>
+
+                                {/* Tool categories */}
+                                {toolCategories.map((cat) => (
+                                    <div key={cat.category} className="space-y-2">
+                                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{cat.category}</p>
+                                        <div className="space-y-1.5">
+                                            {cat.tools.map((tool) => (
+                                                <button
+                                                    key={tool.kind}
+                                                    onClick={() => onAddToolNode?.(tool.kind)}
+                                                    className={`w-full text-left rounded-xl border px-3 py-2 hover:shadow-sm transition group ${cat.color}`}
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <p className="text-[13px] font-semibold text-gray-900">{tool.title}</p>
+                                                        <Plus className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                    </div>
+                                                    <p className="text-[11px] text-gray-500 leading-snug mt-0.5">{tool.description}</p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {/* Actions */}
+                                <div className="space-y-2 pt-1">
+                                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Actions</p>
+                                    <div className="flex flex-col gap-1.5">
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            className="justify-start gap-2 rounded-lg h-8 text-xs"
+                                            onClick={() => onConnectNodes?.()}
+                                        >
+                                            <Link2 className="h-3.5 w-3.5" />
+                                            Connect selected nodes
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            className="justify-start gap-2 rounded-lg h-8 text-xs"
+                                            onClick={() => onRunTools?.()}
+                                        >
+                                            <Play className="h-3.5 w-3.5" />
+                                            Run selected tools
+                                        </Button>
+                                    </div>
+                                    <p className="text-[11px] text-gray-400 leading-snug">
+                                        Drag from a connector dot to link nodes, or select two nodes and click Connect. Then Run to generate output.
+                                    </p>
+                                </div>
                             </div>
-                            <p className="text-sm font-medium text-gray-900 mb-1">Styles tab</p>
-                            <p className="text-xs text-gray-500">Styles editing is not available in screen studio</p>
+                        </ScrollArea>
+                    ) : (
+                        <div className="flex items-center justify-center h-full p-4">
+                            <div className="text-center">
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-100 to-purple-50 flex items-center justify-center mb-4 mx-auto">
+                                    <Palette className="w-5 h-5 text-purple-600/60" />
+                                </div>
+                                <p className="text-sm font-medium text-gray-900 mb-1">Tools tab</p>
+                                <p className="text-xs text-gray-500">Tools are not available in this studio</p>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
         </div>

@@ -61,6 +61,112 @@ CREATE TABLE IF NOT EXISTS public.assets_metadata (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Brand kits table (brand identity storage)
+CREATE TABLE IF NOT EXISTS public.brand_kits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  name TEXT NOT NULL,
+  logo_url TEXT,
+  colors JSONB, -- array of HEX strings or color tokens
+  fonts JSONB, -- { primary, secondary, body }
+  guidelines_text TEXT,
+  voice_tone TEXT,
+  style_references JSONB, -- uploaded reference images / URLs
+  ai_brand_summary TEXT, -- AI-distilled brand essence used for prompt injection
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Campaigns table (campaign containers)
+CREATE TABLE IF NOT EXISTS public.campaigns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  brand_kit_id UUID REFERENCES public.brand_kits(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'draft', -- draft, active, completed, archived
+  brief TEXT, -- AI generation input
+  target_audience TEXT,
+  tags JSONB,
+  ai_strategy JSONB, -- AI-generated strategy, messaging angles, suggested formats
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Design formats table (standard sizes, seeded data)
+CREATE TABLE IF NOT EXISTS public.design_formats (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL, -- e.g. "Instagram Post"
+  platform TEXT NOT NULL, -- instagram, facebook, twitter, linkedin, youtube, tiktok, print, custom
+  width INTEGER NOT NULL,
+  height INTEGER NOT NULL,
+  unit TEXT NOT NULL DEFAULT 'px', -- px, in, cm
+  category TEXT NOT NULL, -- social, ad, video, print, web
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Templates table (reusable design templates)
+CREATE TABLE IF NOT EXISTS public.templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL, -- social_post, ad, banner, email_header, story, presentation, print
+  format_key TEXT NOT NULL, -- logical key that maps to a design format
+  canvas_data JSONB,
+  thumbnail_url TEXT,
+  tags JSONB,
+  is_system BOOLEAN NOT NULL DEFAULT false,
+  ai_customization_hints TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Campaign designs table (links projects to campaigns + formats)
+CREATE TABLE IF NOT EXISTS public.campaign_designs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id UUID REFERENCES public.campaigns(id) ON DELETE CASCADE NOT NULL,
+  project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE NOT NULL,
+  format_id UUID REFERENCES public.design_formats(id) ON DELETE SET NULL,
+  sort_order INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Generated videos table (image-to-video outputs)
+CREATE TABLE IF NOT EXISTS public.generated_videos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE NOT NULL,
+  campaign_id UUID REFERENCES public.campaigns(id) ON DELETE SET NULL,
+  source_image_url TEXT,
+  video_url TEXT,
+  prompt TEXT,
+  duration INTEGER,
+  status TEXT NOT NULL DEFAULT 'pending', -- pending, generating, completed, failed
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- AI generation log table (AI-native context & memory)
+CREATE TABLE IF NOT EXISTS public.ai_generation_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  campaign_id UUID REFERENCES public.campaigns(id) ON DELETE SET NULL,
+  project_id UUID REFERENCES public.projects(id) ON DELETE SET NULL,
+  brand_kit_id UUID REFERENCES public.brand_kits(id) ON DELETE SET NULL,
+  action_type TEXT NOT NULL, -- generate_image, generate_video, generate_copy, edit, reformat, suggest
+  input_prompt TEXT NOT NULL,
+  input_context JSONB,
+  output_summary TEXT,
+  output_data JSONB,
+  rating SMALLINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Extend projects table with campaign/brand/template context
+ALTER TABLE public.projects
+  ADD COLUMN IF NOT EXISTS brand_kit_id UUID REFERENCES public.brand_kits(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS format_id UUID REFERENCES public.design_formats(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS template_id UUID REFERENCES public.templates(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS project_type TEXT NOT NULL DEFAULT 'design'; -- design or video
+
 -- ============================================
 -- INDEXES for performance
 -- ============================================
@@ -73,6 +179,18 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_project_id ON public.project_snapshots(
 CREATE INDEX IF NOT EXISTS idx_snapshots_created_at ON public.project_snapshots(project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_assets_project_id ON public.assets_metadata(project_id);
 
+CREATE INDEX IF NOT EXISTS idx_brand_kits_user_id ON public.brand_kits(user_id);
+CREATE INDEX IF NOT EXISTS idx_campaigns_user_id ON public.campaigns(user_id);
+CREATE INDEX IF NOT EXISTS idx_campaigns_brand_kit_id ON public.campaigns(brand_kit_id);
+CREATE INDEX IF NOT EXISTS idx_templates_user_id ON public.templates(user_id);
+CREATE INDEX IF NOT EXISTS idx_campaign_designs_campaign_id ON public.campaign_designs(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_campaign_designs_project_id ON public.campaign_designs(project_id);
+CREATE INDEX IF NOT EXISTS idx_generated_videos_project_id ON public.generated_videos(project_id);
+CREATE INDEX IF NOT EXISTS idx_generated_videos_campaign_id ON public.generated_videos(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_ai_generation_log_user_id ON public.ai_generation_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_ai_generation_log_campaign_id ON public.ai_generation_log(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_ai_generation_log_project_id ON public.ai_generation_log(project_id);
+
 -- ============================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ============================================
@@ -83,6 +201,13 @@ ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ops_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.assets_metadata ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.brand_kits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.campaigns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.design_formats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.campaign_designs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.generated_videos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ai_generation_log ENABLE ROW LEVEL SECURITY;
 
 -- Profiles policies
 CREATE POLICY "Users can view their own profile"
@@ -149,6 +274,118 @@ CREATE POLICY "Users can delete their assets"
   ON public.assets_metadata FOR DELETE
   USING (auth.uid() = user_id);
 
+-- Brand kits policies
+CREATE POLICY "Users can view their own brand kits"
+  ON public.brand_kits FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create their own brand kits"
+  ON public.brand_kits FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own brand kits"
+  ON public.brand_kits FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own brand kits"
+  ON public.brand_kits FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- Campaigns policies
+CREATE POLICY "Users can view their own campaigns"
+  ON public.campaigns FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create their own campaigns"
+  ON public.campaigns FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own campaigns"
+  ON public.campaigns FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own campaigns"
+  ON public.campaigns FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- Templates policies
+CREATE POLICY "Users can view public and their own templates"
+  ON public.templates FOR SELECT
+  USING (is_system = true OR auth.uid() = user_id);
+
+CREATE POLICY "Users can create their own templates"
+  ON public.templates FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own templates"
+  ON public.templates FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own templates"
+  ON public.templates FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- Design formats policies (read-only for all authenticated users)
+CREATE POLICY "Users can view design formats"
+  ON public.design_formats FOR SELECT
+  USING (true);
+
+-- Campaign designs policies
+CREATE POLICY "Users can view campaign designs for their campaigns"
+  ON public.campaign_designs FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.campaigns c
+      WHERE c.id = campaign_id AND c.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can create campaign designs for their campaigns"
+  ON public.campaign_designs FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.campaigns c
+      WHERE c.id = campaign_id AND c.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can delete campaign designs for their campaigns"
+  ON public.campaign_designs FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.campaigns c
+      WHERE c.id = campaign_id AND c.user_id = auth.uid()
+    )
+  );
+
+-- Generated videos policies
+CREATE POLICY "Users can view generated videos for their projects"
+  ON public.generated_videos FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.projects p
+      WHERE p.id = project_id AND p.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can create generated videos for their projects"
+  ON public.generated_videos FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.projects p
+      WHERE p.id = project_id AND p.user_id = auth.uid()
+    )
+  );
+
+-- AI generation log policies
+CREATE POLICY "Users can view their own AI generation log"
+  ON public.ai_generation_log FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own AI generation log"
+  ON public.ai_generation_log FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
 -- ============================================
 -- TRIGGERS
 -- ============================================
@@ -173,6 +410,27 @@ CREATE TRIGGER update_profiles_updated_at
 DROP TRIGGER IF EXISTS update_projects_updated_at ON public.projects;
 CREATE TRIGGER update_projects_updated_at
   BEFORE UPDATE ON public.projects
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger for brand_kits table
+DROP TRIGGER IF EXISTS update_brand_kits_updated_at ON public.brand_kits;
+CREATE TRIGGER update_brand_kits_updated_at
+  BEFORE UPDATE ON public.brand_kits
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger for campaigns table
+DROP TRIGGER IF EXISTS update_campaigns_updated_at ON public.campaigns;
+CREATE TRIGGER update_campaigns_updated_at
+  BEFORE UPDATE ON public.campaigns
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger for templates table
+DROP TRIGGER IF EXISTS update_templates_updated_at ON public.templates;
+CREATE TRIGGER update_templates_updated_at
+  BEFORE UPDATE ON public.templates
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 

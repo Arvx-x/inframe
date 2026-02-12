@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     }
 
     // Call Google Generative Language API directly for image generation
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${INFRAME_API_KEY}`;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${INFRAME_API_KEY}`;
 
     // Build parts for request
     const parts: any[] = [];

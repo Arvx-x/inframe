@@ -1,79 +1,71 @@
 'use client';
 
-import { useState, useRef, useEffect, Suspense } from "react";
+import { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/app/providers/AuthProvider';
-import { getProject, createProject, updateProject, saveCanvas } from '@/app/lib/services/projects.service';
+import { getProject, createProject, updateProject } from '@/app/lib/services/projects.service';
 import { uploadDataURL } from '@/app/lib/services/storage.service';
 import { ProjectColorsProvider } from '@/app/contexts/ProjectColorsContext';
 import ChatSidebar from "@/app/components/ChatSidebar";
-import PromptSidebar from "@/app/components/PromptSidebar";
 import Canvas from "@/app/components/Canvas";
 import { InspectorSidebar } from "@/app/components/InspectorSidebar";
 import ColorSelector from "@/app/components/ColorSelector";
 import { Button } from "@/app/components/ui/button";
-import { Share, ArrowLeft, PenTool, Image as ImageIcon, Layout, PanelLeftClose, PanelLeft, Menu, Palette, Monitor, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { Share, ArrowLeft, PanelLeftClose, PanelLeft, Sparkles, Lightbulb } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { ProfileDropdown } from "@/app/components/ProfileDropdown";
-import { GlobalSearchBar } from "@/app/components/GlobalSearchBar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
+import { AIPanel } from "@/app/components/AIPanel";
+import { FormatBar } from "@/app/components/FormatBar";
+import { getCampaign } from "@/app/lib/services/campaigns.service";
+import { getBrandKit } from "@/app/lib/services/brand-kit.service";
+import type { Campaign } from "@/app/lib/services/campaigns.service";
+import type { BrandKit } from "@/app/lib/services/brand-kit.service";
+import type { DesignFormat } from "@/app/lib/services/formats.service";
 import { toast } from 'sonner';
-import Link from 'next/link';
 import { FabricImage } from 'fabric';
 
 function EditorContent() {
   const searchParams = useSearchParams();
   const projectId = searchParams.get('project');
+  const campaignIdParam = searchParams.get('campaign');
+  const templateIdParam = searchParams.get('template');
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
+  // Campaign & brand context for AI
+  const [campaignContext, setCampaignContext] = useState<Campaign | null>(null);
+  const [brandKitContext, setBrandKitContext] = useState<BrandKit | null>(null);
+  const [activeFormat, setActiveFormat] = useState<DesignFormat | null>(null);
+
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const [isImagePending, setIsImagePending] = useState(false);
   const [pendingRatio, setPendingRatio] = useState<string | null>(null);
+  type CanvasNodesApi = {
+    addInputNode: () => void;
+    addImageInputNode: () => void;
+    addTextImageInputNode: () => void;
+    addToolNode: (kind: string) => void;
+    connectSelectedNodes: () => void;
+    runSelectedTools: () => void;
+  };
   const canvasCommandRef = useRef<((command: string) => Promise<string>) | null>(null);
   const canvasHistoryRef = useRef<{ undo: () => void; redo: () => void } | null>(null);
   const canvasExportRef = useRef<(() => void) | null>(null);
   const canvasSaveRef = useRef<(() => any) | null>(null);
   const canvasColorRef = useRef<((color: string) => void) | null>(null);
   const canvasInstanceRef = useRef<(() => string | null) | null>(null);
+  const canvasNodesRef = useRef<CanvasNodesApi | null>(null);
   const [historyAvailable, setHistoryAvailable] = useState(false);
   const [projectName, setProjectName] = useState("Untitled Project");
   const [canvasColor, setCanvasColor] = useState("#F4F4F6");
-  const [canvasData, setCanvasData] = useState<any>(null);
+  const [designCanvasData, setDesignCanvasData] = useState<any>(null);
+  const [planCanvasData, setPlanCanvasData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   
   // Studio management
-  type StudioType = 'design' | 'vector' | 'pixel' | 'layout' | 'color' | 'screen';
-  const allStudios: { type: StudioType; label: string; icon: any }[] = [
-    { type: 'design', label: 'Design', icon: Sparkles },
-    { type: 'vector', label: 'Vector', icon: PenTool },
-    { type: 'pixel', label: 'Pixel', icon: ImageIcon },
-    { type: 'layout', label: 'Layout', icon: Layout },
-    { type: 'color', label: 'Color', icon: Palette },
-    { type: 'screen', label: 'Screen', icon: Monitor },
-  ];
-  
-  const [visibleStudios, setVisibleStudios] = useState<StudioType[]>(['design', 'vector', 'pixel']);
+  type StudioType = 'design' | 'plan' | 'screen';
   const [activeStudio, setActiveStudio] = useState<StudioType>('design');
-  const [isStudiosCollapsed, setIsStudiosCollapsed] = useState(true);
-  
-  // Prompt mode management (design vs chat) - controlled from Studios dropdown
-  type PromptMode = 'design' | 'chat';
-  const [promptMode, setPromptMode] = useState<PromptMode>('design');
-  
-  const availableStudios = allStudios.filter(studio => !visibleStudios.includes(studio.type));
-  
-  const handleStudioSwap = (studioToAdd: StudioType, studioToRemove: StudioType) => {
-    setVisibleStudios(prev => {
-      const newVisible = prev.filter(s => s !== studioToRemove);
-      newVisible.push(studioToAdd);
-      return newVisible;
-    });
-    // If we're removing the active studio, switch to the newly added one
-    if (activeStudio === studioToRemove) {
-      setActiveStudio(studioToAdd);
-    }
-  };
   
   const [selectedObject, setSelectedObject] = useState<any>(null);
   const [fabricCanvasInstance, setFabricCanvasInstance] = useState<any>(null);
@@ -90,6 +82,22 @@ function EditorContent() {
     }
   }, [activeStudio]);
   const [rightSidebarWidth, setRightSidebarWidth] = useState(300);
+
+  const switchStudio = (nextStudio: StudioType) => {
+    if (canvasSaveRef.current) {
+      const currentData = canvasSaveRef.current();
+      if (activeStudio === 'plan') {
+        setPlanCanvasData(currentData);
+      } else {
+        setDesignCanvasData(currentData);
+      }
+    }
+    // Clear selection and Design-only AI outputs so they don't leak into the other mode
+    setSelectedObject(null);
+    setGeneratedImageUrl(null);
+    setGeneratedVideoUrl(null);
+    setActiveStudio(nextStudio);
+  };
 
   // Load or create project - optimized for instant loading
   // Allow unsigned users to use canvas without saving
@@ -115,7 +123,7 @@ function EditorContent() {
               setProjectName(project.name);
               setCanvasColor(project.canvas_color || '#F4F4F6');
               if (project.canvas_data) {
-                setCanvasData(project.canvas_data);
+                setDesignCanvasData(project.canvas_data);
               }
             } else {
               toast.error('Project not found');
@@ -140,8 +148,32 @@ function EditorContent() {
     initProject();
   }, [projectId, user, authLoading, router]);
 
+  // Load campaign and brand kit context when campaign param is present
+  useEffect(() => {
+    async function loadCampaignContext() {
+      if (!campaignIdParam) return;
+      try {
+        const campaign = await getCampaign(campaignIdParam);
+        if (campaign) {
+          setCampaignContext(campaign);
+          if (campaign.brand_kit_id) {
+            const kit = await getBrandKit(campaign.brand_kit_id);
+            if (kit) setBrandKitContext(kit);
+          }
+        }
+      } catch {
+        // silent - context is optional enhancement
+      }
+    }
+    loadCampaignContext();
+  }, [campaignIdParam]);
+
   const handleImageGenerated = (imageUrl: string) => {
     setGeneratedImageUrl(imageUrl);
+  };
+
+  const handleVideoGenerated = (videoUrl: string) => {
+    setGeneratedVideoUrl(videoUrl);
   };
 
   const handleClear = () => {
@@ -175,6 +207,20 @@ function EditorContent() {
       canvasColorRef.current(color);
     }
   };
+
+  const getSelectedImageSnapshot = useCallback(() => {
+    if (!fabricCanvasInstance || !selectedObject || !(selectedObject instanceof FabricImage)) return null;
+    const image = selectedObject as FabricImage;
+    const bounds = image.getBoundingRect();
+    return fabricCanvasInstance.toDataURL({
+      format: 'png',
+      quality: 1,
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+    });
+  }, [fabricCanvasInstance, selectedObject]);
 
   const handleImageEdit = (newImageUrl: string) => {
     if (!fabricCanvasInstance || !selectedObject) return;
@@ -220,7 +266,12 @@ function EditorContent() {
     if (projectId && user) {
       (async () => {
         try {
-          const currentCanvasData = canvasSaveRef.current?.();
+          let currentCanvasData: any = null;
+          if (activeStudio === 'design') {
+            currentCanvasData = canvasSaveRef.current?.() ?? designCanvasData;
+          } else {
+            currentCanvasData = designCanvasData;
+          }
 
           // Generate thumbnail if canvas is available
           let thumbnailUrl: string | undefined = undefined;
@@ -278,6 +329,7 @@ function EditorContent() {
 
   // Render different layouts based on active studio
   const isScreenMode = activeStudio === 'screen';
+  const isPlanMode = activeStudio === 'plan';
 
   // Old layout for non-screen studios
   if (!isScreenMode) {
@@ -314,84 +366,40 @@ function EditorContent() {
               </Button>
             )}
 
-            {/* Studio Selector - Vertical Dropdown */}
-            <div className="relative ml-2">
-              {/* Active Studio Button - Always visible */}
+            {/* Studio Toggle */}
+            <div className="ml-2 inline-flex items-center rounded-full border border-border/60 bg-white p-0.5 shadow-sm">
               <button
-                onClick={() => setIsStudiosCollapsed(!isStudiosCollapsed)}
-                className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] bg-[hsl(var(--sidebar-ring))] text-white shadow-sm cursor-pointer select-none outline-none"
+                onClick={() => switchStudio('design')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              !isPlanMode
+                ? 'bg-[hsl(var(--sidebar-ring))] text-white'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
               >
-                {(() => {
-                  const activeStudioData = allStudios.find(s => s.type === activeStudio);
-                  if (!activeStudioData) return null;
-                  const Icon = activeStudioData.icon;
-                  return (
-                    <>
-                      <Icon className="w-3.5 h-3.5" />
-                      {activeStudioData.label}
-                      <ChevronDown className={`w-3.5 h-3.5 ml-1 transition-transform duration-300 ${!isStudiosCollapsed ? 'rotate-180' : ''}`} />
-                    </>
-                  );
-                })()}
+                <Sparkles className="h-3.5 w-3.5" />
+                Design
               </button>
-
-              {/* Vertical Dropdown - expands below */}
-              <div 
-                className={`absolute left-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-border/60 overflow-hidden z-50 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-                  isStudiosCollapsed 
-                    ? 'opacity-0 translate-y-[-8px] pointer-events-none max-h-0' 
-                    : 'opacity-100 translate-y-0 max-h-[400px]'
-                }`}
+              <button
+                onClick={() => switchStudio('plan')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              isPlanMode
+                ? 'bg-[hsl(var(--sidebar-ring))] text-white'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
               >
-                {/* Mode Toggle Section */}
-                <div className="px-3 py-2 border-b border-border/40">
-                  <div className="text-xs font-semibold text-muted-foreground mb-2">Mode</div>
-                  <div className="flex flex-col gap-1">
-                    <button
-                      onClick={() => {
-                        setPromptMode('design');
-                      }}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        promptMode === 'design' 
-                          ? 'bg-blue-50 text-blue-600' 
-                          : 'text-muted-foreground hover:text-foreground hover:bg-gray-50'
-                      }`}
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <polyline points="21,15 16,10 5,21" />
-                      </svg>
-                      <span>Design</span>
-                      {promptMode === 'design' && <span className="ml-auto text-blue-600">✓</span>}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setPromptMode('chat');
-                      }}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        promptMode === 'chat' 
-                          ? 'bg-green-50 text-green-600' 
-                          : 'text-muted-foreground hover:text-foreground hover:bg-gray-50'
-                      }`}
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                      </svg>
-                      <span>Chat</span>
-                      {promptMode === 'chat' && <span className="ml-auto text-green-600">✓</span>}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Studios section removed from this dropdown */}
-              </div>
+                <Lightbulb className="h-3.5 w-3.5" />
+                Plan
+              </button>
             </div>
-          </div>
 
-          {/* Centered Global Search Bar (anchored to top so it expands downward only) */}
-          <div className="absolute left-1/2 -translate-x-1/2 top-1.5 z-[101]">
-            <GlobalSearchBar projectName={projectName} />
+            {/* Format Bar (design mode only) */}
+            {!isPlanMode && (
+              <FormatBar
+                activeFormat={activeFormat}
+                onFormatChange={setActiveFormat}
+                className="ml-2"
+              />
+            )}
           </div>
 
           {/* Right side controls */}
@@ -429,7 +437,9 @@ function EditorContent() {
           {/* Canvas Area - takes remaining space */}
           <div className="flex-1 relative">
             <Canvas
-              generatedImageUrl={generatedImageUrl}
+              key={`canvas-${activeStudio}`}
+              generatedImageUrl={isPlanMode ? null : generatedImageUrl}
+              generatedVideoUrl={isPlanMode ? null : generatedVideoUrl}
               isImagePending={isImagePending}
               pendingImageRatio={pendingRatio}
               onClear={handleClear}
@@ -440,41 +450,50 @@ function EditorContent() {
               onCanvasSaveRef={canvasSaveRef}
               onCanvasColorRef={canvasColorRef}
               onCanvasInstanceRef={canvasInstanceRef}
+              onCanvasNodesRef={canvasNodesRef}
               initialCanvasColor={canvasColor}
-              initialCanvasData={canvasData}
-              isLayersOpen={isLeftPanelOpen}
-              onLayersOpenChange={setIsLeftPanelOpen}
+              initialCanvasData={isPlanMode ? planCanvasData : designCanvasData}
+              isLayersOpen={isPlanMode ? false : isLeftPanelOpen}
+              onLayersOpenChange={isPlanMode ? undefined : setIsLeftPanelOpen}
               onSelectedObjectChange={setSelectedObject}
               onCanvasInstanceChange={setFabricCanvasInstance}
+              onCanvasDataChange={(data) => {
+                if (isPlanMode) setPlanCanvasData(data);
+                else setDesignCanvasData(data);
+              }}
               toolbarLayout="vertical"
+              toolbarMode={isPlanMode ? 'plan' : 'default'}
+              showLayersPanel={!isPlanMode}
+              backgroundStyle={isPlanMode ? 'grid' : 'plain'}
             />
           </div>
 
-          {/* PromptSidebar at bottom center - Old Layout */}
-          <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[560px] px-4 pb-4 z-50 pointer-events-none">
-            <div className="pointer-events-auto">
-            <PromptSidebar
-              onImageGenerated={handleImageGenerated}
-              onImageGenerationPending={(pending, options) => {
-                setIsImagePending(pending);
-                if (pending && options?.ratio) {
-                  setPendingRatio(options.ratio);
-                }
-                if (!pending) {
-                  setPendingRatio(null);
-                }
-              }}
-              currentImageUrl={generatedImageUrl}
-              onCanvasCommand={handleCanvasCommand}
-              onProjectNameUpdate={handleProjectNameUpdate}
-              externalMode={promptMode}
-              onExternalModeChange={setPromptMode}
-            />
+          {/* AI Panel at bottom center - Design Mode */}
+          {!isPlanMode && (
+            <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[600px] px-4 pb-4 z-50 pointer-events-none">
+              <div className="pointer-events-auto">
+                <AIPanel
+                  onCanvasCommand={handleCanvasCommand}
+                  onImageGenerated={handleImageGenerated}
+                  onVideoGenerated={handleVideoGenerated}
+                  onImageGenerationPending={(pending, options) => {
+                    setIsImagePending(pending);
+                    if (pending && options?.ratio) setPendingRatio(options.ratio);
+                    if (!pending) setPendingRatio(null);
+                  }}
+                  getCanvasSnapshot={() => canvasInstanceRef.current?.() ?? null}
+                  getSelectedImageSnapshot={getSelectedImageSnapshot}
+                  campaignBrief={campaignContext?.brief}
+                  brandSummary={brandKitContext?.ai_brand_summary}
+                  formatLabel={activeFormat ? `${activeFormat.name} (${activeFormat.width}x${activeFormat.height})` : null}
+                  formatDimensions={activeFormat ? { width: activeFormat.width, height: activeFormat.height } : null}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Right Sidebar - Properties/Styles (only shows when object is selected) */}
-          {selectedObject && fabricCanvasInstance && (
+          {!isPlanMode && selectedObject && fabricCanvasInstance && (
             <InspectorSidebar
               selectedObject={selectedObject}
               canvas={fabricCanvasInstance}
@@ -491,6 +510,35 @@ function EditorContent() {
               onExitPathEditMode={() => {}}
               onCanvasCommand={handleCanvasCommand}
             />
+          )}
+
+          {/* Right Sidebar - Chat (Plan mode) */}
+          {isPlanMode && (
+            <div className="absolute right-0 top-[58px] -bottom-12 flex" style={{ width: rightSidebarWidth }}>
+              <ChatSidebar
+                width={rightSidebarWidth}
+                onWidthChange={setRightSidebarWidth}
+                onImageGenerated={handleImageGenerated}
+                onImageGenerationPending={(pending, options) => {
+                  setIsImagePending(pending);
+                  if (pending && options?.ratio) {
+                    setPendingRatio(options.ratio);
+                  }
+                  if (!pending) {
+                    setPendingRatio(null);
+                  }
+                }}
+                currentImageUrl={generatedImageUrl}
+                onCanvasCommand={handleCanvasCommand}
+                onProjectNameUpdate={handleProjectNameUpdate}
+                selectedObject={selectedObject}
+                fabricCanvas={fabricCanvasInstance}
+                onAddInputNode={() => canvasNodesRef.current?.addInputNode()}
+                onAddToolNode={(kind) => canvasNodesRef.current?.addToolNode(kind)}
+                onConnectNodes={() => canvasNodesRef.current?.connectSelectedNodes()}
+                onRunTools={() => canvasNodesRef.current?.runSelectedTools()}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -531,141 +579,31 @@ function EditorContent() {
             </Button>
           )}
 
-          {/* Studio Selector - Vertical Dropdown */}
-          <div className="relative ml-2">
-            {/* Active Studio Button - Always visible */}
+          {/* Studio Toggle */}
+          <div className="ml-2 inline-flex items-center rounded-full border border-border/60 bg-white p-0.5 shadow-sm">
             <button
-              onClick={() => setIsStudiosCollapsed(!isStudiosCollapsed)}
-              className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] bg-[hsl(var(--sidebar-ring))] text-white shadow-sm cursor-pointer select-none outline-none"
-            >
-              {(() => {
-                const activeStudioData = allStudios.find(s => s.type === activeStudio);
-                if (!activeStudioData) return null;
-                const Icon = activeStudioData.icon;
-                return (
-                  <>
-                    <Icon className="w-3.5 h-3.5" />
-                    {activeStudioData.label}
-                    <ChevronDown className={`w-3.5 h-3.5 ml-1 transition-transform duration-300 ${!isStudiosCollapsed ? 'rotate-180' : ''}`} />
-                  </>
-                );
-              })()}
-            </button>
-
-            {/* Vertical Dropdown - expands below */}
-            <div 
-              className={`absolute left-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-border/60 overflow-hidden z-50 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-                isStudiosCollapsed 
-                  ? 'opacity-0 translate-y-[-8px] pointer-events-none max-h-0' 
-                  : 'opacity-100 translate-y-0 max-h-[400px]'
+              onClick={() => switchStudio('design')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                !isPlanMode
+                  ? 'bg-[hsl(var(--sidebar-ring))] text-white'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {/* Mode Toggle Section */}
-              <div className="px-3 py-2 border-b border-border/40">
-                <div className="text-xs font-semibold text-muted-foreground mb-2">Mode</div>
-                <div className="flex flex-col gap-1">
-                  <button
-                    onClick={() => {
-                      setPromptMode('design');
-                    }}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      promptMode === 'design' 
-                        ? 'bg-blue-50 text-blue-600' 
-                        : 'text-muted-foreground hover:text-foreground hover:bg-gray-50'
-                    }`}
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21,15 16,10 5,21" />
-                    </svg>
-                    <span>Design</span>
-                    {promptMode === 'design' && <span className="ml-auto text-blue-600">✓</span>}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setPromptMode('chat');
-                    }}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      promptMode === 'chat' 
-                        ? 'bg-green-50 text-green-600' 
-                        : 'text-muted-foreground hover:text-foreground hover:bg-gray-50'
-                    }`}
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    </svg>
-                    <span>Chat</span>
-                    {promptMode === 'chat' && <span className="ml-auto text-green-600">✓</span>}
-                  </button>
-                </div>
-              </div>
-
-              {/* Studios Section */}
-              <div className="px-3 py-2">
-                <div className="text-xs font-semibold text-muted-foreground mb-2">Studios</div>
-                <div className="flex flex-col gap-1">
-                  {visibleStudios.map((studioType, index) => {
-                    const studio = allStudios.find(s => s.type === studioType);
-                    if (!studio) return null;
-                    const Icon = studio.icon;
-                    const isActive = studioType === activeStudio;
-                    return (
-                      <button
-                        key={studioType}
-                        onClick={() => {
-                          setActiveStudio(studioType);
-                          setIsStudiosCollapsed(true);
-                        }}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          isActive 
-                            ? 'bg-[hsl(var(--sidebar-ring)/0.1)] text-[hsl(var(--sidebar-ring))]' 
-                            : 'text-muted-foreground hover:text-foreground hover:bg-gray-50'
-                        }`}
-                        style={{
-                          animationDelay: `${index * 30}ms`
-                        }}
-                      >
-                        <Icon className="w-4 h-4" />
-                        <span>{studio.label}</span>
-                        {isActive && <span className="ml-auto text-[hsl(var(--sidebar-ring))]">✓</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Add More Studios */}
-              {availableStudios.length > 0 && (
-                <div className="px-3 py-2 border-t border-border/40">
-                  <div className="text-xs font-semibold text-muted-foreground mb-2">Add Studio</div>
-                  <div className="flex flex-col gap-1">
-                    {availableStudios.map((studio) => {
-                      const Icon = studio.icon;
-                      return (
-                        <button
-                          key={studio.type}
-                          onClick={() => {
-                            const studioToRemove = visibleStudios.find(s => s !== activeStudio) || visibleStudios[0];
-                            handleStudioSwap(studio.type, studioToRemove);
-                          }}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-gray-50 transition-colors"
-                        >
-                          <Icon className="w-4 h-4" />
-                          <span>{studio.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
+              <Sparkles className="h-3.5 w-3.5" />
+              Design
+            </button>
+            <button
+              onClick={() => switchStudio('plan')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                isPlanMode
+                  ? 'bg-[hsl(var(--sidebar-ring))] text-white'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Lightbulb className="h-3.5 w-3.5" />
+              Plan
+            </button>
           </div>
-        </div>
-
-        {/* Centered Global Search Bar (anchored to top so it expands downward only) */}
-        <div className="absolute left-1/2 -translate-x-1/2 top-1.5 z-[101]">
-          <GlobalSearchBar projectName={projectName} />
         </div>
 
         {/* Right side controls */}
@@ -703,7 +641,9 @@ function EditorContent() {
         {/* Canvas Area - takes remaining space */}
         <div className="flex-1 relative">
           <Canvas
-            generatedImageUrl={generatedImageUrl}
+            key={`canvas-${activeStudio}`}
+            generatedImageUrl={isPlanMode ? null : generatedImageUrl}
+            generatedVideoUrl={isPlanMode ? null : generatedVideoUrl}
             isImagePending={isImagePending}
             pendingImageRatio={pendingRatio}
             onClear={handleClear}
@@ -714,13 +654,21 @@ function EditorContent() {
             onCanvasSaveRef={canvasSaveRef}
             onCanvasColorRef={canvasColorRef}
             onCanvasInstanceRef={canvasInstanceRef}
+            onCanvasNodesRef={canvasNodesRef}
             initialCanvasColor={canvasColor}
-            initialCanvasData={canvasData}
-            isLayersOpen={isLeftPanelOpen}
-            onLayersOpenChange={setIsLeftPanelOpen}
+            initialCanvasData={isPlanMode ? planCanvasData : designCanvasData}
+            isLayersOpen={isPlanMode ? false : isLeftPanelOpen}
+            onLayersOpenChange={isPlanMode ? undefined : setIsLeftPanelOpen}
             onSelectedObjectChange={setSelectedObject}
             onCanvasInstanceChange={setFabricCanvasInstance}
+            onCanvasDataChange={(data) => {
+              if (isPlanMode) setPlanCanvasData(data);
+              else setDesignCanvasData(data);
+            }}
             toolbarLayout="horizontal"
+            toolbarMode={isPlanMode ? 'plan' : 'default'}
+            showLayersPanel={!isPlanMode}
+            backgroundStyle={isPlanMode ? 'grid' : 'plain'}
           />
         </div>
 
@@ -744,6 +692,10 @@ function EditorContent() {
             onProjectNameUpdate={handleProjectNameUpdate}
             selectedObject={selectedObject}
             fabricCanvas={fabricCanvasInstance}
+            onAddInputNode={() => canvasNodesRef.current?.addInputNode()}
+            onAddToolNode={(kind) => canvasNodesRef.current?.addToolNode(kind)}
+            onConnectNodes={() => canvasNodesRef.current?.connectSelectedNodes()}
+            onRunTools={() => canvasNodesRef.current?.runSelectedTools()}
           />
         </div>
       </div>

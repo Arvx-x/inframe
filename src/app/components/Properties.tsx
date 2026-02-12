@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import { Mountain, Square, RotateCw, Maximize, Droplet, Minus, Layers, Palette, Lock, ChevronDown, ChevronUp, Eye, EyeOff, Plus, HelpCircle, Grid3x3, X, Link, Sun, Zap, Wand2, Trash2, Sparkles, Loader2, Move, Type, Box, Sliders, Crop, Brain, Shuffle, Paintbrush, Globe, Scissors, ImageIcon } from "lucide-react";
+import { Mountain, Square, RotateCw, Maximize, Droplet, Minus, Layers, Palette, Lock, ChevronDown, ChevronUp, Eye, EyeOff, Plus, HelpCircle, Grid3x3, X, Link, Sun, Zap, Wand2, Trash2, Sparkles, Loader2, Move, Type, Box, Sliders, Crop, Brain, Paintbrush, Scissors, ImageIcon } from "lucide-react";
 import { Input } from "@/app/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { Textarea } from "@/app/components/ui/textarea";
@@ -244,12 +244,10 @@ export const Properties = ({
   const [pixelate, setPixelate] = useState(0);
   const [sepia, setSepia] = useState(0);
   const [vintage, setVintage] = useState(0);
-  const [activeTool, setActiveTool] = useState<"crop" | "quickFx" | "adjustments" | "removeBackground" | "creativeDirector" | "promptRemixer" | "styleTransfer" | "sceneReimagine" | "smartEdit" | "upscale" | null>(null);
+  const [activeTool, setActiveTool] = useState<"crop" | "quickFx" | "adjustments" | "removeBackground" | "creativeDirector" | "styleTransfer" | "smartEdit" | "upscale" | null>(null);
   // Prompt states for AI tools in toolbar dropdowns
   const [creativePrompt, setCreativePrompt] = useState("");
-  const [remixPrompt, setRemixPrompt] = useState("");
   const [stylePrompt, setStylePrompt] = useState("");
-  const [reimaginePrompt, setReimaginePrompt] = useState("");
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [smartEditPrompt, setSmartEditPrompt] = useState("");
   const [smartEditSelection, setSmartEditSelection] = useState<{
@@ -1110,36 +1108,6 @@ export const Properties = ({
                     </div>
                   </div>
 
-                  {/* Prompt Remixer */}
-                  <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
-                    <button
-                      onClick={() => setActiveTool(activeTool === 'promptRemixer' ? null : 'promptRemixer')}
-                      className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Shuffle className="w-4 h-4 text-[#3B82F6]" />
-                        <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Prompt Remixer</span>
-                      </div>
-                      {activeTool === 'promptRemixer' ? (
-                        <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
-                      )}
-                    </button>
-                    <div
-                      className={`overflow-hidden transition-all ${activeTool === 'promptRemixer' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
-                      style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
-                    >
-                      <div className="pt-2 px-3 pb-3 space-y-2">
-                        <div className="text-[11px] text-[#6E6E6E]">Describe how to remix the image.</div>
-                        <Textarea value={remixPrompt} onChange={(e) => setRemixPrompt(e.target.value)} placeholder="e.g., watercolor look, vintage film" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
-                        <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !remixPrompt.trim()} onClick={() => runAiEditFromToolbar(remixPrompt)}>
-                          {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Remixing...</>) : (<><Shuffle className="w-3 h-3" />Remix Image</>)}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Style Transfer */}
                   <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
                     <button
@@ -1165,36 +1133,6 @@ export const Properties = ({
                         <Textarea value={stylePrompt} onChange={(e) => setStylePrompt(e.target.value)} placeholder="e.g., Van Gogh’s Starry Night" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
                         <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !stylePrompt.trim()} onClick={() => runAiEditFromToolbar(stylePrompt)}>
                           {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Applying...</>) : (<><Paintbrush className="w-3 h-3" />Apply Style</>)}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Scene Reimagine */}
-                  <div className="bg-[#F4F4F6] border border-[#E5E5E5] rounded-xl mb-2.5">
-                    <button
-                      onClick={() => setActiveTool(activeTool === 'sceneReimagine' ? null : 'sceneReimagine')}
-                      className="w-full flex items-center justify-between px-3 py-3 hover:bg-[#F5F5F5] transition-colors rounded-xl"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Globe className="w-4 h-4 text-[#3B82F6]" />
-                        <span className="text-[12px] font-medium text-[#161616] tracking-wide leading-tight">Scene Reimagine</span>
-                      </div>
-                      {activeTool === 'sceneReimagine' ? (
-                        <ChevronUp className="w-4 h-4 text-[#6E6E6E]" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />
-                      )}
-                    </button>
-                    <div
-                      className={`overflow-hidden transition-all ${activeTool === 'sceneReimagine' ? 'max-h-[500px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'}`}
-                      style={{ transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1), transform 250ms cubic-bezier(0.4,0,0.2,1)' }}
-                    >
-                      <div className="pt-2 px-3 pb-3 space-y-2">
-                        <div className="text-[11px] text-[#6E6E6E]">Describe how to reimagine the scene.</div>
-                        <Textarea value={reimaginePrompt} onChange={(e) => setReimaginePrompt(e.target.value)} placeholder="e.g., golden hour, winter snow" className="min-h-[60px] resize-none text-[11px] border border-[#E5E5E5] bg-white" disabled={isAiProcessing} />
-                        <Button className="w-full h-8 text-[11px] rounded-lg gap-1.5" size="sm" disabled={isAiProcessing || !reimaginePrompt.trim()} onClick={() => runAiEditFromToolbar(reimaginePrompt)}>
-                          {isAiProcessing ? (<><Loader2 className="w-3 h-3 animate-spin" />Reimagining...</>) : (<><Globe className="w-3 h-3" />Reimagine Scene</>)}
                         </Button>
                       </div>
                     </div>

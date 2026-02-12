@@ -12,7 +12,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/app/components/ui/dropdown-menu';
-import { User, LogOut, Settings, FolderOpen } from 'lucide-react';
+import { User, LogOut, Settings, FolderOpen, Megaphone, Palette, LayoutTemplate } from 'lucide-react';
 import { AuthModal } from './AuthModal';
 import Link from 'next/link';
 
@@ -72,7 +72,25 @@ export function ProfileDropdown() {
                 <DropdownMenuItem asChild>
                     <Link href="/" className="cursor-pointer">
                         <FolderOpen className="mr-2 h-4 w-4" />
-                        <span>My Projects</span>
+                        <span>Dashboard</span>
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                    <Link href="/campaigns" className="cursor-pointer">
+                        <Megaphone className="mr-2 h-4 w-4" />
+                        <span>Campaigns</span>
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                    <Link href="/brand-kit" className="cursor-pointer">
+                        <Palette className="mr-2 h-4 w-4" />
+                        <span>Brand Kit</span>
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                    <Link href="/templates" className="cursor-pointer">
+                        <LayoutTemplate className="mr-2 h-4 w-4" />
+                        <span>Templates</span>
                     </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled>

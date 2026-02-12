@@ -81,6 +81,75 @@ export const SetTextStyleAction = z.object({
   })
 });
 
+// --- New AI-native actions for campaign builder ---
+
+export const GenerateLayoutAction = z.object({
+  type: z.literal("generate_layout"),
+  params: z.object({
+    description: z.string().min(1),
+    width: z.number().optional(),
+    height: z.number().optional(),
+    style: z.string().optional(), // "minimal", "bold", "corporate", etc.
+  })
+});
+
+export const ApplyBrandKitAction = z.object({
+  type: z.literal("apply_brand_kit"),
+  objectIds: z.array(z.string()).optional(), // empty = apply to all
+  params: z.object({
+    brandKitId: z.string().optional(),
+    applyColors: z.boolean().default(true),
+    applyFonts: z.boolean().default(true),
+  })
+});
+
+export const GenerateVariationsAction = z.object({
+  type: z.literal("generate_variations"),
+  params: z.object({
+    count: z.number().min(1).max(5).default(3),
+    varyColors: z.boolean().default(true),
+    varyLayout: z.boolean().default(true),
+    varyCopy: z.boolean().default(false),
+  })
+});
+
+export const AddBrandedTextAction = z.object({
+  type: z.literal("add_branded_text"),
+  params: z.object({
+    text: z.string().min(1),
+    role: z.enum(["headline", "subheadline", "body", "cta"]),
+    left: z.number().optional(),
+    top: z.number().optional(),
+  })
+});
+
+export const ApplyStyleAction = z.object({
+  type: z.literal("apply_style"),
+  objectIds: z.array(z.string()).optional(),
+  params: z.object({
+    style: z.string(), // "make it bolder", "more minimal", etc.
+  })
+});
+
+export const GenerateCopyAction = z.object({
+  type: z.literal("generate_copy"),
+  objectIds: z.array(z.string()).optional(),
+  params: z.object({
+    instruction: z.string().min(1), // "write a tagline", "shorter CTA"
+    tone: z.string().optional(),
+    maxLength: z.number().optional(),
+  })
+});
+
+export const RecomposeForFormatAction = z.object({
+  type: z.literal("recompose_for_format"),
+  params: z.object({
+    targetWidth: z.number(),
+    targetHeight: z.number(),
+    platform: z.string().optional(),
+  })
+});
+
 export const Action = z.discriminatedUnion("type", [
   MoveAction,
   ResizeAction,
@@ -92,6 +161,14 @@ export const Action = z.discriminatedUnion("type", [
   SetStrokeAction,
   SetOpacityAction,
   SetTextStyleAction,
+  // New AI-native actions
+  GenerateLayoutAction,
+  ApplyBrandKitAction,
+  GenerateVariationsAction,
+  AddBrandedTextAction,
+  ApplyStyleAction,
+  GenerateCopyAction,
+  RecomposeForFormatAction,
 ]);
 
 export const AgentResponse = z.object({

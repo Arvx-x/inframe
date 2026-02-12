@@ -14,9 +14,7 @@ type ToolKey =
   | "adjustments"
   | "removeBackground"
   | "creativeDirector"
-  | "promptRemixer"
   | "styleTransfer"
-  | "sceneReimagine"
   | "smartEdit"
   | "upscale"
   | null;

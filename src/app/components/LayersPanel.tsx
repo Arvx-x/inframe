@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { type Canvas as FabricCanvas, type Object as FabricObject, Group as FabricGroup, ActiveSelection as FabricActiveSelection } from "fabric";
 import { Eye, EyeOff, Lock, Unlock, ChevronUp, ChevronDown, X, Layers as LayersIcon, GripVertical, Sparkles } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import { BrandPanel } from "./BrandPanel";
 
 interface LayersPanelProps {
   canvas: FabricCanvas;
@@ -40,7 +41,7 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
   const [draggedObj, setDraggedObj] = useState<FabricObject | null>(null);
   const [dragOverObj, setDragOverObj] = useState<FabricObject | null>(null);
   const [dragOverPos, setDragOverPos] = useState<"above" | "below" | null>(null);
-  const [activeTab, setActiveTab] = useState<"layers" | "inspo">("layers");
+  const [activeTab, setActiveTab] = useState<"layers" | "brand" | "assets">("layers");
 
   useEffect(() => {
     const rerender = () => setRevision((n) => n + 1);
@@ -432,7 +433,7 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
             <button
               onClick={() => setActiveTab("layers")}
               className={cn(
-                "px-3 h-full text-xs font-semibold transition-colors flex items-center",
+                "px-2.5 h-full text-xs font-semibold transition-colors flex items-center",
                 activeTab === "layers"
                   ? "text-[#161616]"
                   : "text-[#9CA3AF] hover:text-[#161616]"
@@ -441,15 +442,26 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
               Layers
             </button>
             <button
-              onClick={() => setActiveTab("inspo")}
+              onClick={() => setActiveTab("brand")}
               className={cn(
-                "px-3 h-full text-xs font-semibold transition-colors flex items-center",
-                activeTab === "inspo"
+                "px-2.5 h-full text-xs font-semibold transition-colors flex items-center gap-1",
+                activeTab === "brand"
                   ? "text-[#161616]"
                   : "text-[#9CA3AF] hover:text-[#161616]"
               )}
             >
-              Inspo
+              Brand
+            </button>
+            <button
+              onClick={() => setActiveTab("assets")}
+              className={cn(
+                "px-2.5 h-full text-xs font-semibold transition-colors flex items-center gap-1",
+                activeTab === "assets"
+                  ? "text-[#161616]"
+                  : "text-[#9CA3AF] hover:text-[#161616]"
+              )}
+            >
+              Assets
             </button>
           </div>
           <button className="p-1 rounded hover:bg-[#F3F4F6]" onClick={onRequestClose} aria-label="Close layers">
@@ -488,11 +500,15 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
           </>
         )}
 
-        {activeTab === "inspo" && (
+        {activeTab === "brand" && (
+          <BrandPanel />
+        )}
+
+        {activeTab === "assets" && (
           <div className="p-3">
             <div className="mb-3 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-[#6B7280]" />
-              <span className="text-xs font-medium text-[#111827]">Inspiration</span>
+              <span className="text-xs font-medium text-[#111827]">Assets & Inspiration</span>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {inspirationImages.map((img) => (
@@ -505,7 +521,6 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
                     alt={img.title}
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      // Fallback if image fails to load
                       (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23F3F4F6' width='200' height='200'/%3E%3Ctext fill='%239CA3AF' font-family='sans-serif' font-size='14' x='50%25' y='50%25' text-anchor='middle' dy='.3em'%3EImage%3C/text%3E%3C/svg%3E";
                     }}
                   />
@@ -517,7 +532,7 @@ export default function LayersPanel({ canvas, onRequestClose, open }: LayersPane
               ))}
             </div>
             <div className="mt-4 text-center">
-              <p className="text-xs text-[#6B7280] mb-2">Browse design inspiration</p>
+              <p className="text-xs text-[#6B7280] mb-2">Browse design inspiration and assets</p>
               <button className="h-7 px-3 text-xs rounded border border-[#E5E7EB] bg-white text-[#111827] hover:bg-[#F9FAFB] transition-colors">
                 Load More
               </button>

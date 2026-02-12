@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas as FabricCanvas, Image as FabricImage, Textbox as FabricTextbox, Rect as FabricRect, Circle as FabricCircle, Line as FabricLine, Path as FabricPath, filters, Point, Object as FabricObject, Group as FabricGroup, ActiveSelection as FabricActiveSelection } from "fabric";
 import { Button } from "@/app/components/ui/button";
-import { Download, RotateCcw, ImagePlus, Crop, Trash2, Save, Share, Layers as LayersIcon, Eye, EyeOff, Lock, Unlock, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown } from "lucide-react";
+import { Download, RotateCcw, ImagePlus, Crop, Trash2, Save, Share, Layers as LayersIcon, Eye, EyeOff, Lock, Unlock, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Play, Pause } from "lucide-react";
 import { toast } from "sonner";
 import { InspectorSidebar } from "@/app/components/InspectorSidebar";
 import { Toolbar } from "@/app/components/Toolbar";
@@ -20,6 +20,7 @@ import { Skeleton } from "@/app/components/ui/skeleton";
 
 interface CanvasProps {
   generatedImageUrl: string | null;
+  generatedVideoUrl?: string | null;
   isImagePending?: boolean;
   pendingImageRatio?: string | null;
   onClear: () => void;
@@ -30,14 +31,55 @@ interface CanvasProps {
   onCanvasSaveRef?: React.MutableRefObject<(() => any) | null>;
   onCanvasColorRef?: React.MutableRefObject<((color: string) => void) | null>;
   onCanvasInstanceRef?: React.MutableRefObject<(() => string | null) | null>;
+  onCanvasNodesRef?: React.MutableRefObject<CanvasNodesApi | null>;
   initialCanvasColor?: string;
   initialCanvasData?: any;
   isLayersOpen?: boolean;
   onLayersOpenChange?: (open: boolean) => void;
   onSelectedObjectChange?: (object: any) => void;
   onCanvasInstanceChange?: (canvas: any) => void;
+  onCanvasDataChange?: (data: any) => void;
   toolbarLayout?: 'vertical' | 'horizontal';
+  toolbarMode?: 'default' | 'plan';
+  showLayersPanel?: boolean;
+  backgroundStyle?: 'grid' | 'plain';
 }
+
+type CanvasNodeKind =
+  | 'input'
+  | 'output'
+  | 'image-input'
+  | 'text-image-input'
+  | 'op-video-gen'
+  | 'op-asset-gen'
+  | 'op-ad-stitch'
+  | 'op-bg-removal'
+  | 'op-smart-edit'
+  | 'tool-brand-tagline'
+  | 'tool-ad-headline'
+  | 'tool-product-shortener'
+  | 'tool-cta-generator'
+  | 'tool-campaign-hook'
+  | 'tool-audience-persona'
+  | 'tool-swot'
+  | 'tool-positioning'
+  | 'tool-social-caption'
+  | 'tool-hashtag'
+  | 'tool-email-subject'
+  | 'tool-blog-outline'
+  | 'tool-brand-voice'
+  | 'tool-name-generator'
+  | 'tool-value-prop'
+  | 'tool-elevator-pitch';
+
+type CanvasNodesApi = {
+  addInputNode: () => void;
+  addImageInputNode: () => void;
+  addTextImageInputNode: () => void;
+  addToolNode: (kind: CanvasNodeKind) => void;
+  connectSelectedNodes: () => void;
+  runSelectedTools: () => void;
+};
 
 // SVG Path utility functions
 interface PathPoint {
@@ -206,7 +248,32 @@ const computeImagePlacement = (
   return { left, top };
 };
 
-export default function Canvas({ generatedImageUrl, isImagePending = false, pendingImageRatio = null, onClear, onCanvasCommandRef, onCanvasHistoryRef, onHistoryAvailableChange, onCanvasExportRef, onCanvasSaveRef, onCanvasColorRef, onCanvasInstanceRef, initialCanvasColor = "#F4F4F6", initialCanvasData, isLayersOpen: isLayersOpenProp, onLayersOpenChange, onSelectedObjectChange, onCanvasInstanceChange, toolbarLayout = 'horizontal' }: CanvasProps) {
+export default function Canvas({
+  generatedImageUrl,
+  generatedVideoUrl,
+  isImagePending = false,
+  pendingImageRatio = null,
+  onClear,
+  onCanvasCommandRef,
+  onCanvasHistoryRef,
+  onHistoryAvailableChange,
+  onCanvasExportRef,
+  onCanvasSaveRef,
+  onCanvasColorRef,
+  onCanvasInstanceRef,
+  onCanvasNodesRef,
+  initialCanvasColor = "#F4F4F6",
+  initialCanvasData,
+  isLayersOpen: isLayersOpenProp,
+  onLayersOpenChange,
+  onSelectedObjectChange,
+  onCanvasInstanceChange,
+  onCanvasDataChange,
+  toolbarLayout = 'horizontal',
+  toolbarMode = 'default',
+  showLayersPanel = true,
+  backgroundStyle = 'grid',
+}: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [gridOffset, setGridOffset] = useState({ x: 0, y: 0 });
@@ -222,6 +289,8 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     blur: 0,
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const nodeImageFileInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingImageNodeRef = useRef<FabricObject | null>(null);
   const isPanningRef = useRef(false);
   const [activeTool, setActiveTool] = useState<"pointer" | "hand">("pointer");
   const activeToolRef = useRef<"pointer" | "hand">("pointer");
@@ -256,17 +325,59 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   }, [fabricCanvas]);
 
   // Load initial canvas data
+  const lastLoadedDataRef = useRef<any>(null);
+  const isLoadingRef = useRef(false);
+  const skipNextLoadRef = useRef(false);
   useEffect(() => {
+    if (skipNextLoadRef.current) {
+      skipNextLoadRef.current = false;
+      return;
+    }
     if (fabricCanvas && initialCanvasData) {
+      isLoadingRef.current = true;
       fabricCanvas.loadFromJSON(initialCanvasData, () => {
         fabricCanvas.renderAll();
+        lastLoadedDataRef.current = initialCanvasData;
         // Reset history stack after loading initial data
         undoStackRef.current = [];
         redoStackRef.current = [];
         setHistoryAvailability();
+        isLoadingRef.current = false;
       });
     }
   }, [fabricCanvas, initialCanvasData]);
+
+  // Persist canvas changes (add/remove/modify) so edits are not lost when switching modes
+  useEffect(() => {
+    if (!fabricCanvas || !onCanvasDataChange) return;
+
+    const debounceMs = 300;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const scheduleSave = () => {
+      if (isLoadingRef.current) return;
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        const data = fabricCanvas.toJSON();
+        if (data) {
+          lastLoadedDataRef.current = data;
+          skipNextLoadRef.current = true; // Prevent reload — our save would replace videos with static frames
+          onCanvasDataChange(data);
+        }
+      }, debounceMs);
+    };
+
+    fabricCanvas.on('object:added', scheduleSave);
+    fabricCanvas.on('object:removed', scheduleSave);
+    fabricCanvas.on('object:modified', scheduleSave);
+
+    return () => {
+      clearTimeout(timeoutId);
+      fabricCanvas.off('object:added', scheduleSave);
+      fabricCanvas.off('object:removed', scheduleSave);
+      fabricCanvas.off('object:modified', scheduleSave);
+    };
+  }, [fabricCanvas, onCanvasDataChange]);
 
   const placeholderSize = useMemo(() => {
     const { width: canvasWidth, height: canvasHeight } = canvasDimensions;
@@ -312,11 +423,11 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     return { left: `${left}px`, top: `${top}px` };
   }, [canvasDimensions, placeholderSize]);
 
-  const activeToolbarButtonRef = useRef<'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut'>('pointer');
-  const [activeShape, setActiveShape] = useState<"rect" | "circle" | "line">("circle");
-  const activeShapeRef = useRef<"rect" | "circle" | "line">("circle");
+  const activeToolbarButtonRef = useRef<'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut' | 'timer' | 'vote' | 'kanban' | 'mindmap'>('pointer');
+  const [activeShape, setActiveShape] = useState<"rect" | "circle" | "line" | "diamond">("circle");
+  const activeShapeRef = useRef<"rect" | "circle" | "line" | "diamond">("circle");
   const [activeToolbarButton, setActiveToolbarButton] = useState<
-    'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut'
+    'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut' | 'timer' | 'vote' | 'kanban' | 'mindmap'
   >('pointer');
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
   const [penSubTool, setPenSubTool] = useState<'draw' | 'pointer' | 'curve'>('draw');
@@ -326,11 +437,19 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
   const [exportFormat, setExportFormat] = useState<'png' | 'jpg' | 'svg'>('png');
   const [exportType, setExportType] = useState<'canvas' | 'artboard' | 'selected'>('canvas');
   const [exportPreview, setExportPreview] = useState<string | null>(null);
+  const [videoControlsRect, setVideoControlsRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [videoPlayingState, setVideoPlayingState] = useState(false);
+  const videoControlsRef = useRef<HTMLDivElement | null>(null);
+  const isPlanMode = toolbarMode === 'plan';
+  const showGrid = backgroundStyle === 'grid';
+  const nodesRef = useRef<Record<string, { id: string; kind: CanvasNodeKind; object: FabricObject }>>({});
+  const connectionsRef = useRef<Record<string, { id: string; fromId: string; toId: string; fromSide: 'left' | 'right'; toSide: 'left' | 'right'; line: FabricLine; arrow?: any }>>({});
+  const activeConnectorRef = useRef<{ fromId: string; fromSide: 'left' | 'right'; line: FabricLine } | null>(null);
   const isDrawingShapeRef = useRef(false);
   const isDrawingTextRef = useRef(false);
   const isDrawingArtboardRef = useRef(false);
   const startPointRef = useRef<{ x: number; y: number } | null>(null);
-  const drawingShapeRef = useRef<FabricRect | FabricCircle | FabricLine | null>(null);
+  const drawingShapeRef = useRef<FabricRect | FabricCircle | FabricLine | FabricPath | null>(null);
   const drawingArtboardRef = useRef<FabricRect | null>(null);
   const drawingTextBoxRef = useRef<FabricRect | null>(null);
   const drawingTextLabelRef = useRef<FabricTextbox | null>(null);
@@ -385,6 +504,812 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       penPreviewLineRef.current = null;
     }
   };
+
+  const getCanvasCenter = () => {
+    const width =
+      typeof (fabricCanvas as any)?.getWidth === "function"
+        ? (fabricCanvas as any).getWidth()
+        : fabricCanvas?.getWidth?.() ?? fabricCanvas?.width ?? DEFAULT_PLACEHOLDER_SIZE;
+    const height =
+      typeof (fabricCanvas as any)?.getHeight === "function"
+        ? (fabricCanvas as any).getHeight()
+        : fabricCanvas?.getHeight?.() ?? fabricCanvas?.height ?? DEFAULT_PLACEHOLDER_SIZE;
+    return { x: width / 2, y: height / 2 };
+  };
+
+  const getConnectionPoint = (obj: FabricObject, side: 'left' | 'right') => {
+    const bounds = (obj as any).getBoundingRect?.(true) ?? { left: obj.left || 0, top: obj.top || 0, width: obj.width || 0, height: obj.height || 0 };
+    const y = bounds.top + bounds.height / 2;
+    const x = side === 'left' ? bounds.left : bounds.left + bounds.width;
+    return { x, y };
+  };
+
+  const updateConnectionsForNode = (nodeId: string) => {
+    const entries = Object.values(connectionsRef.current).filter(
+      (conn) => conn.fromId === nodeId || conn.toId === nodeId
+    );
+    entries.forEach((conn: any) => {
+      const fromNode = nodesRef.current[conn.fromId];
+      const toNode = nodesRef.current[conn.toId];
+      if (!fromNode || !toNode) return;
+      const fromPoint = getConnectionPoint(fromNode.object, conn.fromSide);
+      const toPoint = getConnectionPoint(toNode.object, conn.toSide);
+      conn.line.set({ x1: fromPoint.x, y1: fromPoint.y, x2: toPoint.x, y2: toPoint.y });
+      // Update arrowhead
+      if (conn.arrow && fabricCanvas) {
+        fabricCanvas.remove(conn.arrow);
+        const newArrow = makeArrowHead(toPoint.x, toPoint.y, fromPoint.x, fromPoint.y, conn.line.stroke || '#6B7280');
+        (newArrow as any).__connectionId = conn.id;
+        conn.arrow = newArrow;
+        fabricCanvas.add(newArrow);
+        (fabricCanvas as any).sendToBack(newArrow);
+      }
+    });
+    fabricCanvas?.requestRenderAll();
+  };
+
+  const makeArrowHead = (x2: number, y2: number, x1: number, y1: number, color: string) => {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const headLen = 10;
+    const p1x = x2 - headLen * Math.cos(angle - Math.PI / 6);
+    const p1y = y2 - headLen * Math.sin(angle - Math.PI / 6);
+    const p2x = x2 - headLen * Math.cos(angle + Math.PI / 6);
+    const p2y = y2 - headLen * Math.sin(angle + Math.PI / 6);
+    const pathStr = `M ${p1x} ${p1y} L ${x2} ${y2} L ${p2x} ${p2y}`;
+    return new FabricPath(pathStr, {
+      stroke: color,
+      strokeWidth: 2,
+      fill: 'transparent',
+      selectable: false,
+      evented: false,
+    });
+  };
+
+  const createConnection = (
+    fromId: string,
+    toId: string,
+    fromSide: 'left' | 'right',
+    toSide: 'left' | 'right',
+    color: string = "#6B7280"
+  ) => {
+    if (!fabricCanvas) return null;
+    const fromNode = nodesRef.current[fromId];
+    const toNode = nodesRef.current[toId];
+    if (!fromNode || !toNode) return null;
+    const fromPoint = getConnectionPoint(fromNode.object, fromSide);
+    const toPoint = getConnectionPoint(toNode.object, toSide);
+    const line = new FabricLine([fromPoint.x, fromPoint.y, toPoint.x, toPoint.y], {
+      stroke: color,
+      strokeWidth: 2,
+      selectable: false,
+      evented: false,
+    });
+    const arrow = makeArrowHead(toPoint.x, toPoint.y, fromPoint.x, fromPoint.y, color);
+    const connId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    (arrow as any).__connectionId = connId;
+    (line as any).__connectionId = connId;
+    connectionsRef.current[connId] = { id: connId, fromId, toId, fromSide, toSide, line, arrow } as any;
+    fabricCanvas.add(line);
+    fabricCanvas.add(arrow);
+    (fabricCanvas as any).sendToBack(line);
+    (fabricCanvas as any).sendToBack(arrow);
+    (fabricCanvas as any).bringToFront(fromNode.object);
+    (fabricCanvas as any).bringToFront(toNode.object);
+    fabricCanvas.requestRenderAll();
+    return connId;
+  };
+
+  const registerNodeObject = (obj: FabricObject, kind: CanvasNodeKind) => {
+    const existingId = (obj as any).__nodeId as string | undefined;
+    const nodeId = existingId || (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    (obj as any).__nodeId = nodeId;
+    (obj as any).__nodeKind = kind;
+    nodesRef.current[nodeId] = { id: nodeId, kind, object: obj };
+    obj.on('moving', () => updateConnectionsForNode(nodeId));
+    obj.on('scaling', () => updateConnectionsForNode(nodeId));
+    obj.on('modified', () => updateConnectionsForNode(nodeId));
+    return nodeId;
+  };
+
+  const ensureNodeFromObject = (obj: FabricObject) => {
+    const existingId = (obj as any).__nodeId as string | undefined;
+    if (existingId) {
+      return existingId;
+    }
+    if (obj.type === 'textbox') {
+      return registerNodeObject(obj, 'input');
+    }
+    return null;
+  };
+
+  const addInputNode = () => {
+    if (!fabricCanvas) return;
+    const { x, y } = getCanvasCenter();
+    const NODE_W = 260;
+    const NODE_H = 80;
+    const rect = new FabricRect({
+      width: NODE_W,
+      height: NODE_H,
+      rx: 10, ry: 10,
+      fill: "#FFF9DB",
+      stroke: "#F59E0B",
+      strokeWidth: 1,
+    });
+    const title = new FabricTextbox("Text Input", {
+      left: 16, top: 8, width: NODE_W - 32,
+      fontSize: 13, fontWeight: 600, fill: "#92400E",
+      editable: false, selectable: false,
+    });
+    const body = new FabricTextbox("Paste your rough draft here...", {
+      left: 16, top: 30, width: NODE_W - 32,
+      fontSize: 11, fill: "#78350F",
+      editable: true, selectable: true,
+    });
+    const outputConn = new FabricCircle({
+      radius: 6, left: NODE_W - 6, top: NODE_H / 2 - 6,
+      fill: "#FFFFFF", stroke: "#F59E0B", strokeWidth: 2,
+      selectable: true, evented: true, hoverCursor: "crosshair",
+    });
+    const group = new FabricGroup([rect, title, body, outputConn], {
+      left: x - NODE_W / 2 - 180,
+      top: y - NODE_H / 2,
+      subTargetCheck: true,
+    });
+    const nodeId = registerNodeObject(group as unknown as FabricObject, 'input');
+    (outputConn as any).__connectorSide = 'right';
+    (outputConn as any).__nodeId = nodeId;
+    fabricCanvas.add(group);
+    fabricCanvas.setActiveObject(group);
+    fabricCanvas.requestRenderAll();
+  };
+
+  const addImageInputNode = () => {
+    if (!fabricCanvas) return;
+    const { x, y } = getCanvasCenter();
+    const NODE_W = 260;
+    const NODE_H = 100;
+    const rect = new FabricRect({
+      width: NODE_W, height: NODE_H, rx: 10, ry: 10,
+      fill: "#E0F2FE", stroke: "#0EA5E9", strokeWidth: 1,
+    });
+    const title = new FabricTextbox("Image Input", {
+      left: 16, top: 8, width: NODE_W - 32,
+      fontSize: 13, fontWeight: 600, fill: "#0C4A6E",
+      editable: false, selectable: false,
+    });
+    const uploadZone = new FabricRect({
+      left: 16, top: 32, width: NODE_W - 32, height: 44,
+      rx: 6, ry: 6,
+      fill: "#BAE6FD",
+      stroke: "#0EA5E9",
+      strokeWidth: 1,
+      selectable: true, evented: true, hoverCursor: "pointer",
+    });
+    (uploadZone as any).__isUploadZone = true;
+    const uploadLabel = new FabricTextbox("Click to upload", {
+      left: 26, top: 44, width: NODE_W - 52,
+      fontSize: 11, fill: "#0369A1",
+      editable: false, selectable: false, evented: false,
+    });
+    const outputConn = new FabricCircle({
+      radius: 6, left: NODE_W - 6, top: NODE_H / 2 - 6,
+      fill: "#FFFFFF", stroke: "#0EA5E9", strokeWidth: 2,
+      selectable: true, evented: true, hoverCursor: "crosshair",
+    });
+    const group = new FabricGroup([rect, title, uploadZone, uploadLabel, outputConn], {
+      left: x - NODE_W / 2 - 180,
+      top: y - NODE_H / 2,
+      subTargetCheck: true,
+    });
+    const nodeId = registerNodeObject(group as unknown as FabricObject, 'image-input');
+    (uploadZone as any).__nodeId = nodeId;
+    (outputConn as any).__connectorSide = 'right';
+    (outputConn as any).__nodeId = nodeId;
+    fabricCanvas.add(group);
+    fabricCanvas.setActiveObject(group);
+    fabricCanvas.requestRenderAll();
+  };
+
+  const addTextImageInputNode = () => {
+    if (!fabricCanvas) return;
+    const { x, y } = getCanvasCenter();
+    const NODE_W = 260;
+    const NODE_H = 130;
+    const rect = new FabricRect({
+      width: NODE_W, height: NODE_H, rx: 10, ry: 10,
+      fill: "#E0E7FF", stroke: "#6366F1", strokeWidth: 1,
+    });
+    const title = new FabricTextbox("Text + Image Input", {
+      left: 16, top: 8, width: NODE_W - 32,
+      fontSize: 13, fontWeight: 600, fill: "#312E81",
+      editable: false, selectable: false,
+    });
+    const body = new FabricTextbox("Enter prompt or description...", {
+      left: 16, top: 28, width: NODE_W - 32,
+      fontSize: 11, fill: "#4338CA",
+      editable: true, selectable: true,
+    });
+    const uploadZone = new FabricRect({
+      left: 16, top: 52, width: NODE_W - 32, height: 44,
+      rx: 6, ry: 6,
+      fill: "#C7D2FE",
+      stroke: "#6366F1",
+      strokeWidth: 1,
+      selectable: true, evented: true, hoverCursor: "pointer",
+    });
+    (uploadZone as any).__isUploadZone = true;
+    const uploadLabel = new FabricTextbox("Click to upload image", {
+      left: 26, top: 64, width: NODE_W - 52,
+      fontSize: 11, fill: "#4338CA",
+      editable: false, selectable: false, evented: false,
+    });
+    const outputConn = new FabricCircle({
+      radius: 6, left: NODE_W - 6, top: NODE_H / 2 - 6,
+      fill: "#FFFFFF", stroke: "#6366F1", strokeWidth: 2,
+      selectable: true, evented: true, hoverCursor: "crosshair",
+    });
+    const group = new FabricGroup([rect, title, body, uploadZone, uploadLabel, outputConn], {
+      left: x - NODE_W / 2 - 180,
+      top: y - NODE_H / 2,
+      subTargetCheck: true,
+    });
+    const nodeId = registerNodeObject(group as unknown as FabricObject, 'text-image-input');
+    (uploadZone as any).__nodeId = nodeId;
+    (outputConn as any).__connectorSide = 'right';
+    (outputConn as any).__nodeId = nodeId;
+    fabricCanvas.add(group);
+    fabricCanvas.setActiveObject(group);
+    fabricCanvas.requestRenderAll();
+  };
+
+  const addToolNode = (kind: CanvasNodeKind) => {
+    if (!fabricCanvas) return;
+    const { x, y } = getCanvasCenter();
+    const NODE_W = 260;
+    const NODE_H = 80;
+    const toolLabelMap: Record<string, { title: string; desc: string; fill: string; stroke: string }> = {
+      'op-video-gen':          { title: "Video Generation",  desc: "Generate video from image + prompt",              fill: "#FCE7F3", stroke: "#EC4899" },
+      'op-asset-gen':          { title: "Asset Generation",  desc: "Generate images from text/image",                 fill: "#FCE7F3", stroke: "#EC4899" },
+      'op-ad-stitch':          { title: "Ad Stitcher",       desc: "Compose video ad from clips/images",              fill: "#FCE7F3", stroke: "#EC4899" },
+      'op-bg-removal':         { title: "Background Removal", desc: "Remove image background",                        fill: "#E0E7FF", stroke: "#6366F1" },
+      'op-smart-edit':         { title: "Smart Edit",        desc: "Edit image with text instructions",               fill: "#E0E7FF", stroke: "#6366F1" },
+      'tool-brand-tagline':    { title: "Brand Tagline",     desc: "Turn rough copy into a brand tagline.",           fill: "#E0F2FE", stroke: "#3B82F6" },
+      'tool-ad-headline':      { title: "Ad Headline",       desc: "Generate attention-grabbing ad headlines.",       fill: "#E0F2FE", stroke: "#3B82F6" },
+      'tool-product-shortener':{ title: "Copy Shortener",    desc: "Condense long descriptions into concise copy.",  fill: "#E0F2FE", stroke: "#3B82F6" },
+      'tool-cta-generator':    { title: "CTA Generator",     desc: "Create compelling calls-to-action.",             fill: "#E0F2FE", stroke: "#3B82F6" },
+      'tool-campaign-hook':    { title: "Campaign Hook",     desc: "Generate a hook idea for your campaign.",         fill: "#F3E8FF", stroke: "#8B5CF6" },
+      'tool-audience-persona': { title: "Audience Persona",  desc: "Build a target audience persona from a brief.",  fill: "#F3E8FF", stroke: "#8B5CF6" },
+      'tool-swot':             { title: "SWOT Analysis",     desc: "Generate strengths, weaknesses, opportunities.", fill: "#F3E8FF", stroke: "#8B5CF6" },
+      'tool-positioning':      { title: "Brand Positioning", desc: "Craft a positioning statement.",                  fill: "#F3E8FF", stroke: "#8B5CF6" },
+      'tool-social-caption':   { title: "Social Caption",    desc: "Write a social media caption from a brief.",     fill: "#DCFCE7", stroke: "#22C55E" },
+      'tool-hashtag':          { title: "Hashtag Generator", desc: "Generate relevant hashtags for your content.",    fill: "#DCFCE7", stroke: "#22C55E" },
+      'tool-email-subject':    { title: "Email Subject",     desc: "Craft high-open-rate email subject lines.",      fill: "#DCFCE7", stroke: "#22C55E" },
+      'tool-blog-outline':     { title: "Blog Outline",      desc: "Create a structured blog post outline.",         fill: "#DCFCE7", stroke: "#22C55E" },
+      'tool-brand-voice':      { title: "Brand Voice",       desc: "Define tone and voice guidelines.",              fill: "#FEF3C7", stroke: "#D97706" },
+      'tool-name-generator':   { title: "Name Generator",    desc: "Brainstorm product or brand name ideas.",        fill: "#FEF3C7", stroke: "#D97706" },
+      'tool-value-prop':       { title: "Value Proposition", desc: "Distill a clear value proposition statement.",   fill: "#FEF3C7", stroke: "#D97706" },
+      'tool-elevator-pitch':   { title: "Elevator Pitch",    desc: "Generate a concise elevator pitch.",             fill: "#FEF3C7", stroke: "#D97706" },
+      input:  { title: "Input",  desc: "", fill: "#FFF9DB", stroke: "#F59E0B" },
+      output: { title: "Output", desc: "", fill: "#ECFDF3", stroke: "#10B981" },
+    };
+    const tool = toolLabelMap[kind] || { title: kind, desc: "", fill: "#F3F4F6", stroke: "#9CA3AF" };
+    const rect = new FabricRect({
+      width: NODE_W, height: NODE_H, rx: 10, ry: 10,
+      fill: tool.fill, stroke: tool.stroke, strokeWidth: 1,
+    });
+    const title = new FabricTextbox(tool.title, {
+      left: 20, top: 10, width: NODE_W - 40,
+      fontSize: 13, fontWeight: 600, fill: "#111827",
+      editable: false, selectable: false,
+    });
+    const desc = new FabricTextbox(tool.desc, {
+      left: 20, top: 32, width: NODE_W - 40,
+      fontSize: 11, fill: "#6B7280",
+      editable: false, selectable: false,
+    });
+    const inputConnector = new FabricCircle({
+      radius: 6, left: -6, top: NODE_H / 2 - 6,
+      fill: "#FFFFFF", stroke: tool.stroke, strokeWidth: 2,
+      selectable: true, evented: true, hoverCursor: "crosshair",
+    });
+    const outputConnector = new FabricCircle({
+      radius: 6, left: NODE_W - 6, top: NODE_H / 2 - 6,
+      fill: "#FFFFFF", stroke: tool.stroke, strokeWidth: 2,
+      selectable: true, evented: true, hoverCursor: "crosshair",
+    });
+    const group = new FabricGroup([rect, title, desc, inputConnector, outputConnector], {
+      left: x - NODE_W / 2,
+      top: y - NODE_H / 2,
+      subTargetCheck: true,
+    });
+    const nodeId = registerNodeObject(group as unknown as FabricObject, kind);
+    (inputConnector as any).__connectorSide = 'left';
+    (inputConnector as any).__nodeId = nodeId;
+    (outputConnector as any).__connectorSide = 'right';
+    (outputConnector as any).__nodeId = nodeId;
+    fabricCanvas.add(group);
+    fabricCanvas.setActiveObject(group);
+    fabricCanvas.requestRenderAll();
+  };
+
+  const connectSelectedNodes = () => {
+    if (!fabricCanvas) return;
+    const selected = fabricCanvas.getActiveObjects().filter((obj) => {
+      const hasNodeId = Boolean((obj as any).__nodeId);
+      return hasNodeId || obj.type === 'textbox';
+    });
+    if (selected.length < 2) {
+      toast.error("Select two nodes to connect.");
+      return;
+    }
+    const fromObj = selected[0] as FabricObject;
+    const toObj = selected[1] as FabricObject;
+    const fromId = ensureNodeFromObject(fromObj);
+    const toId = ensureNodeFromObject(toObj);
+    if (!fromId || !toId) {
+      toast.error("Select a valid input and tool node.");
+      return;
+    }
+    createConnection(fromId, toId, 'right', 'left');
+  };
+
+  const getInputFromNode = (inputNode: { id: string; kind: CanvasNodeKind; object: FabricObject }): { text: string; imageData: string | null } => {
+    let text = "";
+    let imageData: string | null = null;
+    const obj = inputNode.object;
+    if ((obj as any).__imageData) imageData = (obj as any).__imageData;
+    if (obj.type === 'textbox') {
+      text = (obj as FabricTextbox).text || "";
+    } else if (obj.type === 'group') {
+      const grpObjs = ((obj as any)._objects || []) as FabricObject[];
+      const textObjs = grpObjs.filter((o: any) => o.type === 'textbox' && o.editable);
+      for (const t of textObjs) {
+        const txt = (t as FabricTextbox).text || "";
+        if (txt.trim()) text = txt;
+      }
+    }
+    return { text: text.trim(), imageData };
+  };
+
+  const showNodeLoading = (nodeObj: FabricObject) => {
+    if (!fabricCanvas) return (() => {});
+    const bounds = (nodeObj as any).getBoundingRect?.(true) ?? { left: 0, top: 0, width: 260, height: 80 };
+    const overlay = new FabricRect({
+      left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height,
+      fill: "rgba(255,255,255,0.8)", rx: 10, ry: 10,
+      selectable: false, evented: false,
+    });
+    (overlay as any).__loadingOverlay = true;
+    const label = new FabricTextbox("Loading...", {
+      left: bounds.left + bounds.width / 2 - 40, top: bounds.top + bounds.height / 2 - 12,
+      width: 80, fontSize: 12, fill: "#6B7280", editable: false, selectable: false, evented: false,
+    });
+    fabricCanvas.add(overlay);
+    fabricCanvas.add(label);
+    fabricCanvas.requestRenderAll();
+    return () => {
+      fabricCanvas.remove(overlay);
+      fabricCanvas.remove(label);
+      fabricCanvas.requestRenderAll();
+    };
+  };
+
+  const executeNodeOperation = async (
+    toolKind: CanvasNodeKind,
+    inputText: string,
+    inputImage: string | null
+  ): Promise<{ type: 'text'; text: string } | { type: 'image'; imageUrl: string } | { type: 'video'; videoUrl?: string; videoBase64?: string; mimeType?: string }> => {
+    const instructionMap: Record<string, string> = {
+      'tool-brand-tagline': 'Generate a punchy brand tagline from this rough copy.',
+      'tool-ad-headline': 'Generate attention-grabbing ad headlines from this brief.',
+      'tool-cta-generator': 'Create compelling calls-to-action from this context.',
+      'tool-social-caption': 'Write a social media caption from this brief.',
+      'tool-product-shortener': 'Condense this long description into concise copy.',
+      'tool-campaign-hook': 'Generate a compelling campaign hook from this brief.',
+      'tool-audience-persona': 'Build a target audience persona from this brief.',
+      'tool-swot': 'Generate a SWOT analysis from this context.',
+      'tool-positioning': 'Craft a brand positioning statement from this.',
+      'tool-hashtag': 'Generate relevant hashtags from this content.',
+      'tool-email-subject': 'Craft high-open-rate email subject lines from this.',
+      'tool-blog-outline': 'Create a structured blog post outline from this.',
+      'tool-brand-voice': 'Define tone and voice guidelines from these examples.',
+      'tool-name-generator': 'Brainstorm product or brand name ideas from this.',
+      'tool-value-prop': 'Distill a clear value proposition from this.',
+      'tool-elevator-pitch': 'Generate a concise elevator pitch from this.',
+    };
+
+    if (toolKind.startsWith('tool-')) {
+      const instruction = instructionMap[toolKind] || `Generate marketing copy based on: ${toolKind}`;
+      const res = await fetch('/api/generate-copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instruction,
+          context: { existingCopy: inputText },
+          count: 1,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text().catch(() => 'Copy generation failed'));
+      const data = await res.json();
+      const text = data.copy?.variations?.[0]?.text ?? data.copy?.raw ?? JSON.stringify(data.copy);
+      return { type: 'text', text };
+    }
+
+    if (toolKind === 'op-video-gen') {
+      if (!inputImage && !inputText) throw new Error('Image or prompt required for video generation');
+      const res = await fetch('/api/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceImageBase64: inputImage?.includes(',') ? inputImage.split(',')[1] : inputImage,
+          prompt: inputText || 'Create smooth cinematic motion from this image.',
+          duration: 4,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text().catch(() => 'Video generation failed'));
+      const data = await res.json();
+      if (data.videoBase64) {
+        return { type: 'video', videoBase64: data.videoBase64, mimeType: data.mimeType };
+      }
+      if (data.videoUrl) return { type: 'video', videoUrl: data.videoUrl };
+      throw new Error(data.message || 'Video generation failed');
+    }
+
+    if (toolKind === 'op-asset-gen') {
+      if (!inputText) throw new Error('Prompt required for asset generation');
+      const res = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: inputText,
+          referenceImageUrl: inputImage || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text().catch(() => 'Image generation failed'));
+      const data = await res.json();
+      if (!data.imageUrl) throw new Error('No image in response');
+      return { type: 'image', imageUrl: data.imageUrl };
+    }
+
+    if (toolKind === 'op-bg-removal') {
+      if (!inputImage) throw new Error('Image required for background removal');
+      const base64 = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage;
+      const res = await fetch('/api/remove-background', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: `data:image/png;base64,${base64}` }),
+      });
+      if (!res.ok) throw new Error(await res.text().catch(() => 'Background removal failed'));
+      const data = await res.json();
+      if (!data.imageUrl) throw new Error('No image in response');
+      return { type: 'image', imageUrl: data.imageUrl };
+    }
+
+    if (toolKind === 'op-smart-edit') {
+      if (!inputImage || !inputText) throw new Error('Image and prompt required for smart edit');
+      const res = await fetch('/api/smart-edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: inputText,
+          currentImageUrl: inputImage,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text().catch(() => 'Smart edit failed'));
+      const data = await res.json();
+      if (!data.imageUrl) throw new Error('No image in response');
+      return { type: 'image', imageUrl: data.imageUrl };
+    }
+
+    if (toolKind === 'op-ad-stitch') {
+      const res = await fetch('/api/ad-stitch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: inputText || 'Create a cohesive video ad',
+          images: inputImage ? [inputImage] : [],
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text().catch(() => 'Ad stitch failed'));
+      const data = await res.json();
+      if (data.videoBase64) return { type: 'video', videoBase64: data.videoBase64, mimeType: data.mimeType };
+      if (data.videoUrl) return { type: 'video', videoUrl: data.videoUrl };
+      throw new Error(data.message || 'Ad stitch failed');
+    }
+
+    return { type: 'text', text: inputText };
+  };
+
+  const addOutputNode = (text: string, anchor?: FabricObject, options?: { imageUrl?: string; videoUrl?: string; videoBase64?: string; mimeType?: string }): string | undefined => {
+    if (!fabricCanvas) return;
+    const anchorPt = anchor ? getConnectionPoint(anchor, 'right') : getCanvasCenter();
+    const NODE_W = 260;
+    const hasMedia = !!(options?.imageUrl || options?.videoUrl || options?.videoBase64);
+    const NODE_H = hasMedia ? 200 : 80;
+    const rect = new FabricRect({
+      width: NODE_W, height: NODE_H, rx: 10, ry: 10,
+      fill: "#ECFDF3", stroke: "#10B981", strokeWidth: 1,
+    });
+    const title = new FabricTextbox("Output", {
+      left: 20, top: 8, width: NODE_W - 32,
+      fontSize: 13, fontWeight: 600, fill: "#065F46",
+      editable: false, selectable: false,
+    });
+    const bodyOrPlaceholder = hasMedia
+      ? new FabricTextbox(options?.imageUrl ? "[Loading...]" : "Video generated", {
+          left: 20, top: 80, width: NODE_W - 40,
+          fontSize: 11, fill: "#047857",
+          editable: false, selectable: false,
+        })
+      : new FabricTextbox(text, {
+          left: 20, top: 30, width: NODE_W - 32,
+          fontSize: 11, fill: "#047857",
+          editable: true, selectable: true,
+        });
+    const inputConn = new FabricCircle({
+      radius: 6, left: -6, top: NODE_H / 2 - 6,
+      fill: "#FFFFFF", stroke: "#10B981", strokeWidth: 2,
+      selectable: true, evented: true, hoverCursor: "crosshair",
+    });
+    const group = new FabricGroup([rect, title, bodyOrPlaceholder, inputConn], {
+      left: anchorPt.x + 40,
+      top: anchorPt.y - NODE_H / 2,
+      subTargetCheck: true,
+    });
+    const outputId = registerNodeObject(group as unknown as FabricObject, 'output');
+    (inputConn as any).__connectorSide = 'left';
+    (inputConn as any).__nodeId = outputId;
+    if (options?.imageUrl) (group as any).__imageData = options.imageUrl;
+    if (options?.videoBase64) (group as any).__videoBase64 = options.videoBase64;
+    if (options?.videoUrl) (group as any).__videoUrl = options.videoUrl;
+    fabricCanvas.add(group);
+    fabricCanvas.requestRenderAll();
+
+    if (hasMedia && options?.imageUrl) {
+      FabricImage.fromURL(options.imageUrl, { crossOrigin: 'anonymous' }).then((img) => {
+        const maxW = NODE_W - 40;
+        const maxH = NODE_H - 50;
+        const scale = Math.min(maxW / (img.width || 1), maxH / (img.height || 1), 1);
+        img.set({
+          left: 20, top: 32, scaleX: scale, scaleY: scale,
+          selectable: false, evented: false,
+        });
+        const grp = nodesRef.current[outputId!]?.object as FabricGroup | undefined;
+        if (grp && (grp as any)._objects) {
+          const objs = (grp as any)._objects as FabricObject[];
+          const idx = objs.indexOf(bodyOrPlaceholder);
+          if (idx >= 0) objs[idx] = img;
+          (grp as any).setCoords();
+          fabricCanvas.requestRenderAll();
+        }
+      }).catch(() => {
+        const grp = nodesRef.current[outputId!]?.object as FabricGroup | undefined;
+        if (grp && (grp as any)._objects) {
+          const objs = (grp as any)._objects as FabricObject[];
+          const ph = objs.find((o: any) => o.type === 'textbox' && (o as FabricTextbox).text === '[Loading...]');
+          if (ph) (ph as FabricTextbox).set('text', 'Failed to load');
+          fabricCanvas.requestRenderAll();
+        }
+      });
+    }
+
+    return outputId;
+  };
+
+  const runSelectedTools = async () => {
+    if (!fabricCanvas) return;
+    const selected = fabricCanvas.getActiveObjects().filter(
+      (obj) => (obj as any).__nodeKind && (
+        String((obj as any).__nodeKind).startsWith('tool-') ||
+        String((obj as any).__nodeKind).startsWith('op-')
+      )
+    );
+    if (selected.length === 0) {
+      toast.error("Select a tool or operation node to run.");
+      return;
+    }
+    for (const toolObj of selected) {
+      const toolId = (toolObj as any).__nodeId as string | undefined;
+      const toolKind = (toolObj as any).__nodeKind as CanvasNodeKind | undefined;
+      if (!toolId || !toolKind) continue;
+      const incoming = Object.values(connectionsRef.current).find((conn) => conn.toId === toolId);
+      if (!incoming) {
+        toast.error("Connect an input node to the tool.");
+        continue;
+      }
+      const inputNode = nodesRef.current[incoming.fromId];
+      if (!inputNode) {
+        toast.error("Input node not found.");
+        continue;
+      }
+      const { text: inputText, imageData: inputImage } = getInputFromNode(inputNode);
+      const needsText = toolKind.startsWith('tool-') || toolKind === 'op-asset-gen' || toolKind === 'op-smart-edit' || toolKind === 'op-ad-stitch';
+      const needsImage = toolKind === 'op-video-gen' || toolKind === 'op-bg-removal' || toolKind === 'op-smart-edit' || toolKind === 'op-ad-stitch';
+      if (needsText && !inputText && !inputImage) {
+        toast.error("Input node is empty. Add text or image.");
+        continue;
+      }
+      if (needsImage && !inputImage) {
+        toast.error("Image required for this operation. Connect an image input node.");
+        continue;
+      }
+      const removeLoading = showNodeLoading(toolObj);
+      try {
+        const result = await executeNodeOperation(toolKind, inputText, inputImage);
+        removeLoading();
+        if (result.type === 'text') {
+          const outputId = addOutputNode(result.text, toolObj);
+          if (outputId) createConnection(toolId, outputId, 'right', 'left', "#10B981");
+        } else if (result.type === 'image') {
+          const outputId = addOutputNode("", toolObj, { imageUrl: result.imageUrl });
+          if (outputId) createConnection(toolId, outputId, 'right', 'left', "#10B981");
+        } else if (result.type === 'video') {
+          const outputId = addOutputNode("[Video]", toolObj, {
+            videoUrl: result.videoUrl,
+            videoBase64: result.videoBase64,
+            mimeType: result.mimeType,
+          });
+          if (outputId) createConnection(toolId, outputId, 'right', 'left', "#10B981");
+        }
+      } catch (err: any) {
+        removeLoading();
+        toast.error(err?.message || "Operation failed");
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!fabricCanvas) return;
+
+    const findConnector = (opt: any) => {
+      const subs = opt?.subTargets || [];
+      for (const s of subs) {
+        if ((s as any).__connectorSide && (s as any).__nodeId) return s;
+      }
+      if (opt?.target && (opt.target as any).__connectorSide && (opt.target as any).__nodeId) return opt.target;
+      return null;
+    };
+
+    const findNodeTarget = (opt: any) => {
+      const connector = findConnector(opt);
+      if (connector) return { nodeId: (connector as any).__nodeId as string, side: (connector as any).__connectorSide as 'left' | 'right' };
+      // Also allow dropping on a node directly
+      const target = opt?.target;
+      if (target && (target as any).__nodeId) {
+        return { nodeId: (target as any).__nodeId as string, side: 'left' as const };
+      }
+      return null;
+    };
+
+    let lockedGroup: FabricObject | null = null;
+    let lockedGroupOriginal: { lockMovementX: boolean; lockMovementY: boolean; selectable: boolean } | null = null;
+
+    const handleMouseDown = (opt: any) => {
+      const target = opt?.target;
+      if (target && (target as any).__isUploadZone) {
+        const nodeId = (target as any).__nodeId;
+        if (nodeId) {
+          const nodeObj = nodesRef.current[nodeId]?.object;
+          if (nodeObj) {
+            pendingImageNodeRef.current = nodeObj;
+            nodeImageFileInputRef.current?.click();
+            return;
+          }
+        }
+      }
+
+      const connector = findConnector(opt);
+      if (!connector) return;
+      const nodeId = (connector as any).__nodeId as string;
+      const side = (connector as any).__connectorSide as 'left' | 'right';
+      const nodeObj = nodesRef.current[nodeId]?.object ?? connector;
+
+      // Lock the parent group so it doesn't move during connector drag
+      if (nodeObj && nodeObj !== connector) {
+        lockedGroupOriginal = {
+          lockMovementX: nodeObj.lockMovementX || false,
+          lockMovementY: nodeObj.lockMovementY || false,
+          selectable: nodeObj.selectable !== false,
+        };
+        nodeObj.set({ lockMovementX: true, lockMovementY: true });
+        lockedGroup = nodeObj;
+      }
+
+      // Deselect everything to prevent drag
+      fabricCanvas.discardActiveObject();
+
+      const point = getConnectionPoint(nodeObj, side);
+      const line = new FabricLine([point.x, point.y, point.x, point.y], {
+        stroke: "#6B7280",
+        strokeWidth: 2,
+        strokeDashArray: [6, 3],
+        selectable: false,
+        evented: false,
+      });
+      activeConnectorRef.current = { fromId: nodeId, fromSide: side, line };
+      fabricCanvas.add(line);
+      (fabricCanvas as any).sendToBack(line);
+      fabricCanvas.requestRenderAll();
+    };
+
+    const handleMouseMove = (opt: any) => {
+      if (!activeConnectorRef.current) return;
+      const pointer = fabricCanvas.getPointer(opt.e);
+      activeConnectorRef.current.line.set({ x2: pointer.x, y2: pointer.y });
+      fabricCanvas.requestRenderAll();
+    };
+
+    const unlockGroup = () => {
+      if (lockedGroup && lockedGroupOriginal) {
+        lockedGroup.set({
+          lockMovementX: lockedGroupOriginal.lockMovementX,
+          lockMovementY: lockedGroupOriginal.lockMovementY,
+        });
+        lockedGroup = null;
+        lockedGroupOriginal = null;
+      }
+    };
+
+    const handleMouseUp = (opt: any) => {
+      if (!activeConnectorRef.current) {
+        unlockGroup();
+        return;
+      }
+      const active = activeConnectorRef.current;
+
+      const target = findNodeTarget(opt);
+      if (target && target.nodeId !== active.fromId) {
+        if (active.fromSide === 'right') {
+          createConnection(active.fromId, target.nodeId, 'right', 'left');
+        } else if (active.fromSide === 'left' && target.side === 'right') {
+          createConnection(target.nodeId, active.fromId, 'right', 'left');
+        } else {
+          createConnection(target.nodeId, active.fromId, 'right', 'left');
+        }
+      }
+
+      fabricCanvas.remove(active.line);
+      activeConnectorRef.current = null;
+      unlockGroup();
+      fabricCanvas.requestRenderAll();
+    };
+
+    fabricCanvas.on('mouse:down', handleMouseDown);
+    fabricCanvas.on('mouse:move', handleMouseMove);
+    fabricCanvas.on('mouse:up', handleMouseUp);
+
+    return () => {
+      fabricCanvas.off('mouse:down', handleMouseDown);
+      fabricCanvas.off('mouse:move', handleMouseMove);
+      fabricCanvas.off('mouse:up', handleMouseUp);
+    };
+  }, [fabricCanvas]);
+
+  // (pen tool is now allowed in plan mode for the Connector tool)
+
+  // Disable freehand drawing mode when switching away from brush tool
+  useEffect(() => {
+    if (!fabricCanvas) return;
+    if (activeToolbarButton !== 'brush') {
+      fabricCanvas.isDrawingMode = false;
+    }
+  }, [activeToolbarButton, fabricCanvas]);
+
+  useEffect(() => {
+    if (!onCanvasNodesRef) return;
+    onCanvasNodesRef.current = {
+      addInputNode,
+      addImageInputNode,
+      addTextImageInputNode,
+      addToolNode,
+      connectSelectedNodes,
+      runSelectedTools,
+    };
+  });
 
   const updatePenNodeOverlay = (canvas: FabricCanvas, previewPoint?: { x: number; y: number }) => {
     clearPenNodeOverlay(canvas);
@@ -595,6 +1520,9 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
 
     // Enable panning with middle mouse drag (or left-drag when Hand tool active)
     canvas.on('mouse:down', (opt: any) => {
+      // If a connector drag is active, skip all other mousedown handling
+      if (activeConnectorRef.current) return;
+
       const e = opt.e as MouseEvent;
       const isMiddleButton = e.button === 1 || (e.buttons & 4) === 4;
       const isLeftButton = e.button === 0 || (e.buttons & 1) === 1;
@@ -602,6 +1530,19 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
       // Block panning/other draw starts during Smart Edit
       if ((canvas as any).__smartEditActive) {
         // Do not initiate panning or any draw tools while smart edit selection is active
+        return;
+      }
+
+      // Sticky note text editing: if a sticky text sub-target is clicked, edit it directly
+      const subTargets = opt?.subTargets || [];
+      const stickyTextTarget = subTargets.find((t: any) => t?.__isStickyText);
+      if (stickyTextTarget && activeToolRef.current === 'pointer') {
+        try {
+          canvas.setActiveObject(stickyTextTarget);
+          stickyTextTarget.enterEditing?.();
+          stickyTextTarget.selectAll?.();
+          canvas.requestRenderAll();
+        } catch (_e) { /* ignore */ }
         return;
       }
 
@@ -718,6 +1659,19 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           });
           drawingShapeRef.current = line;
           canvas.add(line);
+        } else if (activeShapeRef.current === 'diamond') {
+          // Diamond is drawn as a rotated rect; we'll use a path and update on move
+          const diamondPath = new FabricPath('M 0 0 L 0 0 L 0 0 L 0 0 Z', {
+            fill: 'transparent',
+            stroke: '#111827',
+            strokeWidth: 2,
+            selectable: false,
+          });
+          (diamondPath as any).__isDiamond = true;
+          (diamondPath as any).__startX = pointer.x;
+          (diamondPath as any).__startY = pointer.y;
+          drawingShapeRef.current = diamondPath;
+          canvas.add(diamondPath);
         }
 
         canvas.renderAll();
@@ -1032,6 +1986,16 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             x2: currentX,
             y2: currentY
           });
+        } else if ((drawingShapeRef.current as any)?.__isDiamond) {
+          // Diamond: 4-point rhombus path
+          const cx = left + width / 2;
+          const cy = top + height / 2;
+          const hw = width / 2;
+          const hh = height / 2;
+          const d = `M ${cx} ${cy - hh} L ${cx + hw} ${cy} L ${cx} ${cy + hh} L ${cx - hw} ${cy} Z`;
+          const diamondObj = drawingShapeRef.current as any;
+          diamondObj.set({ path: new FabricPath(d).path, left: cx - hw, top: cy - hh });
+          diamondObj.setCoords?.();
         }
 
         canvas.renderAll();
@@ -1237,6 +2201,8 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             hasMinimumSize = (drawingShapeRef.current.radius || 0) > 5;
           } else if (drawingShapeRef.current instanceof FabricLine) {
             hasMinimumSize = true; // Lines are always valid
+          } else if ((drawingShapeRef.current as any).__isDiamond) {
+            hasMinimumSize = true; // Diamond paths are valid if drawn
           }
 
           if (hasMinimumSize) {
@@ -1583,6 +2549,267 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     });
   }, [generatedImageUrl, fabricCanvas]);
 
+  // ── Add generated video to canvas as a playable, movable object ──
+  // Uses an offscreen canvas to draw video frames — Fabric reads <canvas> elements
+  // perfectly on every render, unlike <video> which gets snapshot-cached.
+  useEffect(() => {
+    if (!fabricCanvas || !generatedVideoUrl) return;
+
+    console.log('[Canvas] Adding video to canvas:', generatedVideoUrl.slice(0, 120));
+
+    // Find source image for sizing/positioning
+    const activeObj = fabricCanvas.getActiveObject();
+    const sourceImg = activeObj instanceof FabricImage && !(activeObj as any).__isVideo ? activeObj : null;
+    const allObjects = fabricCanvas.getObjects();
+    const lastImage = sourceImg || [...allObjects].reverse().find(o => o instanceof FabricImage && !(o as any).__isVideo) as FabricImage | undefined;
+
+    // Create hidden video element
+    const videoEl = document.createElement('video');
+    videoEl.crossOrigin = 'anonymous';
+    videoEl.loop = true;
+    videoEl.muted = true;
+    videoEl.playsInline = true;
+    videoEl.preload = 'auto';
+
+    // Create offscreen canvas we'll paint frames onto
+    const offscreen = document.createElement('canvas');
+    const offCtx = offscreen.getContext('2d')!;
+
+    let animFrameId: number;
+    let videoFabric: FabricImage | null = null;
+
+    const onCanPlay = () => {
+      const vw = videoEl.videoWidth || 640;
+      const vh = videoEl.videoHeight || 360;
+      offscreen.width = vw;
+      offscreen.height = vh;
+
+      // Draw the first frame so the Fabric object is immediately visible
+      offCtx.drawImage(videoEl, 0, 0, vw, vh);
+
+      // Create a FabricImage from the offscreen canvas (not the video element)
+      videoFabric = new FabricImage(offscreen, {
+        left: 0,
+        top: 0,
+        objectCaching: false,
+        selectable: true,
+        name: 'Video',
+      });
+
+      // ── Size: match source image, or 60% of canvas ──
+      if (lastImage) {
+        const targetWidth = lastImage.getScaledWidth();
+        const targetHeight = lastImage.getScaledHeight();
+        videoFabric.set({
+          scaleX: targetWidth / Math.max(vw, 1),
+          scaleY: targetHeight / Math.max(vh, 1),
+        });
+      } else {
+        videoFabric.scaleToWidth(fabricCanvas.width! * 0.6);
+      }
+
+      const displayedW = videoFabric.getScaledWidth();
+      const displayedH = videoFabric.getScaledHeight();
+
+      // ── Position: next to source image, or centered ──
+      let placeLeft: number;
+      let placeTop: number;
+
+      if (lastImage) {
+        const imgLeft = lastImage.left ?? 0;
+        const imgTop = lastImage.top ?? 0;
+        const imgW = lastImage.getScaledWidth();
+        const imgH = lastImage.getScaledHeight();
+        placeLeft = imgLeft + imgW + 20;
+        placeTop = imgTop;
+        if (placeLeft + displayedW > fabricCanvas.width!) {
+          placeLeft = imgLeft;
+          placeTop = imgTop + imgH + 20;
+        }
+      } else {
+        const center = fabricCanvas.getCenterPoint();
+        placeLeft = center.x - displayedW / 2;
+        placeTop = center.y - displayedH / 2;
+      }
+
+      // Clamp inside canvas
+      const clampedLeft = Math.max(12, Math.min(placeLeft, fabricCanvas.width! - displayedW - 12));
+      const clampedTop = Math.max(12, Math.min(placeTop, fabricCanvas.height! - displayedH - 12));
+      videoFabric.set({ left: clampedLeft, top: clampedTop });
+
+      // Store metadata
+      (videoFabric as any).__videoElement = videoEl;
+      (videoFabric as any).__offscreenCanvas = offscreen;
+      (videoFabric as any).__isVideo = true;
+      (videoFabric as any).__isPlaying = false;
+
+      fabricCanvas.add(videoFabric);
+      // Fabric v6: move to top of z-stack so video is not behind other objects
+      const objects = fabricCanvas.getObjects();
+      const idx = objects.indexOf(videoFabric);
+      if (idx >= 0 && idx < objects.length - 1) {
+        fabricCanvas.moveObjectTo(videoFabric, objects.length - 1);
+      }
+      fabricCanvas.setActiveObject(videoFabric);
+      fabricCanvas.requestRenderAll();
+
+      // Start playback
+      videoEl.play().then(() => {
+        (videoFabric as any).__isPlaying = true;
+      }).catch(() => {
+        // Autoplay blocked — user can double-click to play
+      });
+
+      // Ensure video loops (some sources don't respect loop attribute)
+      videoEl.addEventListener('ended', () => {
+        if (videoFabric && fabricCanvas.getObjects().includes(videoFabric)) {
+          videoEl.currentTime = 0;
+          videoEl.play().catch(() => {});
+        }
+      });
+
+      // Render loop: paint video frame → offscreen canvas → mark dirty → fabric repaints
+      const renderLoop = () => {
+        if (!videoFabric || !fabricCanvas.getObjects().includes(videoFabric)) {
+          videoEl.pause();
+          cancelAnimationFrame(animFrameId);
+          return;
+        }
+        if (!videoEl.paused) {
+          offCtx.drawImage(videoEl, 0, 0, offscreen.width, offscreen.height);
+          videoFabric.dirty = true;
+          fabricCanvas.requestRenderAll();
+        }
+        animFrameId = requestAnimationFrame(renderLoop);
+      };
+      animFrameId = requestAnimationFrame(renderLoop);
+
+      // Cleanup when removed
+      const handleRemoved = ({ target }: any) => {
+        if (target === videoFabric) {
+          cancelAnimationFrame(animFrameId);
+          videoEl.pause();
+          videoEl.removeAttribute('src');
+          videoEl.load();
+          fabricCanvas.off('object:removed', handleRemoved);
+        }
+      };
+      fabricCanvas.on('object:removed', handleRemoved);
+
+      console.log('[Canvas] Video object added at', clampedLeft, clampedTop, 'size', displayedW, 'x', displayedH);
+      toast.success('Video added to canvas — select it to show play/pause');
+    };
+
+    videoEl.addEventListener('canplay', () => {
+      console.log('[Canvas] canplay — native size:', videoEl.videoWidth, 'x', videoEl.videoHeight);
+      onCanPlay();
+    }, { once: true });
+
+    videoEl.addEventListener('error', (ev) => {
+      console.error('[Canvas] Video load error:', ev, videoEl.error);
+      toast.error('Failed to load video onto canvas');
+    }, { once: true });
+
+    videoEl.src = generatedVideoUrl;
+    videoEl.load();
+  }, [generatedVideoUrl, fabricCanvas]);
+
+  // ── Double-click handler for video play/pause (fallback when buttons not used) ──
+  useEffect(() => {
+    if (!fabricCanvas) return;
+
+    const handleDblClick = () => {
+      const active = fabricCanvas.getActiveObject();
+      if (!active || !(active as any).__isVideo) return;
+      const videoEl = (active as any).__videoElement as HTMLVideoElement;
+      if (!videoEl) return;
+
+      if (videoEl.paused) {
+        videoEl.play().then(() => {
+          (active as any).__isPlaying = true;
+        }).catch(() => {});
+      } else {
+        videoEl.pause();
+        (active as any).__isPlaying = false;
+      }
+    };
+
+    fabricCanvas.on('mouse:dblclick', handleDblClick);
+    return () => {
+      fabricCanvas.off('mouse:dblclick', handleDblClick);
+    };
+  }, [fabricCanvas]);
+
+  // ── Update video controls overlay position when a video is selected ──
+  useEffect(() => {
+    if (!fabricCanvas || !containerRef.current) return;
+
+    const projectPoint = (x: number, y: number) => {
+      const vpt = fabricCanvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+      return {
+        x: vpt[0] * x + vpt[2] * y + vpt[4],
+        y: vpt[1] * x + vpt[3] * y + vpt[5],
+      };
+    };
+
+    const updateVideoControlsPosition = () => {
+      const active = fabricCanvas.getActiveObject();
+      if (!active || !(active as any).__isVideo) {
+        setVideoControlsRect(null);
+        return;
+      }
+      const bounds = active.getBoundingRect();
+      const centerX = bounds.left + bounds.width / 2;
+      const topY = bounds.top;
+      const center = projectPoint(centerX, topY);
+      const btnSize = Math.min(44, Math.max(28, bounds.width * 0.15));
+      const ctrlHeight = btnSize + 12;
+      const rect = {
+        left: center.x - btnSize / 2,
+        top: center.y - ctrlHeight - 8,
+        width: btnSize,
+        height: ctrlHeight,
+      };
+      if (videoControlsRef.current) {
+        videoControlsRef.current.style.left = `${rect.left}px`;
+        videoControlsRef.current.style.top = `${rect.top}px`;
+        videoControlsRef.current.style.width = `${rect.width}px`;
+        videoControlsRef.current.style.height = `${rect.height}px`;
+      } else {
+        setVideoControlsRect(rect);
+      }
+    };
+
+    updateVideoControlsPosition();
+    const active = fabricCanvas.getActiveObject();
+    const videoEl = active && (active as any).__isVideo ? (active as any).__videoElement : null;
+    fabricCanvas.on('after:render', updateVideoControlsPosition);
+    fabricCanvas.on('object:moving', updateVideoControlsPosition);
+    fabricCanvas.on('object:scaling', updateVideoControlsPosition);
+    fabricCanvas.on('object:rotating', updateVideoControlsPosition);
+    if (videoEl) {
+      setVideoPlayingState(!(videoEl as HTMLVideoElement).paused);
+      const onPlay = () => setVideoPlayingState(true);
+      const onPause = () => setVideoPlayingState(false);
+      videoEl.addEventListener('play', onPlay);
+      videoEl.addEventListener('pause', onPause);
+      return () => {
+        videoEl.removeEventListener('play', onPlay);
+        videoEl.removeEventListener('pause', onPause);
+        fabricCanvas.off('after:render', updateVideoControlsPosition);
+        fabricCanvas.off('object:moving', updateVideoControlsPosition);
+        fabricCanvas.off('object:scaling', updateVideoControlsPosition);
+        fabricCanvas.off('object:rotating', updateVideoControlsPosition);
+      };
+    }
+    return () => {
+      fabricCanvas.off('after:render', updateVideoControlsPosition);
+      fabricCanvas.off('object:moving', updateVideoControlsPosition);
+      fabricCanvas.off('object:scaling', updateVideoControlsPosition);
+      fabricCanvas.off('object:rotating', updateVideoControlsPosition);
+    };
+  }, [fabricCanvas, selectedObject]);
+
   // Apply filters to selected image
   const handleFilterChange = (filterName: string, value: number) => {
     if (!selectedImage) return;
@@ -1721,6 +2948,420 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
     fabricCanvas.setCursor('text');
   };
 
+  const STICKY_COLORS = [
+    { bg: '#FFF9DB', fold: '#EDE9A6', text: '#78350F' },
+    { bg: '#DCFCE7', fold: '#A7E8BD', text: '#14532D' },
+    { bg: '#E0F2FE', fold: '#A5D8F8', text: '#0C4A6E' },
+    { bg: '#F3E8FF', fold: '#D4B8F0', text: '#581C87' },
+    { bg: '#FFE4E6', fold: '#F5B7BB', text: '#881337' },
+    { bg: '#FEF3C7', fold: '#F5D98B', text: '#78350F' },
+  ];
+  const STICKY_FONT = 'Caveat';
+
+  // Load handwriting font for sticky notes
+  const loadStickyFont = () => {
+    const fontUrl = `https://fonts.googleapis.com/css2?family=${STICKY_FONT}:wght@400;500;600;700&display=swap`;
+    if (!document.querySelector(`link[href="${fontUrl}"]`)) {
+      const link = document.createElement('link');
+      link.href = fontUrl;
+      link.rel = 'stylesheet';
+      link.setAttribute('crossorigin', 'anonymous');
+      document.head.appendChild(link);
+    }
+  };
+
+  const handleAddStickyNote = () => {
+    if (!fabricCanvas) return;
+    loadStickyFont();
+
+    const SIZE = 180;
+    const FOLD = 20;
+    const PAD = 14;
+    const { left: cx, top: cy } = centerCoords(SIZE, SIZE);
+    const palette = STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)];
+
+    // Background note
+    const bg = new FabricRect({
+      width: SIZE,
+      height: SIZE,
+      rx: 6, ry: 6,
+      fill: palette.bg,
+      stroke: 'rgba(0,0,0,0.06)',
+      strokeWidth: 1,
+      shadow: '2px 3px 8px rgba(0,0,0,0.12)' as any,
+      selectable: false,
+      evented: false,
+    });
+
+    // Folded corner in the top-right (cleaner and more natural)
+    const fold = new FabricPath(
+      `M ${SIZE - FOLD} 0 L ${SIZE} ${FOLD} L ${SIZE} 0 Z`,
+      {
+        fill: palette.fold,
+        stroke: 'rgba(0,0,0,0.08)',
+        strokeWidth: 0.5,
+        selectable: false,
+        evented: false,
+      }
+    );
+    const foldShadow = new FabricPath(
+      `M ${SIZE - FOLD} 0 L ${SIZE} ${FOLD}`,
+      {
+        fill: 'transparent',
+        stroke: 'rgba(0,0,0,0.10)',
+        strokeWidth: 1,
+        selectable: false,
+        evented: false,
+      }
+    );
+
+    const text = new FabricTextbox('', {
+      left: PAD,
+      top: PAD + 2,
+      width: SIZE - PAD * 2,
+      fontSize: 18,
+      fontFamily: `'${STICKY_FONT}', cursive`,
+      fill: palette.text,
+      editable: true,
+      lineHeight: 1.35,
+      selectable: true,
+      lockMovementX: true,
+      lockMovementY: true,
+    });
+    (text as any).__isStickyText = true;
+
+    const group = new FabricGroup([bg, fold, foldShadow, text], {
+      left: cx,
+      top: cy,
+      subTargetCheck: true,
+      interactive: true,
+      objectCaching: false,
+    } as any);
+    (group as any).name = 'Sticky Note';
+
+    fabricCanvas.add(group);
+    fabricCanvas.setActiveObject(group);
+    fabricCanvas.requestRenderAll();
+
+    // Enter editing mode automatically
+    setTimeout(() => {
+      if (!fabricCanvas) return;
+      try {
+        fabricCanvas.setActiveObject(text);
+        text.enterEditing();
+        text.selectAll();
+        fabricCanvas.requestRenderAll();
+      } catch (_e) { /* ignore */ }
+    }, 80);
+
+    // Reset tool
+    setActiveToolbarButton('pointer');
+    activeToolbarButtonRef.current = 'pointer';
+    setActiveTool('pointer');
+  };
+
+  const resetToolbarToPointer = () => {
+    setActiveToolbarButton('pointer');
+    activeToolbarButtonRef.current = 'pointer';
+    setActiveTool('pointer');
+    activeToolRef.current = 'pointer';
+    if (fabricCanvas) {
+      fabricCanvas.isDrawingMode = false;
+      fabricCanvas.selection = true;
+      fabricCanvas.defaultCursor = 'default';
+      fabricCanvas.setCursor('default');
+    }
+  };
+
+  const handleAddTimer = () => {
+    if (!fabricCanvas) return;
+    const SIZE = 170;
+    const { left, top } = centerCoords(SIZE, SIZE);
+
+    const base = new FabricCircle({
+      left: 0,
+      top: 6,
+      radius: 70,
+      fill: "#FFF7ED",
+      stroke: "#F97316",
+      strokeWidth: 2,
+      shadow: '2px 3px 8px rgba(0,0,0,0.12)' as any,
+    });
+    const ring = new FabricCircle({
+      left: 10,
+      top: 16,
+      radius: 60,
+      fill: "#FFFBEB",
+      stroke: "#FDBA74",
+      strokeWidth: 2,
+    });
+    const knob = new FabricRect({
+      left: 60,
+      top: -2,
+      width: 40,
+      height: 14,
+      rx: 7,
+      ry: 7,
+      fill: "#FDBA74",
+      stroke: "#F97316",
+      strokeWidth: 1,
+    });
+    const timeText = new FabricTextbox("5:00", {
+      left: 35,
+      top: 60,
+      width: 100,
+      fontSize: 24,
+      fontWeight: 700,
+      fill: "#9A3412",
+      textAlign: "center",
+      editable: true,
+      selectable: true,
+    });
+    const label = new FabricTextbox("Timer", {
+      left: 45,
+      top: 100,
+      width: 80,
+      fontSize: 12,
+      fontWeight: 600,
+      fill: "#9A3412",
+      textAlign: "center",
+      editable: true,
+      selectable: true,
+    });
+
+    const group = new FabricGroup([base, ring, knob, timeText, label], {
+      left,
+      top,
+      subTargetCheck: true,
+    } as any);
+    (group as any).name = 'Timer';
+
+    fabricCanvas.add(group);
+    fabricCanvas.setActiveObject(group);
+    fabricCanvas.requestRenderAll();
+    resetToolbarToPointer();
+  };
+
+  const handleAddVote = () => {
+    if (!fabricCanvas) return;
+    const WIDTH = 230;
+    const HEIGHT = 130;
+    const { left, top } = centerCoords(WIDTH, HEIGHT);
+
+    const card = new FabricRect({
+      width: WIDTH,
+      height: HEIGHT,
+      rx: 14,
+      ry: 14,
+      fill: "#FFF7ED",
+      stroke: "#FDBA74",
+      strokeWidth: 2,
+      shadow: '2px 3px 8px rgba(0,0,0,0.12)' as any,
+    });
+    const title = new FabricTextbox("Dot Vote", {
+      left: 18,
+      top: 12,
+      width: WIDTH - 36,
+      fontSize: 14,
+      fontWeight: 700,
+      fill: "#9A3412",
+      editable: true,
+      selectable: true,
+    });
+    const subtitle = new FabricTextbox("Tap dots to vote", {
+      left: 18,
+      top: 34,
+      width: WIDTH - 36,
+      fontSize: 11,
+      fill: "#9A3412",
+      editable: true,
+      selectable: true,
+    });
+
+    const dots = Array.from({ length: 5 }, (_, idx) => new FabricCircle({
+      radius: 10,
+      left: 28 + idx * 36,
+      top: 70,
+      fill: "#FDBA74",
+      stroke: "#F97316",
+      strokeWidth: 1,
+    }));
+
+    const group = new FabricGroup([card, title, subtitle, ...dots], {
+      left,
+      top,
+      subTargetCheck: true,
+    } as any);
+    (group as any).name = 'Dot Vote';
+
+    fabricCanvas.add(group);
+    fabricCanvas.setActiveObject(group);
+    fabricCanvas.requestRenderAll();
+    resetToolbarToPointer();
+  };
+
+  const handleAddKanban = () => {
+    if (!fabricCanvas) return;
+    const WIDTH = 540;
+    const HEIGHT = 300;
+    const { left, top } = centerCoords(WIDTH, HEIGHT);
+
+    const board = new FabricRect({
+      width: WIDTH,
+      height: HEIGHT,
+      rx: 16,
+      ry: 16,
+      fill: "#F8FAFC",
+      stroke: "#CBD5F5",
+      strokeWidth: 2,
+      shadow: '2px 3px 10px rgba(0,0,0,0.10)' as any,
+    });
+    const colLine1 = new FabricLine([WIDTH / 3, 46, WIDTH / 3, HEIGHT - 12], {
+      stroke: "#CBD5F5",
+      strokeWidth: 2,
+    });
+    const colLine2 = new FabricLine([WIDTH * 2 / 3, 46, WIDTH * 2 / 3, HEIGHT - 12], {
+      stroke: "#CBD5F5",
+      strokeWidth: 2,
+    });
+    const header = new FabricRect({
+      width: WIDTH,
+      height: 46,
+      rx: 16,
+      ry: 16,
+      fill: "#EEF2FF",
+      stroke: "#CBD5F5",
+      strokeWidth: 1,
+    });
+    const todo = new FabricTextbox("To Do", {
+      left: 20,
+      top: 12,
+      width: WIDTH / 3 - 40,
+      fontSize: 14,
+      fontWeight: 700,
+      fill: "#1E293B",
+      editable: true,
+      selectable: true,
+    });
+    const doing = new FabricTextbox("Doing", {
+      left: WIDTH / 3 + 20,
+      top: 12,
+      width: WIDTH / 3 - 40,
+      fontSize: 14,
+      fontWeight: 700,
+      fill: "#1E293B",
+      editable: true,
+      selectable: true,
+    });
+    const done = new FabricTextbox("Done", {
+      left: WIDTH * 2 / 3 + 20,
+      top: 12,
+      width: WIDTH / 3 - 40,
+      fontSize: 14,
+      fontWeight: 700,
+      fill: "#1E293B",
+      editable: true,
+      selectable: true,
+    });
+
+    const group = new FabricGroup([board, header, colLine1, colLine2, todo, doing, done], {
+      left,
+      top,
+      subTargetCheck: true,
+    } as any);
+    (group as any).name = 'Kanban Board';
+
+    fabricCanvas.add(group);
+    fabricCanvas.setActiveObject(group);
+    fabricCanvas.requestRenderAll();
+    resetToolbarToPointer();
+  };
+
+  const handleAddMindMap = () => {
+    if (!fabricCanvas) return;
+    const WIDTH = 360;
+    const HEIGHT = 240;
+    const { left, top } = centerCoords(WIDTH, HEIGHT);
+
+    const centerX = WIDTH / 2;
+    const centerY = HEIGHT / 2;
+    const centerNode = new FabricCircle({
+      left: centerX - 42,
+      top: centerY - 42,
+      radius: 42,
+      fill: "#FCE7F3",
+      stroke: "#DB2777",
+      strokeWidth: 2,
+      shadow: '2px 3px 8px rgba(0,0,0,0.12)' as any,
+    });
+    const centerText = new FabricTextbox("Idea", {
+      left: centerX - 40,
+      top: centerY - 12,
+      width: 80,
+      fontSize: 14,
+      fontWeight: 700,
+      fill: "#9D174D",
+      textAlign: "center",
+      editable: true,
+      selectable: true,
+    });
+
+    const nodes = [
+      { x: 70, y: 40, label: "Branch A" },
+      { x: WIDTH - 130, y: 45, label: "Branch B" },
+      { x: WIDTH - 120, y: HEIGHT - 90, label: "Branch C" },
+    ];
+    const nodeCircles = nodes.map((node) => new FabricCircle({
+      left: node.x,
+      top: node.y,
+      radius: 28,
+      fill: "#FDF2F8",
+      stroke: "#F472B6",
+      strokeWidth: 2,
+    }));
+    const nodeTexts = nodes.map((node) => new FabricTextbox(node.label, {
+      left: node.x - 10,
+      top: node.y + 10,
+      width: 80,
+      fontSize: 11,
+      fontWeight: 600,
+      fill: "#9D174D",
+      textAlign: "center",
+      editable: true,
+      selectable: true,
+    }));
+    const connectors = nodes.map((node) => new FabricLine(
+      [centerX, centerY, node.x + 28, node.y + 28],
+      { stroke: "#F472B6", strokeWidth: 2 }
+    ));
+
+    const group = new FabricGroup([centerNode, centerText, ...connectors, ...nodeCircles, ...nodeTexts], {
+      left,
+      top,
+      subTargetCheck: true,
+    } as any);
+    (group as any).name = 'Mind Map';
+
+    fabricCanvas.add(group);
+    fabricCanvas.setActiveObject(group);
+    fabricCanvas.requestRenderAll();
+    resetToolbarToPointer();
+  };
+
+  const handleActivateBrush = () => {
+    if (!fabricCanvas) return;
+    setActiveToolbarButton('brush');
+    activeToolbarButtonRef.current = 'brush';
+    fabricCanvas.isDrawingMode = true;
+    if (fabricCanvas.freeDrawingBrush) {
+      fabricCanvas.freeDrawingBrush.color = 'rgba(255, 213, 79, 0.5)';
+      fabricCanvas.freeDrawingBrush.width = 12;
+      (fabricCanvas.freeDrawingBrush as any).strokeLineCap = 'round';
+    }
+    fabricCanvas.defaultCursor = 'crosshair';
+    fabricCanvas.setCursor('crosshair');
+  };
+
   const handleAddArtboard = () => {
     if (!fabricCanvas) return;
     // Set artboard tool mode for drag-to-create
@@ -1785,6 +3426,30 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleNodeImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !pendingImageNodeRef.current || !fabricCanvas) return;
+    const nodeObj = pendingImageNodeRef.current;
+    pendingImageNodeRef.current = null;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      (nodeObj as any).__imageData = dataUrl;
+      const grp = nodeObj.type === 'group' ? (nodeObj as FabricGroup) : null;
+      if (grp && (grp as any)._objects) {
+        const objs = (grp as any)._objects as FabricObject[];
+        const uploadZone = objs.find((o: any) => o.__isUploadZone);
+        const uploadLabel = objs.find((o: any) => o.type === 'textbox' && (o as FabricTextbox).text?.toLowerCase().includes('upload'));
+        if (uploadZone) (uploadZone as FabricRect).set({ fill: '#86EFAC' });
+        if (uploadLabel) (uploadLabel as FabricTextbox).set('text', 'Image loaded');
+      }
+      fabricCanvas.requestRenderAll();
+      toast.success("Image added to node");
+    };
+    reader.readAsDataURL(file);
+    if (nodeImageFileInputRef.current) nodeImageFileInputRef.current.value = '';
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2883,13 +4548,55 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
             ref={containerRef}
             className="relative w-full h-screen overflow-hidden"
             style={{
-              backgroundColor: '#F4F4F6',
-              backgroundImage: 'radial-gradient(circle, #d1d1d6 1px, transparent 1px)',
-              backgroundSize: '24px 24px',
-              backgroundPosition: `${gridOffset.x}px ${gridOffset.y}px`,
+              backgroundColor: initialCanvasColor || '#F4F4F6',
+              backgroundImage: showGrid ? 'radial-gradient(circle, #d1d1d6 1px, transparent 1px)' : 'none',
+              backgroundSize: showGrid ? '24px 24px' : undefined,
+              backgroundPosition: showGrid ? `${gridOffset.x}px ${gridOffset.y}px` : undefined,
             }}
           >
             <canvas ref={canvasRef} className="absolute inset-0 cursor-default" />
+            {/* Video play/pause overlay — shown when a video is selected */}
+            {videoControlsRect && fabricCanvas && (() => {
+              const active = fabricCanvas.getActiveObject();
+              const videoEl = active && (active as any).__isVideo ? (active as any).__videoElement as HTMLVideoElement : null;
+              if (!videoEl) return null;
+              const isPlaying = !videoEl.paused;
+              return (
+                <div
+                  ref={videoControlsRef}
+                  className="absolute z-[55] flex items-center justify-center rounded-lg px-2 py-1.5 shadow-lg"
+                  style={{
+                    left: videoControlsRect.left,
+                    top: videoControlsRect.top,
+                    width: videoControlsRect.width,
+                    height: videoControlsRect.height,
+                    backgroundColor: '#000000',
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isPlaying) {
+                        videoEl.pause();
+                        (active as any).__isPlaying = false;
+                        setVideoPlayingState(false);
+                      } else {
+                        videoEl.play().then(() => {
+                          (active as any).__isPlaying = true;
+                          setVideoPlayingState(true);
+                        }).catch(() => {});
+                      }
+                    }}
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-white hover:bg-white/20 transition-colors"
+                    aria-label={isPlaying ? 'Pause' : 'Play'}
+                  >
+                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  </button>
+                </div>
+              );
+            })()}
             {isImagePending && (
               <div
                 className="pointer-events-none absolute z-[55]"
@@ -2918,8 +4625,17 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               className="hidden"
               aria-label="Upload image"
             />
+            {/* Hidden file input for node image upload */}
+            <input
+              ref={nodeImageFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleNodeImageFileChange}
+              className="hidden"
+              aria-label="Upload image to node"
+            />
 
-            {/* Toolbar (Vertical on left for old layout, Horizontal at bottom for screen mode) */}
+            {/* Toolbar for all modes */}
             <Toolbar
               activeTool={activeTool}
               setActiveTool={setActiveTool}
@@ -2930,16 +4646,23 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
               isToolbarExpanded={isToolbarExpanded}
               setIsToolbarExpanded={setIsToolbarExpanded}
               onAddText={handleAddText}
+              onAddStickyNote={handleAddStickyNote}
+              onActivateBrush={handleActivateBrush}
+              onAddTimer={handleAddTimer}
+              onAddVote={handleAddVote}
+              onAddKanban={handleAddKanban}
+              onAddMindMap={handleAddMindMap}
               fileInputRef={fileInputRef}
               onFileChange={handleFileChange}
               onUploadClick={handleUploadClick}
               penSubTool={penSubTool}
               setPenSubTool={setPenSubTool}
               layout={toolbarLayout}
+              mode={toolbarMode}
             />
 
             {/* Layers sidebar (controlled by isLayersOpen state) */}
-            {fabricCanvas && (
+            {showLayersPanel && fabricCanvas && (
               <LayersPanel
                 canvas={fabricCanvas}
                 onRequestClose={() => setIsLayersOpen(false)}
@@ -3108,7 +4831,7 @@ export default function Canvas({ generatedImageUrl, isImagePending = false, pend
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
-      {/* Inspector Sidebar - Hidden when object is selected (shown in ChatSidebar Styles tab instead) */}
+      {/* Inspector Sidebar - Hidden when object is selected (shown in ChatSidebar Tools tab instead) */}
       {false && selectedObject && (
         <InspectorSidebar
           selectedObject={selectedObject}

@@ -14,8 +14,8 @@ const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-space
 const plusJakartaSans = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-plus-jakarta-sans', weight: ['200','300','400','500','600','700','800'], display: 'swap' });
 
 export const metadata = {
-  title: 'Frame / Inframe',
-  description: 'AI-native creative canvas',
+  title: 'inFrame - AI-Native Campaign Builder',
+  description: 'Build marketing campaigns, ads, and visuals with AI. Brand-consistent, multi-format, image-to-video.',
   icons: {
     icon: '/logooo2.png',
     shortcut: '/logooo2.png',
