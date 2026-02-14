@@ -164,6 +164,32 @@
   }
 }
 
+/* Scenebuilder Promptbox glass effect */
+.prompt-glass {
+  position: relative;
+  isolation: isolate;
+}
+
+.prompt-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(46, 55, 88, 0.4) 20%,
+    rgba(244, 174, 146, 0.24) 80%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+
 /* 
   ────────────────────────────────────────────────────────────────
   Legacy / utility classes carried over from app.css (Vite)

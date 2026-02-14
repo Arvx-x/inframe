@@ -18,8 +18,11 @@ import { RadioGroup, RadioGroupItem } from "@/app/components/ui/radio-group";
 import { Label } from "@/app/components/ui/label";
 import { Skeleton } from "@/app/components/ui/skeleton";
 
+const GRID_GAP = 12;
+
 interface CanvasProps {
-  generatedImageUrl: string | null;
+  generatedImageUrl?: string | null;
+  generatedImageUrls?: string[] | null;
   generatedVideoUrl?: string | null;
   isImagePending?: boolean;
   pendingImageRatio?: string | null;
@@ -220,7 +223,7 @@ const clearCurveHandles = (point: PathPoint, target: 'cp1' | 'cp2' | 'both' = 'b
 };
 
 const DEFAULT_PLACEHOLDER_SIZE = 200;
-const PLACEHOLDER_VERTICAL_OFFSET_RATIO = 0.08;
+const PLACEHOLDER_VERTICAL_OFFSET_RATIO = 0.14;
 const PLACEHOLDER_MIN_TOP = 16;
 const PEN_CLOSE_THRESHOLD = 14;
 const CURVE_HANDLE_TENSION = 0.4;
@@ -248,8 +251,30 @@ const computeImagePlacement = (
   return { left, top };
 };
 
+/** Compute 2x2 grid positions for 4 images. Returns [{left, top}, ...] for indices 0-3. */
+const computeGrid2x2Placement = (
+  canvasWidth: number,
+  canvasHeight: number,
+  cellWidth: number,
+  cellHeight: number
+) => {
+  const totalW = 2 * cellWidth + GRID_GAP;
+  const totalH = 2 * cellHeight + GRID_GAP;
+  const verticalOffset = canvasHeight * PLACEHOLDER_VERTICAL_OFFSET_RATIO;
+  const centerY = Math.max(canvasHeight / 2 - verticalOffset, PLACEHOLDER_MIN_TOP + totalH / 2);
+  const gridLeft = (canvasWidth - totalW) / 2;
+  const gridTop = centerY - totalH / 2;
+  return [
+    { left: gridLeft, top: gridTop },
+    { left: gridLeft + cellWidth + GRID_GAP, top: gridTop },
+    { left: gridLeft, top: gridTop + cellHeight + GRID_GAP },
+    { left: gridLeft + cellWidth + GRID_GAP, top: gridTop + cellHeight + GRID_GAP },
+  ];
+};
+
 export default function Canvas({
   generatedImageUrl,
+  generatedImageUrls,
   generatedVideoUrl,
   isImagePending = false,
   pendingImageRatio = null,
@@ -379,49 +404,34 @@ export default function Canvas({
     };
   }, [fabricCanvas, onCanvasDataChange]);
 
+  // 4-image grid: use same dimensions as computeGrid2x2Placement so skeletons match where images land
   const placeholderSize = useMemo(() => {
     const { width: canvasWidth, height: canvasHeight } = canvasDimensions;
     if (!canvasWidth || !canvasHeight) {
-      return { width: DEFAULT_PLACEHOLDER_SIZE, height: DEFAULT_PLACEHOLDER_SIZE };
+      return { width: DEFAULT_PLACEHOLDER_SIZE * 2 + GRID_GAP, height: DEFAULT_PLACEHOLDER_SIZE * 2 + GRID_GAP };
     }
-
-    const maxWidth = canvasWidth * 0.6;
-    const maxHeight = canvasHeight * 0.6;
-    const ratio = parseRatio(pendingImageRatio);
-
-    if (!ratio) {
-      const side = Math.max(DEFAULT_PLACEHOLDER_SIZE, Math.min(maxWidth, maxHeight));
-      return { width: side, height: side };
-    }
-
-    const aspect = ratio.width / ratio.height;
-    let width = maxWidth;
-    let height = width / aspect;
-
-    if (height > maxHeight) {
-      height = maxHeight;
-      width = height * aspect;
-    }
-
-    width = Math.max(width, DEFAULT_PLACEHOLDER_SIZE);
-    height = Math.max(height, DEFAULT_PLACEHOLDER_SIZE);
-
-    return { width, height };
-  }, [canvasDimensions, pendingImageRatio]);
+    const cellW = (canvasWidth * 0.6 - GRID_GAP) / 2;
+    const cellH = (canvasHeight * 0.6 - GRID_GAP) / 2;
+    const totalW = 2 * cellW + GRID_GAP;
+    const totalH = 2 * cellH + GRID_GAP;
+    return { width: totalW, height: totalH };
+  }, [canvasDimensions]);
 
   const placeholderPosition = useMemo(() => {
     const { width: canvasWidth, height: canvasHeight } = canvasDimensions;
     if (!canvasWidth || !canvasHeight) {
       return { left: '50%', top: '50%' };
     }
-    const { left, top } = computeImagePlacement(
-      canvasWidth,
-      canvasHeight,
-      placeholderSize.width,
-      placeholderSize.height
-    );
-    return { left: `${left}px`, top: `${top}px` };
-  }, [canvasDimensions, placeholderSize]);
+    const cellW = (canvasWidth * 0.6 - GRID_GAP) / 2;
+    const cellH = (canvasHeight * 0.6 - GRID_GAP) / 2;
+    const totalW = 2 * cellW + GRID_GAP;
+    const totalH = 2 * cellH + GRID_GAP;
+    const verticalOffset = canvasHeight * PLACEHOLDER_VERTICAL_OFFSET_RATIO;
+    const centerY = Math.max(canvasHeight / 2 - verticalOffset, PLACEHOLDER_MIN_TOP + totalH / 2);
+    const gridLeft = (canvasWidth - totalW) / 2;
+    const gridTop = centerY - totalH / 2;
+    return { left: `${gridLeft}px`, top: `${gridTop}px` };
+  }, [canvasDimensions]);
 
   const activeToolbarButtonRef = useRef<'pointer' | 'hand' | 'text' | 'shape' | 'upload' | 'reference' | 'selector' | 'artboard' | 'pen' | 'colorPicker' | 'brush' | 'move' | 'layers' | 'grid' | 'ruler' | 'eraser' | 'eye' | 'zoomIn' | 'zoomOut' | 'timer' | 'vote' | 'kanban' | 'mindmap'>('pointer');
   const [activeShape, setActiveShape] = useState<"rect" | "circle" | "line" | "diamond">("circle");
@@ -946,8 +956,8 @@ export default function Canvas({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sourceImageBase64: inputImage?.includes(',') ? inputImage.split(',')[1] : inputImage,
-          prompt: inputText || 'Create smooth cinematic motion from this image.',
-          duration: 4,
+          prompt: inputText || 'Animate this image naturally for product or ad use.',
+          aspectRatio: '16:9',
         }),
       });
       if (!res.ok) throw new Error(await res.text().catch(() => 'Video generation failed'));
@@ -2505,49 +2515,53 @@ export default function Canvas({
   };
 
 
-  // Add generated image to canvas
+  // Add generated image(s) to canvas — single centered or 4 in 2x2 grid
+  const urlsToAdd = generatedImageUrls?.length ? generatedImageUrls : (generatedImageUrl ? [generatedImageUrl] : []);
+
   useEffect(() => {
-    if (!fabricCanvas || !generatedImageUrl) return;
+    if (!fabricCanvas || urlsToAdd.length === 0) return;
 
-    FabricImage.fromURL(generatedImageUrl, {
-      crossOrigin: 'anonymous'
-    }).then((img) => {
-      const maxWidth = fabricCanvas.width! * 0.6;
-      const maxHeight = fabricCanvas.height! * 0.6;
+    const isGrid = urlsToAdd.length === 4;
+    const maxWidth = fabricCanvas.width! * (isGrid ? 0.3 : 0.6);
+    const maxHeight = fabricCanvas.height! * (isGrid ? 0.3 : 0.6);
+    const cellW = isGrid ? (fabricCanvas.width! * 0.6 - GRID_GAP) / 2 : maxWidth;
+    const cellH = isGrid ? (fabricCanvas.height! * 0.6 - GRID_GAP) / 2 : maxHeight;
+    const positions = isGrid
+      ? computeGrid2x2Placement(fabricCanvas.width!, fabricCanvas.height!, cellW, cellH)
+      : null;
 
-      if (img.width! > maxWidth) {
-        img.scaleToWidth(maxWidth);
-      }
-      if (img.getScaledHeight() > maxHeight) {
-        img.scaleToHeight(maxHeight);
-      }
+    Promise.all(
+      urlsToAdd.map((url) =>
+        FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
+      )
+    ).then((images) => {
+      images.forEach((img, i) => {
+        const targetW = isGrid ? cellW : maxWidth;
+        const targetH = isGrid ? cellH : maxHeight;
+        if (img.width! > targetW) img.scaleToWidth(targetW);
+        if (img.getScaledHeight() > targetH) img.scaleToHeight(targetH);
 
-      const { left, top } = computeImagePlacement(
-        fabricCanvas.width!,
-        fabricCanvas.height!,
-        img.getScaledWidth(),
-        img.getScaledHeight()
-      );
+        const { left, top } = positions
+          ? positions[i]
+          : computeImagePlacement(
+              fabricCanvas.width!,
+              fabricCanvas.height!,
+              img.getScaledWidth(),
+              img.getScaledHeight()
+            );
 
-      img.set({
-        left,
-        top,
-        selectable: true,
-        name: 'Image',
+        img.set({ left, top, selectable: true, name: 'Image' });
+        fabricCanvas.add(img);
       });
-
-      fabricCanvas.add(img);
-      fabricCanvas.setActiveObject(img);
+      fabricCanvas.setActiveObject(images[0]);
       fabricCanvas.renderAll();
-
-      setSelectedImage(img);
-
-      toast.success("Image added to canvas");
+      setSelectedImage(images[0]);
+      toast.success(images.length > 1 ? `${images.length} images added to canvas` : "Image added to canvas");
     }).catch((error) => {
       console.error("Error loading image:", error);
       toast.error("Failed to load image");
     });
-  }, [generatedImageUrl, fabricCanvas]);
+  }, [generatedImageUrls, generatedImageUrl, fabricCanvas]);
 
   // ── Add generated video to canvas as a playable, movable object ──
   // Uses an offscreen canvas to draw video frames — Fabric reads <canvas> elements
@@ -2596,17 +2610,9 @@ export default function Canvas({
         name: 'Video',
       });
 
-      // ── Size: match source image, or 60% of canvas ──
-      if (lastImage) {
-        const targetWidth = lastImage.getScaledWidth();
-        const targetHeight = lastImage.getScaledHeight();
-        videoFabric.set({
-          scaleX: targetWidth / Math.max(vw, 1),
-          scaleY: targetHeight / Math.max(vh, 1),
-        });
-      } else {
-        videoFabric.scaleToWidth(fabricCanvas.width! * 0.6);
-      }
+      // ── Size: preserve video's original aspect ratio (no stretch). Use uniform scale. ──
+      const maxW = lastImage ? lastImage.getScaledWidth() : fabricCanvas.width! * 0.6;
+      videoFabric.scaleToWidth(maxW);
 
       const displayedW = videoFabric.getScaledWidth();
       const displayedH = videoFabric.getScaledHeight();
@@ -4603,16 +4609,19 @@ export default function Canvas({
                 style={{
                   left: placeholderPosition.left,
                   top: placeholderPosition.top,
+                  width: placeholderSize.width,
+                  height: placeholderSize.height,
                 }}
               >
-                <Skeleton
-                  animate="blink"
-                  className="rounded-none bg-[#d4d4d8] shadow-lg shadow-black/10"
-                  style={{
-                    width: `${placeholderSize.width}px`,
-                    height: `${placeholderSize.height}px`,
-                  }}
-                />
+                <div className="grid grid-cols-2 grid-rows-2 gap-3 w-full h-full min-h-0">
+                  {[1, 2, 3, 4].map((i) => (
+                    <Skeleton
+                      key={i}
+                      animate="pulse"
+                      className="rounded-lg bg-[#d4d4d8]/90 shadow-md shadow-black/5 w-full h-full min-h-0 flex-shrink-0"
+                    />
+                  ))}
+                </div>
               </div>
             )}
 

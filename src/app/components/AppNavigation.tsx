@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ProfileDropdown } from './ProfileDropdown';
 import { cn } from '@/app/lib/utils';
-import { Megaphone, Palette, LayoutTemplate, FolderOpen, Sparkles } from 'lucide-react';
+import { Megaphone, Palette, LayoutTemplate, Sparkles, Film } from 'lucide-react';
 
 const navItems = [
     { href: '/', label: 'Home', icon: Sparkles },
     { href: '/campaigns', label: 'Campaigns', icon: Megaphone },
     { href: '/brand-kit', label: 'Brand Kit', icon: Palette },
     { href: '/templates', label: 'Templates', icon: LayoutTemplate },
+    { href: '/scenebuilder', label: 'Scenebuilding', icon: Film },
 ];
 
 export function AppNavigation() {

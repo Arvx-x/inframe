@@ -14,8 +14,8 @@ import { Button } from "@/app/components/ui/button";
 import { Share, ArrowLeft, PanelLeftClose, PanelLeft, Sparkles, Lightbulb } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { ProfileDropdown } from "@/app/components/ProfileDropdown";
+import { StudioHeader } from "@/app/components/StudioHeader";
 import { AIPanel } from "@/app/components/AIPanel";
-import { FormatBar } from "@/app/components/FormatBar";
 import { getCampaign } from "@/app/lib/services/campaigns.service";
 import { getBrandKit } from "@/app/lib/services/brand-kit.service";
 import type { Campaign } from "@/app/lib/services/campaigns.service";
@@ -37,7 +37,11 @@ function EditorContent() {
   const [brandKitContext, setBrandKitContext] = useState<BrandKit | null>(null);
   const [activeFormat, setActiveFormat] = useState<DesignFormat | null>(null);
 
+  // Plan-mode brief context (for non-signed-in users who upload briefs via chat)
+  const [planBriefContext, setPlanBriefContext] = useState<string | null>(null);
+
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [generatedImageUrls, setGeneratedImageUrls] = useState<string[] | null>(null);
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const [isImagePending, setIsImagePending] = useState(false);
   const [pendingRatio, setPendingRatio] = useState<string | null>(null);
@@ -66,7 +70,15 @@ function EditorContent() {
   // Studio management
   type StudioType = 'design' | 'plan' | 'screen';
   const [activeStudio, setActiveStudio] = useState<StudioType>('design');
-  
+
+  // Sync studio from URL (e.g. /editor?studio=plan from scenebuilder)
+  useEffect(() => {
+    const studio = searchParams.get('studio');
+    if (studio === 'plan' || studio === 'design') {
+      setActiveStudio(studio);
+    }
+  }, [searchParams]);
+
   const [selectedObject, setSelectedObject] = useState<any>(null);
   const [fabricCanvasInstance, setFabricCanvasInstance] = useState<any>(null);
 
@@ -81,7 +93,7 @@ function EditorContent() {
       setIsLeftPanelOpen(false);
     }
   }, [activeStudio]);
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(300);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(310);
 
   const switchStudio = (nextStudio: StudioType) => {
     if (canvasSaveRef.current) {
@@ -168,8 +180,10 @@ function EditorContent() {
     loadCampaignContext();
   }, [campaignIdParam]);
 
-  const handleImageGenerated = (imageUrl: string) => {
-    setGeneratedImageUrl(imageUrl);
+  const handleImageGenerated = (imageUrlOrUrls: string | string[]) => {
+    const urls = Array.isArray(imageUrlOrUrls) ? imageUrlOrUrls : [imageUrlOrUrls];
+    setGeneratedImageUrls(urls.length > 0 ? urls : null);
+    setGeneratedImageUrl(urls[0] ?? null);
   };
 
   const handleVideoGenerated = (videoUrl: string) => {
@@ -178,6 +192,7 @@ function EditorContent() {
 
   const handleClear = () => {
     setGeneratedImageUrl(null);
+    setGeneratedImageUrls(null);
   };
 
   const handleCanvasCommand = async (command: string): Promise<string> => {
@@ -335,102 +350,62 @@ function EditorContent() {
   if (!isScreenMode) {
     return (
       <div className="relative w-full h-screen overflow-hidden bg-white">
-        {/* Header - Old Layout (with studio selector) */}
-        <div className="fixed top-0 left-0 right-0 h-[52px] bg-white border-b border-border z-[100] flex items-center px-4">
-          {/* Left: Back Button and Layers Toggle */}
-          <div className="flex-1 flex items-center gap-2">
-            {/* Layers Panel Toggle */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={() => setIsLeftPanelOpen(!isLeftPanelOpen)}
-              title={isLeftPanelOpen ? "Hide Layers" : "Show Layers"}
-            >
-              {isLeftPanelOpen ? (
-                <PanelLeftClose className="h-4 w-4" />
-              ) : (
-                <PanelLeft className="h-4 w-4" />
-              )}
-            </Button>
-
-            {user && (
+        <StudioHeader
+          activeMode={isPlanMode ? "plan" : "design"}
+          onDesignClick={() => switchStudio("design")}
+          onPlanClick={() => switchStudio("plan")}
+          leftSlot={
+            <>
               <Button
                 variant="ghost"
-                size="sm"
-                className="gap-2 text-muted-foreground hover:text-foreground"
-                onClick={handleBack}
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => setIsLeftPanelOpen(!isLeftPanelOpen)}
+                title={isLeftPanelOpen ? "Hide Layers" : "Show Layers"}
               >
-                <ArrowLeft className="h-4 w-4" />
-                Back
+                {isLeftPanelOpen ? (
+                  <PanelLeftClose className="h-4 w-4" />
+                ) : (
+                  <PanelLeft className="h-4 w-4" />
+                )}
               </Button>
-            )}
-
-            {/* Studio Toggle */}
-            <div className="ml-2 inline-flex items-center rounded-full border border-border/60 bg-white p-0.5 shadow-sm">
-              <button
-                onClick={() => switchStudio('design')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              !isPlanMode
-                ? 'bg-[hsl(var(--sidebar-ring))] text-white'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Design
-              </button>
-              <button
-                onClick={() => switchStudio('plan')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              isPlanMode
-                ? 'bg-[hsl(var(--sidebar-ring))] text-white'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-              >
-                <Lightbulb className="h-3.5 w-3.5" />
-                Plan
-              </button>
-            </div>
-
-            {/* Format Bar (design mode only) */}
-            {!isPlanMode && (
-              <FormatBar
-                activeFormat={activeFormat}
-                onFormatChange={setActiveFormat}
-                className="ml-2"
+              {user && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 text-muted-foreground hover:text-foreground"
+                  onClick={handleBack}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </Button>
+              )}
+            </>
+          }
+          rightSlot={
+            <>
+              <ColorSelector
+                canvasColor={canvasColor}
+                onColorChange={handleCanvasColorChange}
               />
-            )}
-          </div>
-
-          {/* Right side controls */}
-          <div className="flex-1 flex justify-end gap-2">
-            {/* Canvas Color Selector */}
-            <ColorSelector
-              canvasColor={canvasColor}
-              onColorChange={handleCanvasColorChange}
-            />
-
-            {/* Export Button */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={() => canvasExportRef.current?.()}
-                    className="h-9 px-3 rounded-lg flex items-center gap-2 text-white bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 transition-colors"
-                    aria-label="Export"
-                  >
-                    <Share className="w-4 h-4" />
-                    <span className="text-sm font-normal">Export</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Export Canvas</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            {/* Profile Dropdown */}
-            <ProfileDropdown />
-          </div>
-        </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={() => canvasExportRef.current?.()}
+                      className="h-9 px-3 rounded-lg flex items-center gap-2 text-white bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 transition-colors"
+                      aria-label="Export"
+                    >
+                      <Share className="w-4 h-4" />
+                      <span className="text-sm font-normal">Export</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Export Canvas</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </>
+          }
+        />
 
         {/* Main Content Area - below header */}
         <div className="absolute top-[52px] left-0 right-0 bottom-0 flex">
@@ -439,6 +414,7 @@ function EditorContent() {
             <Canvas
               key={`canvas-${activeStudio}`}
               generatedImageUrl={isPlanMode ? null : generatedImageUrl}
+              generatedImageUrls={isPlanMode ? null : generatedImageUrls}
               generatedVideoUrl={isPlanMode ? null : generatedVideoUrl}
               isImagePending={isImagePending}
               pendingImageRatio={pendingRatio}
@@ -483,7 +459,7 @@ function EditorContent() {
                   }}
                   getCanvasSnapshot={() => canvasInstanceRef.current?.() ?? null}
                   getSelectedImageSnapshot={getSelectedImageSnapshot}
-                  campaignBrief={campaignContext?.brief}
+                  campaignBrief={campaignContext?.brief || planBriefContext}
                   brandSummary={brandKitContext?.ai_brand_summary}
                   formatLabel={activeFormat ? `${activeFormat.name} (${activeFormat.width}x${activeFormat.height})` : null}
                   formatDimensions={activeFormat ? { width: activeFormat.width, height: activeFormat.height } : null}
@@ -537,6 +513,9 @@ function EditorContent() {
                 onAddToolNode={(kind) => canvasNodesRef.current?.addToolNode(kind)}
                 onConnectNodes={() => canvasNodesRef.current?.connectSelectedNodes()}
                 onRunTools={() => canvasNodesRef.current?.runSelectedTools()}
+                isPlanMode
+                onBriefContextChange={setPlanBriefContext}
+                campaignBrief={campaignContext?.brief || planBriefContext}
               />
             </div>
           )}
@@ -548,93 +527,62 @@ function EditorContent() {
   // Current layout for screen mode (with studio selector)
   return (
     <div className="relative w-full h-screen overflow-hidden bg-white">
-      {/* Header - Current Layout (with studio selector) */}
-      <div className="fixed top-0 left-0 right-0 h-[52px] bg-white border-b border-border z-[100] flex items-center px-4">
-        {/* Left: Back Button and Layers Toggle */}
-        <div className="flex-1 flex items-center gap-2">
-          {/* Layers Panel Toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={() => setIsLeftPanelOpen(!isLeftPanelOpen)}
-            title={isLeftPanelOpen ? "Hide Layers" : "Show Layers"}
-          >
-            {isLeftPanelOpen ? (
-              <PanelLeftClose className="h-4 w-4" />
-            ) : (
-              <PanelLeft className="h-4 w-4" />
-            )}
-          </Button>
-
-          {user && (
+      <StudioHeader
+        activeMode={isPlanMode ? "plan" : "design"}
+        onDesignClick={() => switchStudio("design")}
+        onPlanClick={() => switchStudio("plan")}
+        leftSlot={
+          <>
             <Button
               variant="ghost"
-              size="sm"
-              className="gap-2 text-muted-foreground hover:text-foreground"
-              onClick={handleBack}
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => setIsLeftPanelOpen(!isLeftPanelOpen)}
+              title={isLeftPanelOpen ? "Hide Layers" : "Show Layers"}
             >
-              <ArrowLeft className="h-4 w-4" />
-              Back
+              {isLeftPanelOpen ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeft className="h-4 w-4" />
+              )}
             </Button>
-          )}
-
-          {/* Studio Toggle */}
-          <div className="ml-2 inline-flex items-center rounded-full border border-border/60 bg-white p-0.5 shadow-sm">
-            <button
-              onClick={() => switchStudio('design')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                !isPlanMode
-                  ? 'bg-[hsl(var(--sidebar-ring))] text-white'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Design
-            </button>
-            <button
-              onClick={() => switchStudio('plan')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                isPlanMode
-                  ? 'bg-[hsl(var(--sidebar-ring))] text-white'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Lightbulb className="h-3.5 w-3.5" />
-              Plan
-            </button>
-          </div>
-        </div>
-
-        {/* Right side controls */}
-        <div className="flex-1 flex justify-end gap-2">
-          {/* Canvas Color Selector */}
-          <ColorSelector
-            canvasColor={canvasColor}
-            onColorChange={handleCanvasColorChange}
-          />
-
-          {/* Export Button */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  onClick={() => canvasExportRef.current?.()}
-                  className="h-9 px-3 rounded-lg flex items-center gap-2 text-white bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 transition-colors"
-                  aria-label="Export"
-                >
-                  <Share className="w-4 h-4" />
-                  <span className="text-sm font-normal">Export</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Export Canvas</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {/* Profile Dropdown */}
-          <ProfileDropdown />
-        </div>
-      </div>
+            {user && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2 text-muted-foreground hover:text-foreground"
+                onClick={handleBack}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Button>
+            )}
+          </>
+        }
+        rightSlot={
+          <>
+            <ColorSelector
+              canvasColor={canvasColor}
+              onColorChange={handleCanvasColorChange}
+            />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => canvasExportRef.current?.()}
+                    className="h-9 px-3 rounded-lg flex items-center gap-2 text-white bg-[hsl(var(--sidebar-ring))] hover:bg-[hsl(var(--sidebar-ring))]/90 transition-colors"
+                    aria-label="Export"
+                  >
+                    <Share className="w-4 h-4" />
+                    <span className="text-sm font-normal">Export</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Export Canvas</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </>
+        }
+      />
 
       {/* Main Content Area - below header */}
       <div className="absolute top-[52px] left-0 right-0 bottom-0 flex">
@@ -643,6 +591,7 @@ function EditorContent() {
           <Canvas
             key={`canvas-${activeStudio}`}
             generatedImageUrl={isPlanMode ? null : generatedImageUrl}
+            generatedImageUrls={isPlanMode ? null : generatedImageUrls}
             generatedVideoUrl={isPlanMode ? null : generatedVideoUrl}
             isImagePending={isImagePending}
             pendingImageRatio={pendingRatio}
@@ -696,6 +645,9 @@ function EditorContent() {
             onAddToolNode={(kind) => canvasNodesRef.current?.addToolNode(kind)}
             onConnectNodes={() => canvasNodesRef.current?.connectSelectedNodes()}
             onRunTools={() => canvasNodesRef.current?.runSelectedTools()}
+            isPlanMode={isPlanMode}
+            onBriefContextChange={setPlanBriefContext}
+            campaignBrief={campaignContext?.brief || planBriefContext}
           />
         </div>
       </div>

@@ -1,16 +1,74 @@
 // app/api/generate-image/route.ts
 import { NextResponse } from "next/server";
+import { generateImageWithGemini } from "@/lib/imagen";
 
-const INFRAME_API_KEY = process.env.INFRAME_API_KEY;
+const GENERATION_VARIATIONS = 4;
 
-if (!INFRAME_API_KEY) {
-  throw new Error("Missing INFRAME_API_KEY environment variable.");
+function getApiKey(): string {
+  const key = process.env.GEMINI_API_KEY ?? process.env.INFRAME_API_KEY;
+  if (!key) {
+    throw new Error("GEMINI_API_KEY or INFRAME_API_KEY must be set.");
+  }
+  return key;
+}
+
+function extractImageFromResponse(data: any): string | null {
+  const partsOut: any[] = data?.candidates?.[0]?.content?.parts ?? [];
+  let base64Data: string | null = null;
+  let mime: string | null = null;
+  for (const p of partsOut) {
+    const d1 = p?.inline_data?.data as string | undefined;
+    const d2 = p?.inlineData?.data as string | undefined;
+    if (d1 || d2) {
+      base64Data = d1 || d2 || null;
+      mime = (p?.inline_data?.mime_type as string | undefined) || (p?.inlineData?.mimeType as string | undefined) || "image/png";
+      break;
+    }
+  }
+  return base64Data ? `data:${mime};base64,${base64Data}` : null;
+}
+
+async function callGeminiImageApi(parts: any[]): Promise<string | null> {
+  const apiKey = getApiKey();
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${apiKey}`;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000);
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts }],
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        console.error("Gemini image API error:", res.status, text);
+        if (res.status === 429 || res.status >= 500) {
+          await new Promise((r) => setTimeout(r, attempt * 600));
+          continue;
+        }
+        return null;
+      }
+
+      const data = await res.json().catch(() => null);
+      return extractImageFromResponse(data);
+    } catch (e) {
+      await new Promise((r) => setTimeout(r, attempt * 600));
+    }
+  }
+  return null;
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { prompt, currentImageUrl, isEdit, selection, selectionImageUrl, editIntent, textEditOptions, referenceImageUrl } = body as {
+    const { prompt, currentImageUrl, isEdit, selection, selectionImageUrl, editIntent, textEditOptions, referenceImageUrl, referenceMode, briefContext } = body as {
       prompt?: string;
       currentImageUrl?: string;
       isEdit?: boolean;
@@ -23,60 +81,20 @@ export async function POST(request: Request) {
         allowPositionChange?: boolean;
       } | null;
       referenceImageUrl?: string | null;
+      referenceMode?: "branding" | "inspiration";
+      briefContext?: string | null;
     };
 
     if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
       return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     }
 
-    // Build messages payload similar to your Deno function
-    let messages: any[] = [];
+    const isGenerationMode = !isEdit || !currentImageUrl;
+
+    // Build parts only for edit mode
+    const parts: any[] = [];
 
     if (isEdit && currentImageUrl) {
-      messages = [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: prompt },
-            ...(selection ? [{ type: "text", text: `Selection JSON: ${JSON.stringify(selection)}` }] : []),
-            {
-              type: "image_url",
-              image_url: {
-                url: currentImageUrl,
-              },
-            },
-          ],
-        },
-      ];
-    } else {
-      messages = [
-        {
-          role: "user",
-          content: `Create a high-quality, detailed image: ${prompt}`,
-        },
-      ];
-    }
-
-    // Call Google Generative Language API directly for image generation
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${INFRAME_API_KEY}`;
-
-    // Build parts for request
-    const parts: any[] = [];
-    
-    // If a reference image is provided, include it first with analysis instructions
-    if (referenceImageUrl && typeof referenceImageUrl === "string" && !isEdit) {
-      parts.push({
-        text: "DESIGN REFERENCE IMAGE ANALYSIS: Carefully analyze the following reference image for its design elements including: color palette and color harmony, typography style and font choices, layout and composition, visual style (minimalist, bold, vintage, modern, etc.), mood and atmosphere, textures and patterns, spacing and proportions. Use these design elements as inspiration and guidance for the image you will create.",
-      });
-      const refBase64 = referenceImageUrl.split(",")[1] || referenceImageUrl;
-      const refMime = referenceImageUrl.includes("image/jpeg") ? "image/jpeg" : 
-                      referenceImageUrl.includes("image/png") ? "image/png" :
-                      referenceImageUrl.includes("image/webp") ? "image/webp" : "image/png";
-      parts.push({ inline_data: { mime_type: refMime, data: refBase64 } });
-      parts.push({
-        text: `Now, using the design elements, style, color palette, and visual aesthetic from the reference image above, create a new image based on this prompt: ${prompt}. The new image should feel cohesive with the reference in terms of visual style while being a unique creation based on the prompt.`,
-      });
-    } else if (isEdit && currentImageUrl) {
       parts.push({ text: prompt });
       if (selection) {
         parts.push({ text: `Selection JSON: ${JSON.stringify(selection)}` });
@@ -129,10 +147,8 @@ export async function POST(request: Request) {
         );
         parts.push({ text: textGuardrails.join(" ") });
       }
-      // Expect data URL like data:image/png;base64,XXXX
       const base64 = currentImageUrl.split(",")[1] || currentImageUrl;
       parts.push({ inline_data: { mime_type: "image/png", data: base64 } });
-      // If a cropped selection image is provided, include it as well
       if (selectionImageUrl && typeof selectionImageUrl === "string") {
         const selBase64 = selectionImageUrl.split(",")[1] || selectionImageUrl;
         parts.push({ inline_data: { mime_type: "image/png", data: selBase64 } });
@@ -141,76 +157,56 @@ export async function POST(request: Request) {
         text:
           "Return the edited image at exactly the same resolution as the base image so the selected patch can be reapplied without scaling artifacts.",
       });
-    } else {
-      parts.push({ text: `Create a high-quality, detailed image: ${prompt}` });
     }
 
-    let res: Response | null = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 60000);
-        res = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts,
-              },
-            ],
-          }),
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
+    if (isGenerationMode) {
+      // Use imagen lib (same as videogen): 4 variations in parallel via generateImageWithGemini
+      const referencePayload =
+        referenceImageUrl && typeof referenceImageUrl === "string"
+          ? {
+              bytesBase64Encoded: referenceImageUrl.split(",")[1] || referenceImageUrl,
+              mimeType: referenceImageUrl.includes("image/jpeg")
+                ? "image/jpeg"
+                : referenceImageUrl.includes("image/png")
+                  ? "image/png"
+                  : referenceImageUrl.includes("image/webp")
+                    ? "image/webp"
+                    : "image/png",
+            }
+          : undefined;
 
-        if (res.ok) break;
+      const results = await Promise.all(
+        Array.from({ length: GENERATION_VARIATIONS }, () =>
+          generateImageWithGemini({
+            prompt,
+            referenceImage: referencePayload,
+            referenceMode: referenceMode ?? "branding",
+            briefContext: briefContext?.trim() || undefined,
+            nanoBananaOnly: true,
+          })
+        )
+      );
 
-        const text = await res.text().catch(() => "");
-        console.error("Gemini image API error:", res.status, text);
-        if (res.status === 429 || res.status >= 500) {
-          await new Promise((r) => setTimeout(r, attempt * 600));
-          continue;
-        }
-        // Non-retryable
-        return NextResponse.json({ error: "Failed to generate image", details: text }, { status: 502 });
-      } catch (e) {
-        // network/timeout
-        await new Promise((r) => setTimeout(r, attempt * 600));
+      const imageUrls = results.map(
+        (r) => `data:${r.mimeType};base64,${r.imageBase64}`
+      );
+
+      if (imageUrls.length === 0) {
+        return NextResponse.json({ error: "No images generated", raw: null }, { status: 502 });
       }
+
+      return NextResponse.json({
+        imageUrl: imageUrls[0],
+        imageUrls,
+      });
     }
 
-    if (!res || !res.ok) {
-      return NextResponse.json({ error: "Failed to generate image after retries" }, { status: 502 });
-    }
-
-    const data = await res.json().catch((e) => {
-      console.error("Failed to parse Google response JSON:", e);
-      return null;
-    });
-
-    // Try to extract base64 image supporting both inline_data and inlineData shapes
-    const partsOut: any[] = data?.candidates?.[0]?.content?.parts ?? [];
-    let base64Data: string | null = null;
-    let mime: string | null = null;
-    for (const p of partsOut) {
-      const d1 = p?.inline_data?.data as string | undefined;
-      const d2 = p?.inlineData?.data as string | undefined;
-      if (d1 || d2) {
-        base64Data = d1 || d2 || null;
-        mime = (p?.inline_data?.mime_type as string | undefined) || (p?.inlineData?.mimeType as string | undefined) || "image/png";
-        break;
-      }
-    }
-    const imageUrl = base64Data ? `data:${mime};base64,${base64Data}` : null;
-
+    // Edit mode: single image
+    const imageUrl = await callGeminiImageApi(parts);
     if (!imageUrl) {
-      console.error("No image in response:", JSON.stringify(data));
-      return NextResponse.json({ error: "No image generated", raw: data }, { status: 502 });
+      return NextResponse.json({ error: "No image generated" }, { status: 502 });
     }
-
-    return NextResponse.json({ imageUrl });
+    return NextResponse.json({ imageUrl, imageUrls: [imageUrl] });
   } catch (err: any) {
     console.error("Error in /api/generate-image:", err);
     return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 });

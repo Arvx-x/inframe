@@ -2,10 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
-    Sparkles,
-    Type,
+    Image,
     Video,
-    Copy,
     Loader2,
     ArrowUp,
     ChevronDown,
@@ -23,11 +21,13 @@ import { cn } from '@/app/lib/utils';
 
 // ── Types ──────────────────────────────────────────────────────
 
-export type AIPanelMode = 'create' | 'copy' | 'video' | 'variations';
+export type AIPanelMode = 'image' | 'product-video' | 'advert' | 'listing';
+
+export type VideoTabType = 'product-video' | 'advert' | 'listing';
 
 interface AIPanelProps {
     onCanvasCommand?: (command: string) => Promise<string>;
-    onImageGenerated?: (imageUrl: string) => void;
+    onImageGenerated?: (imageUrlOrUrls: string | string[]) => void;
     onVideoGenerated?: (videoUrl: string) => void;
     onImageGenerationPending?: (pending: boolean, options?: { ratio?: string }) => void;
     getCanvasSnapshot?: () => string | null;
@@ -37,34 +37,36 @@ interface AIPanelProps {
     formatLabel?: string | null;
     formatDimensions?: { width: number; height: number } | null;
     className?: string;
+    /** When true, only show video modes (Product Video, Advert, Listing) and default to product-video */
+    videoOnly?: boolean;
 }
 
 // ── Mode definitions ───────────────────────────────────────────
 
 const modes: { id: AIPanelMode; label: string; icon: React.ElementType; placeholder: string }[] = [
     {
-        id: 'create',
-        label: 'Create',
-        icon: Sparkles,
+        id: 'image',
+        label: 'Image',
+        icon: Image,
         placeholder: 'Describe a design — "Product showcase with gradient background"',
     },
     {
-        id: 'copy',
-        label: 'Copy',
-        icon: Type,
-        placeholder: 'Generate copy — "Write 5 CTA options for a summer sale"',
-    },
-    {
-        id: 'video',
-        label: 'Video',
+        id: 'product-video',
+        label: 'Product Video',
         icon: Video,
-        placeholder: 'Select an image on canvas, or add one with +, then describe the motion — "Slow zoom on the product"',
+        placeholder: 'Describe the video — "Product closeup with gentle rotation" or "Showcase product details"',
     },
     {
-        id: 'variations',
-        label: 'Variations',
-        icon: Copy,
-        placeholder: 'Generate variations — "3 color alternatives"',
+        id: 'advert',
+        label: 'Advert',
+        icon: Video,
+        placeholder: 'Describe the ad — "Dynamic ad with lifestyle shots" or "Commercial-style reveal"',
+    },
+    {
+        id: 'listing',
+        label: 'Listing',
+        icon: Video,
+        placeholder: 'Describe the listing video — "360° product view for e-commerce" or "Quick product highlights"',
     },
 ];
 
@@ -106,9 +108,10 @@ export function AIPanel({
     formatLabel,
     formatDimensions,
     className,
+    videoOnly = false,
 }: AIPanelProps) {
     // ── State ──
-    const [activeMode, setActiveMode] = useState<AIPanelMode>('create');
+    const [activeMode, setActiveMode] = useState<AIPanelMode>(videoOnly ? 'product-video' : 'image');
     const [input, setInput] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
@@ -167,8 +170,8 @@ export function AIPanel({
 
             try {
                 switch (activeMode) {
-                    // ── CREATE: generate image via /api/generate-image, add to canvas ──
-                    case 'create': {
+                    // ── IMAGE: generate image via /api/generate-image, add to canvas ──
+                    case 'image': {
                         onImageGenerationPending?.(true, formatDimensions ? { ratio: `${formatDimensions.width}x${formatDimensions.height}` } : undefined);
                         const toastId = toast.loading('Generating image...');
                         const contextualPrompt = buildContextualPrompt(trimmed, campaignBrief, brandSummary, formatLabel);
@@ -181,10 +184,11 @@ export function AIPanel({
                             }),
                         });
                         if (res.ok) {
-                            const { imageUrl } = await res.json();
-                            if (imageUrl && onImageGenerated) {
-                                onImageGenerated(imageUrl);
-                                toast.success('Image added to canvas', { id: toastId });
+                            const { imageUrl, imageUrls } = await res.json();
+                            const urls = imageUrls ?? (imageUrl ? [imageUrl] : []);
+                            if (urls.length > 0 && onImageGenerated) {
+                                onImageGenerated(urls);
+                                toast.success(urls.length > 1 ? `${urls.length} images added to canvas` : 'Image added to canvas', { id: toastId });
                             } else {
                                 toast.error('No image was generated. Try a different prompt.', { id: toastId });
                             }
@@ -196,53 +200,51 @@ export function AIPanel({
                         break;
                     }
 
-                    // ── COPY: generate copy and add to canvas ──
-                    case 'copy': {
-                        const toastId = toast.loading('Generating copy...');
-                        const copyRes = await fetch('/api/generate-copy', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                instruction: trimmed,
-                                context: {
-                                    campaignBrief: campaignBrief || undefined,
-                                    brandVoice: brandSummary || undefined,
-                                },
-                            }),
-                        });
-                        if (copyRes.ok) {
-                            const { copy } = await copyRes.json();
-                            if (copy?.variations?.length) {
-                                const bestCopy = copy.variations[0].text;
-                                if (onCanvasCommand) {
-                                    await onCanvasCommand(`Add text: "${bestCopy}"`);
-                                }
-                                toast.success(`Added copy to canvas`, { id: toastId });
-                            } else {
-                                toast.error('No copy variations returned', { id: toastId });
-                            }
-                        } else {
-                            toast.error('Failed to generate copy', { id: toastId });
-                        }
-                        break;
-                    }
-
-                    // ── VIDEO: Veo 3.1 (image-to-video) — base64, no storage ──
-                    case 'video': {
-                        const sourceImage = referenceImageUrl || getSelectedImageSnapshot?.() || getCanvasSnapshot?.();
-                        if (!sourceImage) {
+                    // ── VIDEO TABS: Creative director enhances prompt, then Veo 3.1 generates video ──
+                    case 'product-video':
+                    case 'advert':
+                    case 'listing': {
+                        // Primary: canvas design or selected image (what we animate). Reference: product image (optional).
+                        const primaryImage = getSelectedImageSnapshot?.() || getCanvasSnapshot?.() || referenceImageUrl;
+                        if (!primaryImage) {
                             toast.error('Select an image on the canvas, add one with +, or add a design first.');
                             break;
                         }
-                        const toastId = toast.loading('Generating video — this may take 1-2 minutes...');
-                        const videoPrompt = buildContextualPrompt(trimmed, campaignBrief, brandSummary);
-                        const base64 = sourceImage.includes(',') ? sourceImage.split(',')[1] : sourceImage;
+                        const toastId = toast.loading('Enhancing prompt with creative director...');
+                        const contextualPrompt = buildContextualPrompt(trimmed, campaignBrief, brandSummary);
+                        const primaryBase64 = primaryImage.includes(',') ? primaryImage.split(',')[1] : primaryImage;
+                        const referenceBase64 = referenceImageUrl && referenceImageUrl !== primaryImage
+                            ? (referenceImageUrl.includes(',') ? referenceImageUrl.split(',')[1] : referenceImageUrl)
+                            : undefined;
+
+                        // Creative director: Gemini thinking model enhances prompt for Veo
+                        const enhanceRes = await fetch('/api/enhance-video-prompt', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                sourceImageBase64: primaryBase64,
+                                userPrompt: contextualPrompt,
+                                videoType: activeMode,
+                            }),
+                        });
+                        let enhancedPrompt = contextualPrompt;
+                        if (enhanceRes.ok) {
+                            const enhanceData = await enhanceRes.json();
+                            if (enhanceData?.enhancedPrompt) {
+                                enhancedPrompt = enhanceData.enhancedPrompt;
+                            }
+                        }
+
+                        toast.loading('Generating video — this may take 1-2 minutes...', { id: toastId });
                         const videoRes = await fetch('/api/generate-video', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                sourceImageBase64: base64,
-                                prompt: videoPrompt,
+                                sourceImageBase64: primaryBase64,
+                                referenceImageBase64: referenceBase64,
+                                prompt: enhancedPrompt,
+                                videoType: activeMode,
+                                aspectRatio: '16:9',
                             }),
                         });
                         if (!videoRes.ok) {
@@ -309,22 +311,11 @@ export function AIPanel({
                         break;
                     }
 
-                    // ── VARIATIONS: canvas command ──
-                    case 'variations': {
-                        if (onCanvasCommand) {
-                            const toastId = toast.loading('Generating variations...');
-                            const result = await onCanvasCommand(`Generate variations: ${trimmed}`);
-                            toast.success(result || 'Variations applied', { id: toastId });
-                        } else {
-                            toast.error('Canvas not available');
-                        }
-                        break;
-                    }
                 }
             } catch (err) {
                 console.error('AI Panel error:', err);
                 toast.error('Something went wrong. Please try again.');
-                if (activeMode === 'create') onImageGenerationPending?.(false);
+                if (activeMode === 'image') onImageGenerationPending?.(false);
             } finally {
                 setIsProcessing(false);
             }
@@ -361,13 +352,13 @@ export function AIPanel({
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
                             className="flex items-center justify-center h-8 w-8 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors border border-dashed border-gray-300 flex-shrink-0"
-                            title={activeMode === 'video' ? 'Add source image for video' : 'Add reference image for generation'}
+                            title={activeMode !== 'image' ? 'Add source image for video' : 'Add reference image for generation'}
                         >
                             <Plus className="h-4 w-4" />
                         </button>
                         {/* Mode tabs */}
                         <div className="flex items-center gap-0.5 p-0.5 rounded-xl bg-gray-50/80">
-                        {modes.map((mode) => {
+                        {modes.filter((m) => !videoOnly || m.id !== 'image').map((mode) => {
                             const Icon = mode.icon;
                             const isActive = activeMode === mode.id;
                             return (

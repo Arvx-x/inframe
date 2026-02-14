@@ -107,7 +107,7 @@ interface ImageGenerationPendingOptions {
 }
 
 interface PromptSidebarProps {
-  onImageGenerated: (imageUrl: string) => void;
+  onImageGenerated: (imageUrlOrUrls: string | string[]) => void;
   onImageGenerationPending?: (pending: boolean, options?: ImageGenerationPendingOptions) => void;
   currentImageUrl: string | null;
   onCanvasCommand?: (command: string) => Promise<string>;
@@ -560,7 +560,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
 
             if (genData?.imageUrl) {
               resolvePendingImageMessage("chat", pendingId, genData.imageUrl);
-              onImageGenerated(genData.imageUrl);
+              onImageGenerated(genData.imageUrls ?? [genData.imageUrl]);
               const confirmMessage: Message = {
                 role: "assistant",
                 content: "✨ Image created successfully! I've added it to your canvas.",
@@ -684,22 +684,9 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                     if (mmgData.fallbackMessage) {
                       toast.info(mmgData.fallbackMessage);
                     }
-                    const [firstVariant, ...restVariants] = variants;
+                    const [firstVariant] = variants;
                     resolvePendingImageMessage("design", pendingId, firstVariant.imageUrl);
-                    onImageGenerated(firstVariant.imageUrl);
-
-                    for (const v of restVariants) {
-                      onImageGenerated(v.imageUrl);
-                      setMessages(prev => [
-                        ...prev,
-                        {
-                          role: 'assistant',
-                          imageUrl: v.imageUrl,
-                          content: '',
-                          timestamp: Date.now(),
-                        },
-                      ]);
-                    }
+                    onImageGenerated(variants.map((v: any) => v.imageUrl));
                   } else if (pendingId) {
                     removePendingImageMessage("design", pendingId);
                   }
@@ -741,7 +728,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                   const genData = await genRes.json();
                   if (genData?.imageUrl) {
                     resolvePendingImageMessage("design", pendingId, genData.imageUrl);
-                    onImageGenerated(genData.imageUrl);
+                    onImageGenerated(genData.imageUrls ?? [genData.imageUrl]);
                   } else if (pendingId) {
                     removePendingImageMessage("design", pendingId);
                   }
@@ -779,7 +766,7 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
                     const genData = await genRes.json();
                     if (genData?.imageUrl) {
                       resolvePendingImageMessage("design", pendingId, genData.imageUrl);
-                      onImageGenerated(genData.imageUrl);
+                      onImageGenerated(genData.imageUrls ?? [genData.imageUrl]);
                     } else {
                       removePendingImageMessage("design", pendingId);
                     }
@@ -819,13 +806,14 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
               throw new Error(await quickRes.text());
             }
             const data = await quickRes.json();
-            if (!data?.imageUrl) {
+            const imageUrls = data?.imageUrls ?? (data?.imageUrl ? [data.imageUrl] : []);
+            if (imageUrls.length === 0) {
               throw new Error("No image URL returned");
             }
 
-            onImageGenerated(data.imageUrl);
+            onImageGenerated(imageUrls);
             if (pendingId) {
-              resolvePendingImageMessage("design", pendingId, data.imageUrl);
+              resolvePendingImageMessage("design", pendingId, imageUrls[0]);
             }
             toast.success("Image generated!");
           } catch (error) {
@@ -860,13 +848,11 @@ export default function PromptSidebar({ onImageGenerated, onImageGenerationPendi
       if (!mmgRes.ok) throw new Error(await mmgRes.text());
       const mmgData = await mmgRes.json();
       const variants = mmgData?.variants || [];
-      let added = 0;
-      for (const v of variants) {
-        if (v?.imageUrl) {
-          onImageGenerated(v.imageUrl);
-          added++;
-        }
+      const urls = variants.filter((v: any) => v?.imageUrl).map((v: any) => v.imageUrl);
+      if (urls.length > 0) {
+        onImageGenerated(urls);
       }
+      const added = urls.length;
       const assistantMessage: Message = { role: 'assistant', content: added > 0 ? `Generated ${added} variant(s) for “${direction?.name || 'selection'}”.` : 'No images returned. Try again or pick another direction.', timestamp: Date.now() };
       setMessages(prev => [...prev, assistantMessage]);
       setGuidedConversation(prev => [...prev, assistantMessage]);
